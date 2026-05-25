@@ -271,6 +271,11 @@ When sending emails (task updates, digests, alerts, meeting briefs, status repor
 - Search across M365 for relevant content
 - Find documents, emails, and conversations by topic
 
+### Optional Scenario MCP Servers
+- Add custom or third-party MCP tools here only after an admin enables them for this agent
+- Record the exact server name, tool names, allowed operations, data touched, and any approval rules
+- Do not assume custom MCP tools exist in a fresh PowerClaw template import; they are tenant-specific extensions
+
 ## Usage Guidelines
 - Prefer WorkIQ MCP tools for read operations
 - Use connector actions (Teams Post, Outlook Send) for write operations

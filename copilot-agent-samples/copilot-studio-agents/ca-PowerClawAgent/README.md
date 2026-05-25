@@ -117,9 +117,10 @@ That's it. The heartbeat starts automatically.
 | Microsoft 365 | E3 or E5 (for SharePoint, Teams, Outlook, Graph API) |
 | Copilot Studio | Credit pack or pay-as-you-go — [see pricing](https://aka.ms/copilotstudio/licensingguide) |
 | Power Automate | Premium plan — required because HeartbeatFlow uses the Copilot Studio connector |
+| Microsoft 365 Copilot | Required for the packaged Work IQ MCP tools |
 | Permissions | Ability to create a SharePoint site |
 
-> 💡 See the [FAQ](#frequently-asked-questions) for detailed licensing guidance. M365 Copilot is **not** required.
+> 💡 See the [FAQ](#frequently-asked-questions) for detailed licensing guidance. The packaged template uses Agent 365 Work IQ MCP servers, which Microsoft currently lists as requiring Microsoft 365 Copilot licensing and tenant availability.
 
 </details>
 
@@ -142,8 +143,9 @@ PowerClaw is designed to be extensible — you can layer in guided skills for sp
 | Commitment Tracker | Prompt Tool | Autonomous follow-through on promises and deadlines |
 | Agent Fleet Governor | MCP Server | Monitor and govern your org's AI agent fleet |
 | Workplace Intelligence Monitor | MCP Server | Viva Insights + Power BI workforce analytics |
+| Custom MCP Server Builder | MCP Management Server | Create governed, scenario-specific MCP servers for line-of-business tools |
 
-> **[Browse all skills →](skills/README.md)** — 8 guided extensions with step-by-step setup, copy-paste prompts, and recommended AI models.
+> **[Browse all skills →](skills/README.md)** — 9 guided extensions with step-by-step setup, copy-paste prompts, and recommended AI models.
 
 **💡 More ideas:**
 - **CRM pulse** — Before every customer call, pull open opportunities and recent context into a one-pager
@@ -177,9 +179,9 @@ You can also adjust the heartbeat frequency (e.g., every hour instead of 30 minu
 <details>
 <summary><strong>🪪 Is a Microsoft 365 Copilot license required?</strong></summary>
 
-**No.** PowerClaw runs on Copilot Studio + Power Automate — it does not require a Microsoft 365 Copilot license.
+**Yes for the packaged Work IQ MCP-based template.** PowerClaw's runtime foundation is Copilot Studio + Power Automate, but the current sample solution ships with Work IQ MCP servers for calendar, mail, Teams, user profile, Word, Copilot search, and SharePoint. Microsoft currently lists Microsoft 365 Copilot as a prerequisite for Work IQ MCP access.
 
-However, if users **do** have M365 Copilot, their interactive chats with the agent inside Teams and M365 may be included at no extra Copilot Studio credit cost (subject to fair-use limits). Without M365 Copilot, interactive chats consume credits from your Copilot Studio credit pack.
+If you fork PowerClaw and replace the Work IQ MCP tools with other connectors, custom actions, or tenant-specific custom MCP servers, your licensing profile may differ. Verify licensing, regional availability, and admin policy before customer rollout.
 
 The autonomous heartbeat always consumes Copilot Studio credits regardless of M365 Copilot licensing.
 
@@ -195,9 +197,9 @@ The autonomous heartbeat always consumes Copilot Studio credits regardless of M3
 | **Microsoft 365** (E3/E5) | ✅ Yes | SharePoint, Teams, Outlook, Graph API |
 | **Copilot Studio** | ✅ Yes | Powers the AI agent (credit pack or pay-as-you-go) |
 | **Power Automate Premium** | ✅ Yes | HeartbeatFlow uses the Copilot Studio connector (premium) |
-| **Microsoft 365 Copilot** | ❌ Optional | If present, interactive chats in Teams don't consume credits |
+| **Microsoft 365 Copilot** | ✅ Yes for this template | Required for the packaged Work IQ MCP tools, subject to tenant and regional availability |
 
-> 📖 Licensing changes frequently. Always verify with the official [Copilot Studio licensing guide](https://aka.ms/copilotstudio/licensingguide) and [Power Automate pricing](https://www.microsoft.com/en-us/power-platform/products/power-automate/pricing) for current plans and rates.
+> 📖 Licensing changes frequently. Always verify with the official [Copilot Studio licensing guide](https://aka.ms/copilotstudio/licensingguide), [Power Automate pricing](https://www.microsoft.com/en-us/power-platform/products/power-automate/pricing), and [Microsoft 365 Copilot licensing guide](https://learn.microsoft.com/en-us/copilot/microsoft-365/microsoft-365-copilot-licensing) for current plans and rates.
 
 </details>
 

@@ -29,6 +29,8 @@
 | **Microsoft 365** | E3 or E5 (for SharePoint, Teams, Outlook, Graph API) |
 | **Copilot Studio** | Credit pack or pay-as-you-go — [see pricing](https://aka.ms/copilotstudio/licensingguide) |
 | **Power Automate** | Premium plan — required because HeartbeatFlow uses the Copilot Studio connector |
+| **Microsoft 365 Copilot** | Required for the packaged Work IQ MCP tools |
+| **Work IQ MCP availability** | Tenant and region must support Agent 365 Work IQ MCP servers; admins may need to allow these tools |
 | **Permissions** | Ability to create a SharePoint site |
 | **PnP PowerShell** | *Optional* — only needed for the backup script path, which also requires an app registration + admin consent |
 
@@ -57,7 +59,7 @@ PowerClaw needs a dedicated SharePoint site as its workspace.
    - Office 365 Outlook
    - Microsoft Teams
    - Microsoft Copilot Studio
-   - WorkIQ MCP servers (Calendar, Mail, Teams, User, Word, Copilot)
+   - Work IQ MCP servers (Calendar, Mail, Teams, User, Word, Copilot, SharePoint)
 6. **Environment Variables** — if environment variables appear during import, it's fine to enter your actual SharePoint site URL and admin email from Step 1, but the flows themselves are configured in **Step 4: Configure Flows** using Compose actions
 
 > ℹ️ **Expected warning:** You may see *"Solution imported successfully with warnings: The original workflow definition has been deactivated and replaced."* This is normal — all flows are imported in an **OFF** state so you can complete setup before activating them.
@@ -75,6 +77,8 @@ Before running any flows, verify that all connection references are properly lin
 4. Repeat for all connection references (SharePoint, Outlook, Teams, Copilot Studio)
 
 > 💡 This ensures all flows can authenticate when turned on. Skipping this step is the most common cause of flow failures.
+>
+> ⚠️ Work IQ MCP access is also controlled by Microsoft 365 admin policy. If a Work IQ MCP server is blocked under **Microsoft 365 admin center → Agents and Tools**, PowerClaw cannot use it even when the Copilot Studio connection exists.
 
 ---
 
@@ -195,6 +199,8 @@ After provisioning completes, turn on the flows **in this specific order**:
 
 Open the agent in [**Copilot Studio**](https://copilotstudio.microsoft.com) and confirm these **9 tools** are enabled:
 
+Before testing, confirm the signed-in user has the required Microsoft 365 Copilot licensing for Work IQ MCP, the tenant supports the Work IQ MCP preview in your region, and the tenant admin has not blocked the servers in Microsoft 365 admin center.
+
 | Tool | Type |
 |---|---|
 | WorkIQ Calendar MCP | MCP |
@@ -208,6 +214,8 @@ Open the agent in [**Copilot Studio**](https://copilotstudio.microsoft.com) and 
 | Microsoft Teams - Post message | Connector |
 
 > 💡 No extra task connectors needed — PowerClaw manages tasks directly via the WorkIQ SharePoint MCP.
+>
+> 🔎 For tenant-level audit and troubleshooting, admins can inspect Agent 365 tool activity through Microsoft Defender observability where available. PowerClaw's SharePoint **PowerClaw_Memory_Log** remains the app-level audit trail for heartbeat behavior and user-visible actions.
 
 ---
 
@@ -392,6 +400,21 @@ Your SharePoint data (config settings, memories, tasks, constitution files) is f
 
 ---
 
+## Maintainer Workflow: Demo Environment to Template Solution
+
+PowerClaw is developed in a demo Power Platform environment, but this repository publishes a tenant-neutral sample solution for customers to import into their own environments. Treat the demo environment as the behavior validation target, not as a place to capture customer-specific values in source control.
+
+1. Pull the latest agent and flow YAML from the demo environment with the Copilot Studio VS Code extension.
+2. Immediately revert environment-specific files such as `PowerClaw/workflows/*.json` and `PowerClaw/settings.mcs.yml` back to placeholder-safe values unless you intentionally changed portable flow logic.
+3. Make local YAML, documentation, script, or solution changes; push to the demo environment; publish the agent; and validate in Teams or Microsoft 365 Copilot. The Copilot Studio test pane is not enough for MCP, connector, or channel behavior.
+4. Export the solution from the demo environment only after the live agent works correctly. Unpack, scrub, and repack so `PowerClaw_Solution.zip` contains generic placeholders such as `contoso.sharepoint.com`, no demo tenant URLs, no connection secrets, and no one-off test data.
+5. Validate the package by importing it into a clean or customer-like environment, remapping connections, configuring the Compose site URL and admin email, running Bootstrap, and verifying a heartbeat.
+6. Commit only portable artifacts: docs, scripts, YAML, and the scrubbed solution zip.
+
+Custom MCP servers created through the Microsoft MCP Management Server are usually tenant-specific. Document them as optional skills unless the server is certified, published, and realistically importable by customers.
+
+---
+
 ## Troubleshooting
 
 <details>
@@ -406,6 +429,7 @@ Your SharePoint data (config settings, memories, tasks, constitution files) is f
 | **Duplicate task emails** | Check PowerClaw_Memory for entries with scopeKey starting with `task:`. Delete stale entries. |
 | **Rate limit triggered** | Check `MaxActionsPerHour` in PowerClaw_Config. Reset `KillSwitch` to `false` after reviewing. |
 | **Permissions errors** | Ensure the flow account has Edit access to the SharePoint site and all connections are authorized. |
+| **Work IQ MCP tool missing or blocked** | Confirm Microsoft 365 Copilot licensing, regional availability, Copilot Studio connection status, and Microsoft 365 admin center **Agents and Tools** allow/block policy. |
 | **Memory not saving** | Verify the PowerClaw_Memory list exists. Check the list GUID in HeartbeatFlow. Ensure `memory-journal.md` exists in Shared Documents. |
 
 </details>

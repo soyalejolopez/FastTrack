@@ -10,9 +10,12 @@
 |---|---|
 | **Best for** | [target audience] |
 | **Complexity** | Easy / Medium / Hard |
+| **Status** | GA / Preview / Experimental |
+| **Activation** | Prompt Tool / MCP Server / MCP Management Server / Connector |
 | **Requires** | [prerequisites] |
 | **Outputs** | [what the user gets] |
 | **Works in** | Teams / M365 Copilot / Both |
+| **Owner** | [business or platform owner responsible for this skill] |
 
 ## What This Skill Does
 [Short user-centered explanation of the job-to-be-done]
@@ -34,12 +37,25 @@
 ## Prerequisites
 - [license/capability requirements]
 - [MCP/connector requirements]
+- [required admin roles, consent, or tenant settings]
+- [data sources touched and sensitivity level]
 - [Code Interpreter needed? Y/N]
 - [File upload needed? Y/N]
+
+## Governance
+
+| Area | Requirement |
+|---|---|
+| **Permissions** | [least-privilege scopes, connector permissions, or API permissions] |
+| **Admin controls** | [M365 admin center allow/block, Power Platform DLP policy, tenant setting, or approval path] |
+| **Observability** | [PowerClaw_Memory_Log, Microsoft Defender, source-system audit log, or other trace path] |
+| **Rollback** | [how to disable the prompt, MCP server, connector, or custom tool safely] |
+| **Template portability** | [whether this can ship in PowerClaw_Solution.zip or must remain tenant-specific setup guidance] |
 
 ## Setup
 
 <!-- Every prompt tool requires choosing a model. Include a model recommendation. -->
+<!-- Every MCP skill should list the exact server, connection requirements, and tools to toggle on. -->
 
 ### Step 1 — [action]
 [detailed instructions]
@@ -97,6 +113,7 @@ Click the **Model** dropdown at the top of the prompt editor and select the appr
 ## Limitations
 - [limitation 1]
 - [limitation 2]
+- [preview/tenant/region/admin availability constraints, if any]
 
 ## Extension Ideas
 - [idea 1]

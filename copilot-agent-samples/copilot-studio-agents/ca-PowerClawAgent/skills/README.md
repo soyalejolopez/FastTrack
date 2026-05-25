@@ -64,6 +64,7 @@ No PowerClaw YAML surgery required. The goal is to keep the foundation stable wh
 | [Decision Memo Builder](decision-memo-builder.md) | Prompt Tool | Strategy, PMs, execs | Transform rough notes into structured decision memos |
 | [Agent Fleet Governor](agent-fleet-governor.md) | MCP Server + optional Prompt Tool | IT admins, governance teams | Monitor, audit, govern, and rationalize your org's AI agent fleet |
 | [Workplace Intelligence Monitor](workplace-intelligence-monitor.md) | MCP Server | HR analytics, chiefs of staff, business leaders | Query Viva Insights and Power BI models for workforce health trends |
+| [Custom MCP Server Builder](custom-mcp-server-builder.md) | MCP Management Server | Platform admins, makers, solution architects | Build governed, scenario-specific MCP servers from connectors, APIs, Dataverse, or REST endpoints |
 
 ---
 
@@ -92,6 +93,7 @@ If you're building out the library over time, this is the smoothest path:
 6. **Decision Memo Builder** — highest complexity, strongest executive output
 7. **Agent Fleet Governor** — MCP-powered governance skill with optional Catalog Intelligence prompt tool for duplicate detection and consolidation
 8. **Workplace Intelligence Monitor** — Power BI + Viva Insights workforce analytics via MCP
+9. **Custom MCP Server Builder** — advanced/admin extension path for tenant-specific line-of-business tools
 
 This sequence starts with the most immediately useful skills and progresses toward richer capabilities that benefit from accumulated memory and context.
 
@@ -122,7 +124,9 @@ Want to add a new skill? Great — please keep the library consistent.
 ## Notes on Cost & Governance
 
 - **Code Interpreter** may consume additional Copilot Studio credits depending on usage and output generation
-- **WorkIQ-based skills** may access tenant data such as meetings, mail, documents, and people context
+- **Work IQ-based skills** may access tenant data such as meetings, mail, documents, and people context, and Microsoft currently lists Microsoft 365 Copilot as a prerequisite for Work IQ MCP access
+- **Custom MCP servers** should use least-privilege scopes, clear server ownership, Microsoft 365 admin center allow/block controls, and Defender observability where available
+- **Tenant-specific MCP servers** should usually stay documented as optional skills instead of being baked into the portable `PowerClaw_Solution.zip`
 - **File-upload skills** may process user-provided content that should follow your organization's data handling policies
 
 For production use, it's smart to involve your security, compliance, and platform admins early — especially for skills that touch executive communications, sensitive documents, or broad tenant context.
