@@ -95,6 +95,26 @@ Purview `CopilotInteraction` exports are close to one row per prompt in most ten
 - **PowerShell 5.1+** — for the Entra user export
 - **Power BI Desktop** — to open the `.pbix`
 
+## 🏛️ Sovereign Clouds (GCC / GCC High / DoD)
+
+The audit export and Entra user export are **cloud-agnostic** — they read whatever SKUs your tenant actually has directly from Microsoft Graph, so the CSVs load into the dashboard in any cloud.
+
+> [!NOTE]
+> The dashboard's **license friendly-name mapping currently assumes Commercial SKU values.** Government clouds use different license identifiers — the SKU GUID (`skuId`) differs between Commercial and GCC/GCC High/DoD, and some part numbers/friendly names carry a gov-specific variant. As a result, the **license type** shown in the report may display the raw SKU part number (or blank) instead of a friendly name for gov tenants.
+
+**What this affects:** only the *display name* of the license in the report. All other data — usage, apps, agents, users — is unaffected.
+
+**Known Copilot SKU values by cloud:**
+
+| Cloud | SKU part number | `skuId` (GUID) |
+| :--- | :--- | :--- |
+| Commercial | `Microsoft_365_Copilot` | `639dec6b-bb19-468b-871c-c5c441c4b0cb` |
+| GCC | `COPILOT_FOR_MICROSOFT_365_GCC` | `a920a45e-67da-4a1a-b408-460d7a2453ce` |
+
+> GCC High / DoD use their own SKU identifiers. Run `Get-MgSubscribedSku | Select SkuId, SkuPartNumber` in your tenant to find them, and please share via the [issues list](../../../../issues) so we can add them here.
+
+**How to adjust for your cloud:** in Power BI Desktop, edit the license lookup in the query/model to match your tenant's SKU value from the table above. The dashboard keys off the Commercial `Microsoft_365_Copilot` SKU by default, so GCC tenants should add (or swap in) the `COPILOT_FOR_MICROSOFT_365_GCC` value.
+
 ## 📚 Additional Resources
 
 - [Microsoft 365 Copilot documentation](https://learn.microsoft.com/en-us/microsoft-365-copilot/)
@@ -112,6 +132,9 @@ Please report issues to the [issues list](../../../../issues). This is an open-s
 | Alejandro Lopez (alejandro.lopez@microsoft.com) | March 26th, 2025 | April 21st, 2026 |
 
 ## 📝 Changelog
+
+### July 6, 2026
+- **Sovereign cloud guidance.** Documented that the exports are cloud-agnostic but the dashboard's license friendly-name mapping assumes Commercial SKUs, with steps for GCC / GCC High / DoD tenants to adjust the license lookup. Added the verified GCC Copilot SKU (`COPILOT_FOR_MICROSOFT_365_GCC` / `a920a45e-67da-4a1a-b408-460d7a2453ce`) alongside its Commercial counterpart.
 
 ### July 2, 2026
 - **Unified PowerShell export with the main dashboard.** The **Export Purview Audit Logs** option now emits a raw `AuditData` CSV that mirrors the Purview portal export, so it loads directly into `Copilot_Audit_PBI.pbix`. Retired the stale PowerShell app/agent classification (now a single source of truth in the Power BI query) and deprecated the separate `AlternateMethod` model.
