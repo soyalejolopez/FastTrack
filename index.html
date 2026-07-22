@@ -1480,23 +1480,28 @@
       return 'FT';
     };
 
-    const hashStr = (s) => {
-      let h = 0x811c9dc5;
-      for (let i = 0; i < s.length; i++) {
-        h ^= s.charCodeAt(i);
-        h = (h * 0x01000193) >>> 0;
+    let RESOURCE_STATS = null;
+
+    async function loadStats() {
+      try {
+        const response = await fetch('resource-stats.json', { cache: 'no-cache' });
+        if (response.ok) {
+          RESOURCE_STATS = await response.json();
+        }
+      } catch (e) {
+        RESOURCE_STATS = null;
       }
-      return h;
+    }
+
+    const sanitizeUrl = (url) => {
+      if (!url) return '#';
+      const trimmed = String(url).trim();
+      if (/^(?:https?:\/\/|\/|\.\/|\.\.\/|#)/i.test(trimmed)) {
+        return escapeHTML(trimmed);
+      }
+      return '#';
     };
-    const baseStats = (r) => {
-      const h = hashStr(r.slug);
-      const ageDays = Math.max(0, (Date.now() - new Date(r.updated)) / 86400000);
-      const recency = Math.max(0, 1 - ageDays / 540);
-      const views = 140 + (h % 4200) + Math.round(recency * 2600) + (r.featured ? 1600 : 0);
-      const rate = 0.02 + ((h >>> 3) % 9) / 100;
-      const upvotes = Math.max(3, Math.round(views * rate));
-      return { views, upvotes };
-    };
+
     const getVotesState = () => {
       try { return JSON.parse(localStorage.getItem('ft-votes') || '{}'); } catch(e) { return {}; }
     };
@@ -1507,10 +1512,15 @@
       localStorage.setItem('ft-votes', JSON.stringify(votes));
     };
     const getStats = (r) => {
-      const base = baseStats(r);
-      return { views: base.views, upvotes: base.upvotes + (hasVoted(r.slug) ? 1 : 0) };
+      const real = RESOURCE_STATS && RESOURCE_STATS[r.slug];
+      const views = (real && typeof real.views === 'number') ? real.views : (typeof r.views === 'number' ? r.views : null);
+      const baseUpvotes = (real && typeof real.upvotes === 'number') ? real.upvotes : (typeof r.upvotes === 'number' ? r.upvotes : null);
+      const voted = hasVoted(r.slug);
+      const upvotes = voted ? (baseUpvotes !== null ? baseUpvotes : 0) + 1 : baseUpvotes;
+      return { views, upvotes };
     };
     const formatCount = (n) => {
+      if (n === null || n === undefined) return '—';
       if (n >= 10000) return (n / 1000).toFixed(0) + 'k';
       if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
       return n.toString();
@@ -1551,6 +1561,8 @@
     async function loadCatalog() {
       grid.classList.add('d-none');
       showEmptyState('Loading catalog…', 'Reading the latest FastTrack resource metadata.', false);
+
+      await loadStats();
 
       try {
         const response = await fetch(CATALOG_URL, { cache: 'no-cache' });
@@ -1749,21 +1761,46 @@
         const ageA = Math.max(0, (Date.now() - new Date(a.updated)) / 86400000);
         const ageB = Math.max(0, (Date.now() - new Date(b.updated)) / 86400000);
 
+        const hasStatsA = statsA.views !== null || statsA.upvotes !== null;
+        const hasStatsB = statsB.views !== null || statsB.upvotes !== null;
+
         if (state.sort === 'popular') {
-          if (statsA.upvotes !== statsB.upvotes) return statsB.upvotes - statsA.upvotes;
-          if (statsA.views !== statsB.views) return statsB.views - statsA.views;
+          if (hasStatsA || hasStatsB) {
+            const valA = statsA.upvotes || 0;
+            const valB = statsB.upvotes || 0;
+            if (valA !== valB) return valB - valA;
+            const vA = statsA.views || 0;
+            const vB = statsB.views || 0;
+            if (vA !== vB) return vB - vA;
+          }
+          if (!!b.featured !== !!a.featured) return b.featured ? 1 : -1;
           return a.name.localeCompare(b.name);
         } else if (state.sort === 'trending') {
-          const hotA = (statsA.upvotes * 3 + statsA.views / 40) / Math.pow(ageA + 2, 0.75);
-          const hotB = (statsB.upvotes * 3 + statsB.views / 40) / Math.pow(ageB + 2, 0.75);
-          return hotB - hotA;
+          if (hasStatsA || hasStatsB) {
+            const upA = statsA.upvotes || 0;
+            const upB = statsB.upvotes || 0;
+            const vA = statsA.views || 0;
+            const vB = statsB.views || 0;
+            const hotA = (upA * 3 + vA / 40) / Math.pow(ageA + 2, 0.75);
+            const hotB = (upB * 3 + vB / 40) / Math.pow(ageB + 2, 0.75);
+            if (hotA !== hotB) return hotB - hotA;
+          }
+          return new Date(b.updated) - new Date(a.updated);
         } else if (state.sort === 'new') {
           return new Date(b.updated) - new Date(a.updated);
         } else if (state.sort === 'engaging') {
-          const rateA = (statsA.upvotes + 2) / (statsA.views + 40);
-          const rateB = (statsB.upvotes + 2) / (statsB.views + 40);
-          if (rateB !== rateA) return rateB - rateA;
-          return statsB.upvotes - statsA.upvotes;
+          if (hasStatsA || hasStatsB) {
+            const upA = statsA.upvotes || 0;
+            const upB = statsB.upvotes || 0;
+            const vA = statsA.views || 0;
+            const vB = statsB.views || 0;
+            const rateA = (upA + 2) / (vA + 40);
+            const rateB = (upB + 2) / (vB + 40);
+            if (rateB !== rateA) return rateB - rateA;
+            return upB - upA;
+          }
+          if (!!b.featured !== !!a.featured) return b.featured ? 1 : -1;
+          return a.name.localeCompare(b.name);
         }
         return 0;
       });
@@ -1964,7 +2001,7 @@
         const btn = document.createElement('button');
         const isHidden = !state.showAllTags && index >= INITIAL_LIMIT && state.tag !== tag;
         btn.className = `tag-pill ${state.tag === tag ? 'active' : ''} ${isHidden ? 'hidden' : ''}`;
-        btn.innerHTML = `${tag} <span style="opacity: 0.6; margin-left: 2px;">${count}</span>`;
+        btn.innerHTML = `${escapeHTML(tag)} <span style="opacity: 0.6; margin-left: 2px;">${count}</span>`;
         btn.onclick = () => {
           state.tag = state.tag === tag ? 'all' : tag;
           updateState();
@@ -1988,7 +2025,7 @@
       const card = document.createElement('article');
       card.className = 'card';
       
-      const initials = getInitials(data.name);
+      const initials = escapeHTML(getInitials(data.name));
       const bg = getTypeBg(data.type);
       const color = getTypeColor(data.type);
       const stats = getStats(data);
@@ -1996,8 +2033,19 @@
       
       const star = data.featured ? `<span class="featured-star" aria-label="Featured">★</span>` : '';
       
+      const safeSlug = escapeHTML(data.slug);
+      const encodedSlug = encodeURIComponent(data.slug);
+      const safeName = escapeHTML(data.name);
+      const safeSubcategory = escapeHTML(data.subcategory);
+      const safeDescription = escapeHTML(data.description);
+      const safeArtifact = escapeHTML(data.artifact);
+      const formattedArtifact = escapeHTML(formatArtifact(data.artifact));
+
       card.style.setProperty('--card-color', color);
       
+      const viewsAria = stats.views !== null ? `${stats.views} views` : 'No view count available';
+      const voteLabel = voted ? `Remove your upvote from ${safeName}` : `Upvote ${safeName}`;
+
       card.innerHTML = `
         <div class="card-header">
           <div class="card-avatar" style="background-color: ${bg}; color: ${color};" aria-hidden="true">
@@ -2005,43 +2053,43 @@
           </div>
           <div class="card-title-group">
             <h2 class="card-title">
-              <a href="?resource=${data.slug}" class="resource-link">${data.name}</a>
+              <a href="?resource=${encodedSlug}" class="resource-link">${safeName}</a>
             </h2>
             <div class="card-sub">
               <div class="pill-dot" style="background-color: ${color}; width: 6px; height: 6px;"></div>
-              ${data.subcategory}
+              ${safeSubcategory}
             </div>
           </div>
         </div>
-        <div class="card-desc">${data.description}</div>
-        <div class="compact-views" aria-label="${stats.views} views">
+        <div class="card-desc">${safeDescription}</div>
+        <div class="compact-views" aria-label="${viewsAria}">
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
           ${formatCount(stats.views)}
         </div>
         <div class="compact-votes">
-          <button class="vote-btn ${voted ? 'voted' : ''}" data-slug="${data.slug}" aria-pressed="${voted}" aria-label="${voted ? `Remove your upvote from ${data.name}` : `Upvote ${data.name}`}">
+          <button class="vote-btn ${voted ? 'voted' : ''}" data-slug="${safeSlug}" aria-pressed="${voted}" aria-label="${voteLabel}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="${voted ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
             <span class="vote-count">${formatCount(stats.upvotes)}</span>
           </button>
         </div>
         <div class="card-footer">
           <div class="card-tags">
-            ${data.tags.slice(0, 3).map(t => `<span class="card-tag">${t}</span>`).join('')}
+            ${data.tags.slice(0, 3).map(t => `<span class="card-tag">${escapeHTML(t)}</span>`).join('')}
             ${data.tags.length > 3 ? `<span class="card-tag">+${data.tags.length - 3}</span>` : ''}
           </div>
           <div class="card-stats">
-            <span class="stat-views" aria-label="${stats.views} views">
+            <span class="stat-views" aria-label="${viewsAria}">
               <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
               ${formatCount(stats.views)}
             </span>
-            <button class="vote-btn ${voted ? 'voted' : ''}" data-slug="${data.slug}" aria-pressed="${voted}" aria-label="${voted ? `Remove your upvote from ${data.name}` : `Upvote ${data.name}`}">
+            <button class="vote-btn ${voted ? 'voted' : ''}" data-slug="${safeSlug}" aria-pressed="${voted}" aria-label="${voteLabel}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="${voted ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
               <span class="vote-count">${formatCount(stats.upvotes)}</span>
             </button>
           </div>
           <div class="card-artifact-container">
-            <div class="card-artifact" aria-label="Format: ${data.artifact}">
-              ${star} ${formatArtifact(data.artifact)}
+            <div class="card-artifact" aria-label="Format: ${safeArtifact}">
+              ${star} ${formattedArtifact}
             </div>
             <div class="compact-date">${formatDate(data.updated)}</div>
             <div class="card-link-out">View details <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div>
@@ -2154,10 +2202,12 @@
 
     const parseInline = text => {
       if (!text) return '';
-      let escaped = escapeHTML(text);
+      let escaped = escapeHTML(String(text));
       escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
       escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      escaped = escaped.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+      escaped = escaped.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, url) =>
+        `<a href="${sanitizeUrl(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      );
       return escaped;
     };
 
@@ -2249,9 +2299,20 @@
       
       // Tags
       const tagsContainer = document.getElementById('detailTags');
-      tagsContainer.innerHTML = resource.tags.map(t =>
-        `<a href="?tag=${t}" class="card-tag" onclick="event.preventDefault(); document.querySelector('a[data-tag=&quot;${t}&quot;]').click();">${t}</a>`
-      ).join('');
+      tagsContainer.replaceChildren(...resource.tags.map(t => {
+        const btn = document.createElement('button');
+        btn.className = 'card-tag';
+        btn.type = 'button';
+        btn.textContent = t;
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          state.resource = null;
+          state.tag = t;
+          updateState(true);
+          window.scrollTo(0, 0);
+        });
+        return btn;
+      }));
       
       // Detail content
       document.getElementById('detailDesc').textContent = resource.description;
@@ -2285,13 +2346,14 @@
       }));
       
       // Metadata
-      document.getElementById('metaType').innerHTML = `<div class="pill-dot" style="background-color: ${typeColor}; width: 8px; height: 8px;"></div> ${typeDef.label}`;
+      document.getElementById('metaType').innerHTML = `<div class="pill-dot" style="background-color: ${typeColor}; width: 8px; height: 8px;"></div> ${escapeHTML(typeDef.label)}`;
       document.getElementById('metaCat').textContent = resource.subcategory;
       document.getElementById('metaFormat').textContent = fmt;
       
       const stats = getStats(resource);
+      const viewsAria = stats.views !== null ? `${stats.views} views` : 'No view count available';
       document.getElementById('metaViews').innerHTML = `
-        <span class="stat-views" style="display:inline-flex; align-items:center; gap:0.25rem;">
+        <span class="stat-views" style="display:inline-flex; align-items:center; gap:0.25rem;" aria-label="${viewsAria}">
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
           ${formatCount(stats.views)}
         </span>
@@ -2305,14 +2367,15 @@
       document.getElementById('metaVersion').textContent = resource.version || '';
       document.getElementById('metaVersionRow').classList.toggle('d-none', !resource.version);
       
-      document.getElementById('btnDetailOpen').href = resource.url;
+      document.getElementById('btnDetailOpen').href = sanitizeUrl(resource.url);
       
       // Detail Vote Button
       const detailVoteBtn = document.getElementById('btnDetailVote');
       const voted = hasVoted(resource.slug);
+      const safeName = escapeHTML(resource.name);
       detailVoteBtn.classList.toggle('voted', voted);
       detailVoteBtn.setAttribute('aria-pressed', voted);
-      detailVoteBtn.setAttribute('aria-label', voted ? `Remove your upvote from ${resource.name}` : `Upvote ${resource.name}`);
+      detailVoteBtn.setAttribute('aria-label', voted ? `Remove your upvote from ${safeName}` : `Upvote ${safeName}`);
       detailVoteBtn.querySelector('.vote-count').textContent = formatCount(stats.upvotes);
       detailVoteBtn.querySelector('svg').setAttribute('fill', voted ? 'currentColor' : 'none');
       
@@ -2330,7 +2393,7 @@
         const newStats = getStats(resource);
         newBtn.classList.toggle('voted', nowVoted);
         newBtn.setAttribute('aria-pressed', nowVoted);
-        newBtn.setAttribute('aria-label', nowVoted ? `Remove your upvote from ${resource.name}` : `Upvote ${resource.name}`);
+        newBtn.setAttribute('aria-label', nowVoted ? `Remove your upvote from ${safeName}` : `Upvote ${safeName}`);
         newBtn.querySelector('.vote-count').textContent = formatCount(newStats.upvotes);
         newBtn.querySelector('svg').setAttribute('fill', nowVoted ? 'currentColor' : 'none');
         newBtn.classList.remove('pop');

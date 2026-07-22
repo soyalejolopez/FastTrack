@@ -104,6 +104,10 @@ function gitUpdatedDate(file) {
   }
 }
 
+function hasRawHtmlTags(value) {
+  return typeof value === 'string' && /[<>]/.test(value);
+}
+
 function validate(data, file) {
   const errors = [];
   const add = (field, message) => errors.push({ file, field, message });
@@ -114,23 +118,51 @@ function validate(data, file) {
     }
   }
 
-  if (data.title !== undefined && !isNonEmptyString(data.title)) add('title', 'must be a non-empty string');
+  if (data.title !== undefined) {
+    if (!isNonEmptyString(data.title)) add('title', 'must be a non-empty string');
+    else if ([...data.title].length > 100) add('title', `must be 100 characters or fewer (found ${[...data.title].length})`);
+    else if (hasRawHtmlTags(data.title)) add('title', 'must not contain raw < or >');
+  }
   if (data.type !== undefined && !allowedTypes.has(data.type)) add('type', `must be one of: ${[...allowedTypes].join(', ')}`);
-  if (data.category !== undefined && !isNonEmptyString(data.category)) add('category', 'must be a non-empty string');
+  if (data.category !== undefined) {
+    if (!isNonEmptyString(data.category)) add('category', 'must be a non-empty string');
+    else if ([...data.category].length > 100) add('category', `must be 100 characters or fewer (found ${[...data.category].length})`);
+    else if (hasRawHtmlTags(data.category)) add('category', 'must not contain raw < or >');
+  }
   if (data.summary !== undefined) {
     if (!isNonEmptyString(data.summary)) add('summary', 'must be a non-empty string');
     else if ([...data.summary].length > 140) add('summary', `must be 140 characters or fewer (found ${[...data.summary].length})`);
+    else if (hasRawHtmlTags(data.summary)) add('summary', 'must not contain raw < or >');
   }
-  if (data.author !== undefined && !isNonEmptyString(data.author) && !isStringList(data.author)) {
-    add('author', 'must be a non-empty string or a non-empty list of strings');
+  if (data.author !== undefined) {
+    if (!isNonEmptyString(data.author) && !isStringList(data.author)) {
+      add('author', 'must be a non-empty string or a non-empty list of strings');
+    } else {
+      const authors = Array.isArray(data.author) ? data.author : [data.author];
+      for (const author of authors) {
+        if ([...author].length > 100) add('author', `author string must be 100 characters or fewer (found ${[...author].length})`);
+        if (hasRawHtmlTags(author)) add('author', 'author must not contain raw < or >');
+      }
+    }
   }
   if (data.version !== undefined && (!isNonEmptyString(data.version) || !semverPattern.test(data.version))) {
     add('version', 'must be a semantic version such as 1.0.0');
   }
   if (data.published !== undefined && !isValidDate(data.published)) add('published', 'must use YYYY-MM-DD');
   if (data.updated !== undefined && !isValidDate(data.updated)) add('updated', 'must use YYYY-MM-DD');
-  if (data.tags !== undefined && !isStringList(data.tags)) add('tags', 'must be a non-empty list of strings');
-  if (data.format !== undefined && !allowedFormats.has(data.format)) add('format', `must be one of: ${[...allowedFormats].join(', ')}`);
+  if (data.tags !== undefined) {
+    if (!isStringList(data.tags)) add('tags', 'must be a non-empty list of strings');
+    else {
+      for (const tag of data.tags) {
+        if ([...tag].length > 50) add('tags', `tag must be 50 characters or fewer (found ${[...tag].length})`);
+        if (hasRawHtmlTags(tag)) add('tags', 'tag must not contain raw < or >');
+      }
+    }
+  }
+  if (data.format !== undefined) {
+    if (!allowedFormats.has(data.format)) add('format', `must be one of: ${[...allowedFormats].join(', ')}`);
+    else if (hasRawHtmlTags(data.format)) add('format', 'must not contain raw < or >');
+  }
   if (data.featured !== undefined && typeof data.featured !== 'boolean') add('featured', 'must be true or false');
   if (data.status !== undefined && !allowedStatuses.has(data.status)) add('status', `must be one of: ${[...allowedStatuses].join(', ')}`);
   if (data.whatItIs !== undefined && !isNonEmptyString(data.whatItIs)) add('whatItIs', 'must be a non-empty string');
@@ -138,11 +170,23 @@ function validate(data, file) {
   if (data.howToUse !== undefined && !isNonEmptyString(data.howToUse)) add('howToUse', 'must be a non-empty Markdown string');
   if (data.prerequisites !== undefined && !isStringList(data.prerequisites)) add('prerequisites', 'must be a non-empty list of strings');
   if (data.url !== undefined) {
-    try {
-      const url = new URL(data.url);
-      if (url.protocol !== 'https:') add('url', 'must be an HTTPS URL');
-    } catch {
-      add('url', 'must be a valid HTTPS URL');
+    if (typeof data.url !== 'string') {
+      add('url', 'must be a string');
+    } else {
+      const trimmedUrl = data.url.trim();
+      const isAllowedUrl = /^(?:https?:\/\/|\/|\.\/|\.\.\/)/i.test(trimmedUrl);
+      if (!isAllowedUrl) {
+        add('url', 'must be an HTTP(S) or relative URL');
+      } else {
+        try {
+          if (trimmedUrl.startsWith('http')) {
+            const url = new URL(trimmedUrl);
+            if (url.protocol !== 'https:' && url.protocol !== 'http:') add('url', 'must be an HTTP(S) URL');
+          }
+        } catch {
+          add('url', 'must be a valid URL');
+        }
+      }
     }
   }
 
