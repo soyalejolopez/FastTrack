@@ -1,0 +1,23 @@
+* text=auto
+
+*.sh text eol=lf
+*.ps1 text eol=lf
+*.psm1 text eol=lf
+*.psd1 text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+
+*.7z binary
+*.gif binary
+*.ico binary
+*.jpeg binary
+*.jpg binary
+*.pdf binary
+*.pbix binary
+*.png binary
+*.pptx binary
+*.svg binary
+*.vsix binary
+*.zip binary

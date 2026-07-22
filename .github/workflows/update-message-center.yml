@@ -10,6 +10,10 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: update-message-center
+  cancel-in-progress: false
+
 jobs:
   update-message-center:
     # Only run on the canonical upstream repo, not on forks.
@@ -17,6 +21,7 @@ jobs:
     # instead of failing when repo-specific secrets are unavailable.
     if: github.repository == 'microsoft/FastTrack'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0

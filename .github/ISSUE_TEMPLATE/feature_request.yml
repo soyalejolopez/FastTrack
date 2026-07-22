@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest an improvement to a FastTrack script, sample, tool, or catalog.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for proposing an improvement. Please focus on the user need and expected outcome.
+  - type: input
+    id: resource
+    attributes:
+      label: Related resource
+      description: Link to or provide the repository path, if applicable.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or scenario
+      description: What user need or limitation would this address?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed outcome
+      description: Describe the desired behavior, not only a specific implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe current workarounds or other approaches.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues and requests for duplicates.
+          required: true
+        - label: I can contribute this change or help test it.
+          required: false

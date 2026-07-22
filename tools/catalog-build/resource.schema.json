@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/microsoft/FastTrack/tools/catalog-build/resource.schema.json",
+  "title": "FastTrack catalog resource front matter",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "title",
+    "type",
+    "category",
+    "summary",
+    "author",
+    "version",
+    "published"
+  ],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[^<>]+$"
+    },
+    "type": {
+      "enum": [
+        "script",
+        "agent",
+        "strategy",
+        "analytics",
+        "prompt",
+        "skill"
+      ]
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[^<>]+$"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 140,
+      "pattern": "^[^<>]+$"
+    },
+    "author": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[^<>]+$"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[^<>]+$"
+          }
+        }
+      ]
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "published": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "updated": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 50,
+        "pattern": "^[^A-Z<>]+$"
+      }
+    },
+    "format": {
+      "enum": [
+        "ps1",
+        "bundle",
+        "declarative",
+        "interactive",
+        "pptx",
+        "pbix",
+        "md"
+      ]
+    },
+    "featured": {
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "preview",
+        "archived"
+      ]
+    },
+    "whatItIs": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^[^<>]+$"
+    },
+    "whyUseIt": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300,
+        "pattern": "^[^<>]+$"
+      }
+    },
+    "howToUse": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 5000
+    },
+    "prerequisites": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300,
+        "pattern": "^[^<>]+$"
+      }
+    },
+    "url": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^(?:https?://|(?!(?:[A-Za-z][A-Za-z0-9+.-]*:|//))[^\\\\\\s]+)$"
+    }
+  }
+}

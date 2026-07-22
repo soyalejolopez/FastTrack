@@ -2,12 +2,17 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import Ajv2020 from 'ajv/dist/2020.js';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = join(toolDirectory, '..', '..');
 const checkOnly = process.argv.includes('--check');
+const resourceSchema = JSON.parse(readFileSync(join(toolDirectory, 'resource.schema.json'), 'utf8'));
+const legacyExclusionDocument = JSON.parse(readFileSync(join(toolDirectory, 'legacy-exclusions.json'), 'utf8'));
+const legacyExclusions = Array.isArray(legacyExclusionDocument) ? legacyExclusionDocument : [];
+const validateResourceSchema = new Ajv2020({ allErrors: true, strict: true }).compile(resourceSchema);
 
 const folderRoots = [
   'scripts',
@@ -112,6 +117,15 @@ function validate(data, file) {
   const errors = [];
   const add = (field, message) => errors.push({ file, field, message });
 
+  if (!validateResourceSchema(data)) {
+    for (const error of validateResourceSchema.errors) {
+      const field = error.params.missingProperty ??
+        error.instancePath.slice(1).replaceAll('/', '.') ??
+        'front matter';
+      add(field || 'front matter', error.message);
+    }
+  }
+
   for (const field of ['title', 'type', 'category', 'summary', 'author', 'version', 'published']) {
     if (data[field] === undefined || data[field] === null || data[field] === '') {
       add(field, 'is required');
@@ -150,10 +164,18 @@ function validate(data, file) {
   }
   if (data.published !== undefined && !isValidDate(data.published)) add('published', 'must use YYYY-MM-DD');
   if (data.updated !== undefined && !isValidDate(data.updated)) add('updated', 'must use YYYY-MM-DD');
+  const today = new Date().toISOString().slice(0, 10);
+  if (isValidDate(data.published) && data.published > today) add('published', 'must not be in the future');
+  if (isValidDate(data.updated) && data.updated > today) add('updated', 'must not be in the future');
+  if (isValidDate(data.published) && isValidDate(data.updated) && data.updated < data.published) {
+    add('updated', 'must be on or after published');
+  }
   if (data.tags !== undefined) {
     if (!isStringList(data.tags)) add('tags', 'must be a non-empty list of strings');
     else {
+      if (new Set(data.tags).size !== data.tags.length) add('tags', 'must contain unique values');
       for (const tag of data.tags) {
+        if (tag !== tag.toLowerCase()) add('tags', `tag "${tag}" must be lowercase`);
         if ([...tag].length > 50) add('tags', `tag must be 50 characters or fewer (found ${[...tag].length})`);
         if (hasRawHtmlTags(tag)) add('tags', 'tag must not contain raw < or >');
       }
@@ -174,7 +196,10 @@ function validate(data, file) {
       add('url', 'must be a string');
     } else {
       const trimmedUrl = data.url.trim();
-      const isAllowedUrl = /^(?:https?:\/\/|\/|\.\/|\.\.\/)/i.test(trimmedUrl);
+      const hasDisallowedScheme = /^[a-z][a-z\d+.-]*:/i.test(trimmedUrl) &&
+        !/^https?:\/\//i.test(trimmedUrl);
+      const isAllowedUrl = trimmedUrl.length > 0 && !hasDisallowedScheme &&
+        !trimmedUrl.startsWith('//') && !/[\\\s]/.test(trimmedUrl);
       if (!isAllowedUrl) {
         add('url', 'must be an HTTP(S) or relative URL');
       } else {
@@ -239,10 +264,27 @@ function createResource(data, file, updated) {
 const candidates = collectCandidates();
 const resources = [];
 const errors = [];
+const candidatePaths = new Set(candidates.map(file => toPosix(relative(repositoryRoot, file))));
+const legacyExclusionSet = new Set(legacyExclusions);
+
+if (!Array.isArray(legacyExclusionDocument) || legacyExclusionSet.size !== legacyExclusions.length ||
+    !legacyExclusions.every(path => typeof path === 'string' && path.length > 0)) {
+  errors.push({
+    file: join(toolDirectory, 'legacy-exclusions.json'),
+    field: 'manifest',
+    message: 'must be an array of unique, non-empty repository-relative paths'
+  });
+}
 
 for (const file of candidates) {
   const source = readFileSync(file, 'utf8');
-  if (!hasFrontMatter(source)) continue;
+  const relativePath = toPosix(relative(repositoryRoot, file));
+  if (!hasFrontMatter(source)) {
+    if (!legacyExclusionSet.has(relativePath)) {
+      errors.push({ file, field: 'front matter', message: 'is required for new catalog candidates' });
+    }
+    continue;
+  }
 
   let data;
   try {
@@ -262,6 +304,29 @@ for (const file of candidates) {
   }
 }
 
+for (const excludedPath of legacyExclusionSet) {
+  const file = join(repositoryRoot, ...excludedPath.split('/'));
+  if (!candidatePaths.has(excludedPath) || !existsSync(file)) {
+    errors.push({ file, field: 'legacy exclusion', message: 'does not identify an eligible README' });
+  } else if (hasFrontMatter(readFileSync(file, 'utf8'))) {
+    errors.push({ file, field: 'legacy exclusion', message: 'must be removed after front matter is added' });
+  }
+}
+
+const resourcesBySlug = new Map();
+for (const resource of resources) {
+  const existing = resourcesBySlug.get(resource.slug);
+  if (existing) {
+    errors.push({
+      file: join(repositoryRoot, ...resource.source.split('/')),
+      field: 'title',
+      message: `normalizes to duplicate slug "${resource.slug}" already used by ${existing.source}`
+    });
+  } else {
+    resourcesBySlug.set(resource.slug, resource);
+  }
+}
+
 if (resources.length === 0 && errors.length === 0) {
   errors.push({ file: repositoryRoot, field: 'catalog', message: 'contains no resources with YAML front matter' });
 }
@@ -276,11 +341,8 @@ if (errors.length > 0) {
   console.log(`Catalog metadata is valid for ${resources.length} resources.`);
 } else {
   resources.sort((a, b) => a.title.localeCompare(b.title));
-  const latestUpdated = resources.reduce((max, resource) => (
-    resource.updated && resource.updated > max ? resource.updated : max
-  ), '');
   const catalog = {
-    generatedAt: latestUpdated,
+    generatedAt: new Date().toISOString(),
     count: resources.length,
     resources
   };

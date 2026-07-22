@@ -9,7 +9,7 @@
 
 
 
-Welcome to the home for Microsoft FastTrack Open Source Software (FTOSS). Through this initiative we are collecting tools, scripts, and guidance from across the FastTrack program, our partners, and anyone who wants to contribute with the aim to make them easier to find, grow, and improve. Please let us know any questions or feedback you have using the [issues list](https://github.com/Microsoft/FastTrack/issues).
+Welcome to the home for Microsoft FastTrack Open Source Software (FTOSS). Through this initiative we are collecting tools, scripts, and guidance from across the FastTrack program, our partners, and anyone who wants to contribute with the aim to make them easier to find, grow, and improve. Please let us know any questions or feedback you have using the [issues list](https://github.com/microsoft/FastTrack/issues).
 
 ## Scripts
 
@@ -33,7 +33,7 @@ Browse the interactive catalog and Copilot agent analytics on the [FastTrack lan
 
 ## Ideas Welcome!
 
-If you have ideas for projects that would improve our delivery, experience, or process please [submit an issue](https://github.com/Microsoft/FastTrack/issues) and let us know. We can't promise every idea will be implemented, but we value your feedback. Please be sure to include sufficient information that we can understand your idea and respond.
+If you have ideas for projects that would improve our delivery, experience, or process please [submit an issue](https://github.com/microsoft/FastTrack/issues) and let us know. We can't promise every idea will be implemented, but we value your feedback. Please be sure to include sufficient information that we can understand your idea and respond.
 
 Do you have a script or tool you use that would be of value to the community? Please let us know so we can discuss potentially adding it to the catalog - or submit a Pull Request to get it added!
 
@@ -53,7 +53,7 @@ contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additio
 
 ## Legal Notices
 
-Microsoft and any contributors grant you a license to the Microsoft documentation and other content in this repository under the [MIT License](https://opensource.org/licenses/MIT), see the [LICENSE](LICENSE) file, and grant you a license to any code in the repository under the [MIT License](https://opensource.org/licenses/MIT), see the [LICENSE-CODE](LICENSE-CODE) file.
+Microsoft and any contributors grant you a license to the Microsoft documentation and other content in this repository under the [MIT License](https://opensource.org/licenses/MIT), see the [LICENSE](https://github.com/microsoft/FastTrack/blob/master/LICENSE) file, and grant you a license to any code in the repository under the [MIT License](https://opensource.org/licenses/MIT), see the [LICENSE-CODE](https://github.com/microsoft/FastTrack/blob/master/LICENSE-CODE) file. The two files are retained separately to make the content and source-code grants explicit, even though both currently use MIT terms.
 
 Microsoft, Windows, Microsoft Azure and/or other Microsoft products and services referenced in the documentation may be either trademarks or registered trademarks of Microsoft in the United States and/or other countries. The licenses for this project do not grant you rights to use any Microsoft names, logos, or trademarks. Microsoft's general trademark guidelines can be found at http://go.microsoft.com/fwlink/?LinkID=254653.
 

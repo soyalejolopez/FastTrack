@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://msrc.microsoft.com/create-report
+    about: Report vulnerabilities privately to the Microsoft Security Response Center.
+  - name: Microsoft 365 product support
+    url: https://support.microsoft.com/microsoft-365
+    about: Get help with Microsoft 365 products and services.
+  - name: FastTrack information
+    url: https://www.microsoft.com/fasttrack
+    about: Learn about Microsoft FastTrack services and engagement options.

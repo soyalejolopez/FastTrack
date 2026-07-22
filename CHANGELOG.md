@@ -6,6 +6,15 @@ This file captures only selected high-level milestones.
 
 ## History
 
+### July 22, 2026
+
+#### Repository hardening
+
+* Added automated Markdown link and CodeQL checks with pinned actions and bounded workflow execution.
+* Added modern governance, support, issue-reporting, security, and repository-normalization files.
+* Hardened catalog metadata validation with JSON Schema, collision detection, and explicit legacy exclusions.
+* Repaired broken documentation links and refreshed repository maintenance guidance.
+
 ### April 20, 2018
 
 #### New Samples

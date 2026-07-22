@@ -1,35 +1,26 @@
-<!-- BEGIN MICROSOFT SECURITY.MD V0.0.1 BLOCK -->
+# Security
 
-## Security
+Microsoft takes the security of our software products and services seriously, including source code repositories managed through our GitHub organizations.
 
-Microsoft takes the security of our software products and services seriously, which includes all source code repositories managed through our GitHub organizations, which include [Microsoft](https://github.com/Microsoft), [Azure](https://github.com/Azure), [DotNet](https://github.com/dotnet), [AspNet](https://github.com/aspnet), [Xamarin](https://github.com/xamarin), and [many more](https://opensource.microsoft.com/).
+## Reporting security issues
 
-If you believe you have found a security vulnerability in any Microsoft-owned repository that meets Microsoft's [definition](https://docs.microsoft.com/en-us/previous-versions/tn-archive/cc751383(v=technet.10)) of a security vulnerability, please report it to us as described below.
+**Do not report security vulnerabilities through public GitHub issues.**
 
-## Reporting Security Issues
+Report potential vulnerabilities to the Microsoft Security Response Center (MSRC) using the [secure reporting portal](https://msrc.microsoft.com/create-report). If you cannot use the portal, email [security@microsoft.com](mailto:security@microsoft.com). Encrypt sensitive email with the [MSRC PGP key](https://www.microsoft.com/msrc/pgp-key-msrc).
 
-**Please do not report security vulnerabilities through public GitHub issues.** Instead, please report them to the Microsoft Security Response Center at [secure@microsoft.com](mailto:secure@microsoft.com).  If possible, encrypt your message with our PGP key; please download it from the [Microsoft Security Response Center PGP Key page](https://technet.microsoft.com/en-us/security/dn606155).
+Include as much of the following information as possible:
 
-You should receive a response within 24 hours. If for some reason you do not, please follow up via email to ensure we received your original message. Additional information can be found at [microsoft.com/msrc](https://www.microsoft.com/msrc). 
+- The issue type and potential impact.
+- Full paths and the affected branch, tag, or commit.
+- Required configuration and step-by-step reproduction instructions.
+- Proof-of-concept or exploit code, when available.
 
-Please include the requested information listed below (as much as you can provide) to help us better understand the nature and scope of the possible issue:
+MSRC will acknowledge and triage the report. Microsoft follows [Coordinated Vulnerability Disclosure](https://www.microsoft.com/msrc/cvd).
 
-  * Type of issue (e.g. buffer overflow, SQL injection, cross-site scripting, etc.)
-  * Full paths of source file(s) related to the manifestation of the issue
-  * The location of the affected source code (tag/branch/commit or direct URL)
-  * Any special configuration required to reproduce the issue
-  * Step-by-step instructions to reproduce the issue
-  * Proof-of-concept or exploit code (if possible)
-  * Impact of the issue, including how an attacker might exploit the issue
+## Preferred language
 
-This information will help us triage your report more quickly.
- 
-## Preferred Languages
+Security reports are preferred in English.
 
-We prefer all communications to be in English.
+## Workflow credentials
 
-## Policy
-
-Microsoft follows the principle of [Coordinated Vulnerability Disclosure](https://www.microsoft.com/en-us/msrc/cvd).
-
-<!-- END MICROSOFT SECURITY.MD BLOCK -->
+Repository automation should prefer a GitHub App installation token or a fine-grained personal access token over a classic, long-lived PAT. The traffic collection workflow needs only repository traffic read access plus contents and pull-request write access. Scope the credential to this repository, store it as an Actions secret, rotate it regularly and immediately after suspected exposure, and document an owner and expiry date outside the repository.

@@ -26,6 +26,8 @@ jobs:
 
       - name: Collect and persist traffic data
         env:
+          # Prefer a repository-scoped GitHub App or fine-grained token. Grant
+          # traffic read plus contents/PR write only, and rotate it regularly.
           GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
         run: |
           set -euo pipefail
@@ -178,6 +180,7 @@ jobs:
 
       - name: Commit and open PR
         env:
+          # This is the same narrowly scoped, regularly rotated credential.
           GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
