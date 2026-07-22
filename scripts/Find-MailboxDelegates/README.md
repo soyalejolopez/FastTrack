@@ -126,7 +126,7 @@ For extra large environments, please review the "Suggestions for Extra Large Env
 
 ## Issues
 
-Please report any issues you find to the [issues list](../../../../issues).
+Please report any issues you find to the [issues list](https://github.com/microsoft/FastTrack/issues).
 
 ## Support Statement
 

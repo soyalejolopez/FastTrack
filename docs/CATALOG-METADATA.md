@@ -1,6 +1,6 @@
 # Catalog metadata schema
 
-The FastTrack catalog is generated from YAML front matter at the very top of each resource's `README.md`. Prompt resources use the same front matter at the top of their single Markdown file. The catalog build ignores legacy Markdown files without front matter.
+The FastTrack catalog is generated from YAML front matter at the very top of each resource's `README.md`. Prompt resources use the same front matter at the top of their single Markdown file. Existing metadata-less resources are tracked in `tools/catalog-build/legacy-exclusions.json`; a new eligible file without front matter fails validation.
 
 Use `---` on its own line before and after the YAML. YAML block scalars (`>-` and `|-`) are recommended for readable detail content.
 
@@ -66,7 +66,7 @@ prerequisites:
 | `format` | enum | One of `ps1`, `bundle`, `declarative`, `interactive`, `pptx`, `pbix`, or `md`. This replaces the former `artifact` label. |
 | `featured` | boolean | Use sparingly for resources selected for catalog promotion. Default is `false`. |
 | `status` | enum | `active`, `preview`, or `archived`. Default is `active`. |
-| `url` | HTTPS URL | Optional GitHub or destination URL. When omitted, the generator derives a GitHub URL from the resource path. |
+| `url` | HTTP(S) or relative URL | Optional GitHub or destination URL. When omitted, the generator derives a GitHub URL from the resource path. Other schemes are rejected. |
 
 ## Detail-page content
 
@@ -97,4 +97,4 @@ npm ci --prefix tools\catalog-build
 npm run check --prefix tools\catalog-build
 ```
 
-Validation reports every file and field that must be fixed. The default `npm run build` command writes `catalog.json` at the repository root and mirrors it to `design-concepts/catalog.json` for the static site. Do not edit either generated file by hand.
+Validation applies `tools/catalog-build/resource.schema.json` and cross-field checks, and reports every file and field that must be fixed. Unknown fields, duplicate slugs, non-lowercase or duplicate tags, future dates, and dates where `updated` precedes `published` are rejected. The default `npm run build` command writes `catalog.json` at the repository root and mirrors it to `design-concepts/catalog.json` for the static site. Do not edit either generated file by hand.

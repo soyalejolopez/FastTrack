@@ -74,7 +74,7 @@ Script to generate a report (within console or HTML report) from a directory (lo
 
 ## Issues
 
-Please report any issues you find to the [issues list](../../../../issues).
+Please report any issues you find to the [issues list](https://github.com/microsoft/FastTrack/issues).
 
 ## Support Statement
 

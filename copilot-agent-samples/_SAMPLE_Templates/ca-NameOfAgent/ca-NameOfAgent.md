@@ -3,7 +3,7 @@
 ## 📌 Overview
 [Brief description of what this autonomous agent does, its primary function, and the problem it solves]
 
-![Agent Screenshot](./Images/[screenshot-filename].png)
+Agent screenshot: `./Images/<screenshot-filename>.png`
 
 ## 🙌 Credit 
 [Optional: Attribution to original work or inspiration]
@@ -16,10 +16,10 @@ This build is based on the great work from **[Author Name]** here: [Title and Li
 
 [Optional: Include setup images]
 Setup Step 1: 
-![Setup Image](./Images/[setup-image-1].png)
+Setup image: `./Images/<setup-image-1>.png`
 
 Setup Step 2: 
-![Setup Image](./Images/[setup-image-2].png)
+Setup image: `./Images/<setup-image-2>.png`
 
 ## 🚀 Setup Agent
 
@@ -29,7 +29,7 @@ Setup Step 2:
 ```
 
 #### Icon
-![Agent Icon](./Images/[icon-filename].png)
+Agent icon: `./Images/<icon-filename>.png`
 
 #### Description
 ```text
@@ -91,10 +91,10 @@ Recommended: [Any specific knowledge recommendations or web search capabilities]
 ## Example Usage
 
 ### Example: [Scenario Description]
-![Example Input](./Images/[example-input-image].png)
+Example input image: `./Images/<example-input-image>.png`
 
 ### Example: [Result Description]
-![Example Output](./Images/[example-output-image].png)
+Example output image: `./Images/<example-output-image>.png`
 
 ## Version History
 
@@ -121,4 +121,3 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 ## Disclaimer
 
 **THIS CODE IS PROVIDED _AS IS_ WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING ANY IMPLIED WARRANTIES OF FITNESS FOR A PARTICULAR PURPOSE, MERCHANTABILITY, OR NON-INFRINGEMENT.**
-

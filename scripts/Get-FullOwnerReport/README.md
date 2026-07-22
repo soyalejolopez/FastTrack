@@ -39,7 +39,7 @@ SharePointPnPPowerShellOnline PowerShell Module
 
 ## Issues
 
-Please report any issues you find to the [issues list](../../../../issues).
+Please report any issues you find to the [issues list](https://github.com/microsoft/FastTrack/issues).
 
 ## Support Statement
 

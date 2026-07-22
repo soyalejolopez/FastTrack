@@ -142,7 +142,7 @@ The audit export and Entra user export are **cloud-agnostic** — they read what
 
 **What this affects:** only the *display name* of the license in the report. All other data — usage, apps, agents, users — is unaffected.
 
-**How to adjust for your cloud:** in Power BI Desktop, edit the license lookup in the query/model to match your tenant's SKU part numbers (run `Get-MgSubscribedSku | Select SkuId, SkuPartNumber` to list them). If you'd like your GCC/GCC High/DoD SKU values folded into the template so it works out of the box, please share them via the [issues list](../../../../issues).
+**How to adjust for your cloud:** in Power BI Desktop, edit the license lookup in the query/model to match your tenant's SKU part numbers (run `Get-MgSubscribedSku | Select SkuId, SkuPartNumber` to list them). If you'd like your GCC/GCC High/DoD SKU values folded into the template so it works out of the box, please share them via the [issues list](https://github.com/microsoft/FastTrack/issues).
 
 ## 👥 Chat-user classification (non-mailbox objects)
 
@@ -175,7 +175,7 @@ This still can't distinguish an **enabled** shared/resource mailbox from a perso
 
 ## ❓ Issues & Support
 
-Please report issues to the [issues list](../../../../issues). This is an open-source community solution; support is not available through official Microsoft channels.
+Please report issues to the [issues list](https://github.com/microsoft/FastTrack/issues). This is an open-source community solution; support is not available through official Microsoft channels.
 
 ## 👨‍💻 Publish Details
 
@@ -191,7 +191,7 @@ Please report issues to the [issues list](../../../../issues). This is an open-s
 - **Chat-user classification guidance.** Documented the corrected `IsCopilotChat` DAX (Commercial + GCC license detection, gated on member/enabled) so shared/resource mailboxes and other non-`UserMailbox` recipient types aren't over-counted.
 
 ### July 14, 2026
-- **Sovereign cloud connection support.** `Export-M365CopilotReports.ps1` now prompts for the target cloud (Commercial / GCC, GCC High, or DoD) at startup and routes `Connect-MgGraph`, `Connect-ExchangeOnline`, and the direct Graph REST calls to the matching sovereign endpoints. Fixes connection errors for GCC High / DoD tenants where the script previously defaulted to Commercial endpoints. ([#468](../../../../issues/468))
+- **Sovereign cloud connection support.** `Export-M365CopilotReports.ps1` now prompts for the target cloud (Commercial / GCC, GCC High, or DoD) at startup and routes `Connect-MgGraph`, `Connect-ExchangeOnline`, and the direct Graph REST calls to the matching sovereign endpoints. Fixes connection errors for GCC High / DoD tenants where the script previously defaulted to Commercial endpoints. ([#468](https://github.com/microsoft/FastTrack/issues/468))
 
 ### July 6, 2026
 - **Sovereign cloud guidance.** Documented that the exports are cloud-agnostic but the dashboard's license friendly-name mapping assumes Commercial SKUs, with steps for GCC / GCC High / DoD tenants to adjust the license lookup. Native gov SKU mappings to follow.

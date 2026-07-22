@@ -103,6 +103,6 @@ Click the **Model** dropdown at the top of the prompt editor and select the appr
 - [idea 2]
 
 ## Related Skills
-- [Skill Name](link)
+- Skill Name — add the related skill URL here.
 
 <!-- Link to nearby skills that solve adjacent jobs or build on the same capabilities. -->

@@ -55,7 +55,7 @@ The script supports additional options, none are required except for the _Url_ p
 
 ## Issues
 
-Please report any issues you find to the [issues list](../../../../issues).
+Please report any issues you find to the [issues list](https://github.com/microsoft/FastTrack/issues).
 
 ## Support Statement
 
