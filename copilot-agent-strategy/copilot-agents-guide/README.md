@@ -6,9 +6,9 @@ summary: >-
   Compare Microsoft Copilot agent platforms with capability views, decision guidance, support
   indicators, and scenarios.
 author: Microsoft FastTrack
-version: 3.1.0
+version: 3.2.0
 published: "2025-10-28"
-updated: "2026-07-31"
+updated: "2026-08-03"
 tags:
   - guide
   - decision
@@ -89,7 +89,7 @@ Built-in reasoning agents for research and data analysis
 - **Availability:** Immediate (pre-pinned in M365 Copilot)
 - **Cost:** Included with M365 Copilot license (25 queries/month)
 
-### 2. **Copilot Studio Lite Agents**
+### 2. **Agent Builder**
 Low-code agents built within Microsoft 365 Copilot
 - Natural language creation
 - Quick prototyping
@@ -213,7 +213,7 @@ All agent information verified from official Microsoft sources:
 - FastTrack for Microsoft 365 service descriptions
 - Official Microsoft 365 Blog announcements
 
-**Last Verified:** July 2026
+**Last Verified:** August 2026
 
 ## 🔄 Updates & Maintenance
 
@@ -261,6 +261,12 @@ We're always looking to enhance the guide with:
 - [Microsoft Copilot Studio](https://www.microsoft.com/microsoft-copilot-studio)
 - [Microsoft 365 Agents Toolkit](https://github.com/officedev/microsoft-365-agents-toolkit)
 - [FastTrack for Microsoft 365](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/)
+- [FastTrack scope — Microsoft 365 Copilot](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-365-copilot-agents)
+- [FastTrack scope — Microsoft Agent 365](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-agent-365)
+- [Microsoft Agent 365 overview](https://learn.microsoft.com/en-us/microsoft-agent-365/overview)
+- [Compare Microsoft 365 E3, E5, and E7 license features](https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-license-feature-overview)
+- [People Skills overview](https://learn.microsoft.com/en-us/microsoft-365/copilot/people-skills-overview)
+- [Microsoft 365 Copilot release notes](https://learn.microsoft.com/en-us/microsoft-365/copilot/release-notes)
 - [Researcher & Analyst Announcement](https://www.microsoft.com/en-us/microsoft-365/blog/2025/03/25/introducing-researcher-and-analyst-in-microsoft-365-copilot/)
 - [Wave 3 — Powering Frontier Transformation](https://www.microsoft.com/en-us/microsoft-365/blog/2026/03/09/powering-frontier-transformation-with-copilot-and-agents/)
 - [Copilot Cowork Announcement](https://www.microsoft.com/en-us/microsoft-365/blog/2026/03/09/copilot-cowork-a-new-way-of-getting-work-done/)
@@ -272,8 +278,8 @@ This guide is provided as-is for informational and planning purposes. Microsoft,
 
 ---
 
-**Version:** 3.1 (July 2026)  
-**Includes:** Researcher Critique & Model Council (Frontier), Copilot Cowork GA, Agent 365 GA, Wave 3 updates, E7 Frontier Suite  
+**Version:** 3.2 (August 2026)  
+**Includes:** Agent 365 prerequisite licensing (effective June 1, 2026), corrected E7 Frontier Suite composition, FastTrack published scope for Copilot agents and Agent 365, People Skills licensing and scope boundary, Agent Builder SharePoint-list grounding and Agent Store submission  
 **Format:** Single-file HTML application  
 
 *Built to help you navigate the Microsoft Copilot agent ecosystem with confidence.*

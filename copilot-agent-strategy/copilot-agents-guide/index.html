@@ -465,7 +465,9 @@
                 'Natural language agent creation',
                 'Web search knowledge grounding',
                 'SharePoint content integration',
+                'SharePoint list grounding — one list per agent, up to 20,000 items',
                 'Microsoft 365 Copilot connectors',
+                'Governed submission to the Agent Store under "Built by your org" after admin review and approval',
                 'Basic conversation starters',
                 'Real-time test pane'
               ],
@@ -473,7 +475,8 @@
                 'Cannot publish to external channels beyond M365',
                 'No custom code or complex business logic',
                 'Limited to declarative agent functionality only',
-                'Cannot integrate with external APIs directly'
+                'Cannot integrate with external APIs directly',
+                'SharePoint list attachments and lookup columns are not yet supported'
               ],
               whenToUse: [
                 'Quick prototyping and proof of concepts',
@@ -489,7 +492,7 @@
               },
               guidance: {
                 gettingStarted: [
-                  { step: 1, title: 'Open M365 Copilot', description: 'Access the Microsoft 365 Copilot app where Lite agent creation is built in.' },
+                  { step: 1, title: 'Open M365 Copilot', description: 'Access the Microsoft 365 Copilot app where Agent Builder is built in.' },
                   { step: 2, title: 'Create with natural language', description: 'Describe your agent in plain English — what it should do and know about.' },
                   { step: 3, title: 'Add knowledge sources', description: 'Connect SharePoint sites or web sources to ground your agent\'s responses.' },
                   { step: 4, title: 'Test in the preview pane', description: 'Use the real-time test pane to refine your agent\'s behavior before sharing.' }
@@ -498,7 +501,7 @@
                   'Start with a clear, focused purpose — one job done well beats many done poorly',
                   'Write conversation starters to guide users on what to ask',
                   'Ground in specific SharePoint content rather than broad web searches for accurate answers',
-                  'Iterate quickly — Lite agents are designed for rapid prototyping'
+                  'Iterate quickly — Agent Builder agents are designed for rapid prototyping'
                 ],
                 deploymentChecklist: [
                   { item: 'M365 Copilot license for creator', critical: true },
@@ -967,11 +970,11 @@
                             </div>
                             <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
                               <DollarSign className="w-4 h-4 text-blue-600" />
-                              <span>Agent 365 adds enterprise agent governance — GA May 1 — <a href="https://www.microsoft.com/en-us/microsoft-agent-365" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600">see current licensing</a></span>
+                              <span>Agent 365 adds enterprise agent governance — Commercial GA on a per-user basis as of May 1, 2026, and new purchases from June 1 require an eligible prerequisite licence — <a href="https://learn.microsoft.com/en-us/partner-center/announcements/2026-july#new-licensing-prerequisite-for-agent-365" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600">review the prerequisites</a></span>
                             </div>
                             <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
                               <DollarSign className="w-4 h-4 text-indigo-600" />
-                              <span>Microsoft 365 E7 Frontier Suite bundles Copilot, Agent 365, Entra, and E5 security — GA May 1 — <a href="https://www.microsoft.com/en-us/microsoft-365/microsoft-365-enterprise" target="_blank" rel="noopener noreferrer" className="underline hover:text-indigo-600">see current licensing</a></span>
+                              <span>Microsoft 365 E7 Frontier Suite bundles Microsoft 365 E5, Microsoft 365 Copilot, Microsoft Entra Suite, and Agent 365 in a single SKU — GA May 1, 2026 — <a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-license-feature-overview#whats-in-each-license" target="_blank" rel="noopener noreferrer" className="underline hover:text-indigo-600">compare E3, E5, and E7</a></span>
                             </div>
                             <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
                               <DollarSign className="w-4 h-4 text-yellow-600" />
@@ -998,7 +1001,9 @@
                           <ArrowRight className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                           <span className="font-semibold text-gray-800 dark:text-gray-100">Scale Up</span>
                         </div>
-                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">Start with Copilot Cowork and first-party agents like Researcher, Analyst, Viva Engage Community Agent, or SharePoint agents — these are the fastest way to demonstrate personal productivity value. Prove adoption with Agent Builder, then scale to Copilot Studio or the Toolkit when you need repeatable multi-user processes, compliance guardrails, governance, or external channels. FastTrack provides remote guidance for deployment planning within its published scope; adoption and change management strategy are not part of the FastTrack benefit.</p>
+                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">Start with Copilot Cowork and first-party agents like Researcher, Analyst, Viva Engage Community Agent, or SharePoint agents — these are the fastest way to demonstrate personal productivity value. Prove adoption with Agent Builder, then scale to Copilot Studio or the Toolkit when you need repeatable multi-user processes, compliance guardrails, governance, or external channels.</p>
+                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">FastTrack provides remote guidance within its published scope — agent fundamentals, adoption guidance, and an overview of Microsoft prebuilt agents; agent management and governance, including premium capabilities in Agent 365 subscriptions; declarative and SharePoint agent deployment; custom engine agents on Teams, Microsoft 365 Copilot, or SharePoint channels; Cowork and consumption controls; enabling People Skills; Microsoft-published Copilot connectors; Application Lifecycle Management; data protection and cost controls; agent usage reporting; and Copilot Control System setup.</p>
+                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-2">Out of scope: hands-on implementation and project management; creating custom agents with Teams Toolkit, Azure AI Foundry, Semantic Kernel, the Agents SDK, or Fabric data agents; Azure DevOps or Git for ALM; non-Microsoft-published or custom connectors; People Skills agents; Dynamics 365 agent creation; consumption licensing setup; custom reports or content; end-user training; and creating and implementing an adoption and change management strategy or plan. <a href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-365-copilot-agents" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600 dark:hover:text-blue-400">See the FastTrack service description.</a></p>
                       </div>
                     </div>
                   </div>
@@ -1143,12 +1148,16 @@
                         <p className="text-gray-700 dark:text-gray-200 text-xs">Generally available to Microsoft 365 Copilot tenants worldwide in tier-1 languages. Requires an active Microsoft 365 Copilot license, a supported browser, Cowork enabled, usage-based billing enabled, and Anthropic approved as a tenant subprocessor. Local browser use in Microsoft Edge remains a Frontier capability. Check current licensing details for metered usage.</p>
                       </div>
                       <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded">
-                        <p className="font-semibold text-blue-800 mb-1"><a href="https://www.microsoft.com/en-us/microsoft-agent-365" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600">Agent 365</a> — enterprise agent governance:</p>
-                        <p className="text-gray-700 dark:text-gray-200 text-xs">Control plane for observing, securing, and governing agents at scale via Admin Center, Defender, Entra, and Purview</p>
+                        <p className="font-semibold text-blue-800 mb-1"><a href="https://learn.microsoft.com/en-us/microsoft-agent-365/overview" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600">Agent 365</a> — enterprise agent governance:</p>
+                        <p className="text-gray-700 dark:text-gray-200 text-xs">Control plane for observing, securing, and governing agents at scale via Admin Center, Defender, Entra, and Purview. Generally available for the Commercial segment on a per-user basis, and at least one qualifying licence is required to enable it. New purchases beginning June 1, 2026 also require one of: Microsoft 365 E5, A5, or Business Premium; Microsoft Defender Suite and Microsoft Purview Suite; the equivalent Education suites; or Microsoft Defender and Purview Suite FLW.</p>
                       </div>
                       <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded">
-                        <p className="font-semibold text-indigo-800 mb-1"><a href="https://www.microsoft.com/en-us/microsoft-365/microsoft-365-enterprise" target="_blank" rel="noopener noreferrer" className="underline hover:text-indigo-600">Microsoft 365 E7 Frontier Suite</a>:</p>
-                        <p className="text-gray-700 dark:text-gray-200 text-xs">Bundles M365 Copilot, Agent 365, Entra Suite, and M365 E5 security (Defender, Intune, Purview) for comprehensive agent + user protection</p>
+                        <p className="font-semibold text-indigo-800 mb-1"><a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-license-feature-overview#whats-in-each-license" target="_blank" rel="noopener noreferrer" className="underline hover:text-indigo-600">Microsoft 365 E7 Frontier Suite</a>:</p>
+                        <p className="text-gray-700 dark:text-gray-200 text-xs">Bundles Microsoft 365 E5, Microsoft 365 Copilot, Microsoft Entra Suite, and Agent 365 in a single SKU. E7 is a strict superset of E5, so the June 1, 2026 Agent 365 prerequisite does not change E7 engagements.</p>
+                      </div>
+                      <div className="p-3 bg-cyan-50 dark:bg-cyan-950/30 rounded">
+                        <p className="font-semibold text-cyan-800 mb-1"><a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/people-skills-overview" target="_blank" rel="noopener noreferrer" className="underline hover:text-cyan-600">People Skills</a>:</p>
+                        <p className="text-gray-700 dark:text-gray-200 text-xs">No separate licence is required, but available capabilities vary by service plan: Foundation excludes AI inferencing and Copilot capabilities, Advanced adds AI inferencing, and Microsoft 365 Copilot in Productivity Apps adds the related Copilot experiences. AI inferencing is not on by default for Microsoft 365 commercial users. FastTrack remote guidance covers enabling People Skills; People Skills agents are listed as out of scope.</p>
                       </div>
                       <div className="p-3 bg-yellow-50 dark:bg-yellow-950/30 rounded">
                         <p className="font-semibold text-yellow-800 mb-1">Additional licensing or consumption may apply:</p>
@@ -1472,7 +1481,7 @@
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400 text-xs px-2.5 py-1 rounded-full border border-transparent dark:border-white/[0.08]">
                       <Clock className="w-3 h-3" />
-                      <span>Updated July 2026</span>
+                      <span>Updated August 2026</span>
                     </div>
                     <button
                       onClick={() => setIsDark(!isDark)}
@@ -1513,9 +1522,9 @@
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className="text-xs text-gray-400 dark:text-gray-500 truncate">{agent.timeToMarket}</span>
                               {agent.fastTrackSupported && (
-                                <span title="Microsoft FastTrack provides remote guidance for this agent type" className="inline-flex items-center gap-0.5 text-[9px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-400/10 border border-emerald-100 dark:border-emerald-400/20 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap leading-none">
+                                <span title="Microsoft FastTrack provides remote guidance for specific activities involving this agent type — see the FastTrack service description" className="inline-flex items-center gap-0.5 text-[9px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-400/10 border border-emerald-100 dark:border-emerald-400/20 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap leading-none">
                                   <Zap className="w-2 h-2" />
-                                  FastTrack Supported
+                                  FastTrack scope
                                 </span>
                               )}
                             </div>
@@ -1524,17 +1533,22 @@
                       );
                     })}
                     
-                    <div className="mt-4 pt-4 border-t border-gray-100 dark:border-white/[0.08]">
-                      <a href="https://www.microsoft.com/en-us/microsoft-agent-365" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2.5 text-xs text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg transition-colors">
+                    <div className="mt-4 pt-4 border-t border-gray-100 dark:border-white/[0.08] space-y-1">
+                      <a href="https://learn.microsoft.com/en-us/microsoft-agent-365/overview" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2.5 text-xs text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg transition-colors">
                         <Shield className="w-3.5 h-3.5" />
                         <div className="flex-1 min-w-0">
                           <span>Agent 365 — Control Plane</span>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <span title="Agent 365 generally available May 1, 2026" className="inline-flex items-center gap-0.5 text-[9px] text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-400/10 border border-green-100 dark:border-green-400/20 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap leading-none">
-                              GA May 1
+                            <span title="Commercial GA on a per-user basis as of May 1, 2026" className="inline-flex items-center gap-0.5 text-[9px] text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-400/10 border border-green-100 dark:border-green-400/20 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap leading-none">
+                              Commercial GA
                             </span>
                           </div>
                         </div>
+                        <ExternalLink className="w-3 h-3 ml-auto opacity-50 flex-shrink-0" />
+                      </a>
+                      <a href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-agent-365" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 text-xs text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg transition-colors">
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>Agent 365 — FastTrack Scope</span>
                         <ExternalLink className="w-3 h-3 ml-auto opacity-50 flex-shrink-0" />
                       </a>
                     </div>
@@ -1606,9 +1620,9 @@
                       <div className={`lg:col-span-2 bg-gradient-to-br ${currentAgent.gradient} rounded-xl p-8 text-white relative shadow-lg`}>
                         {/* Subtle FastTrack Badge in Overview */}
                         {currentAgent.fastTrackSupported && (
-                          <div title="Microsoft FastTrack provides remote guidance for this agent type" className="absolute top-4 right-4 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-3 py-1 flex items-center gap-1.5">
+                          <div title="Microsoft FastTrack provides remote guidance for specific activities involving this agent type — see the FastTrack service description" className="absolute top-4 right-4 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-3 py-1 flex items-center gap-1.5">
                             <Zap className="w-3.5 h-3.5 text-white/90" />
-                            <span className="text-xs font-medium text-white/90">FastTrack Supported</span>
+                            <span className="text-xs font-medium text-white/90">FastTrack scope</span>
                           </div>
                         )}
                         
@@ -1886,7 +1900,7 @@
                         </thead>
                         <tbody>
                           <tr className="hover:bg-gray-50 dark:hover:bg-white/5">
-                            <td className="p-4 font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-white/[0.08]">FastTrack Remote Guidance</td>
+                            <td className="p-4 font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-white/[0.08]">FastTrack Remote Guidance (scoped activities)</td>
                             {Object.entries(agentTypes).map(([key, agent]) => (
                               <td key={key} className="p-4 text-center border-b border-gray-200 dark:border-white/[0.08]">
                                 {agent.fastTrackSupported ? 
@@ -2398,7 +2412,7 @@
                   <p className="text-gray-400 dark:text-gray-500 text-sm mb-2">
                     Microsoft Copilot Agents Guide • 2026
                   </p>
-                  <div className="flex items-center justify-center gap-3 text-xs text-gray-400 dark:text-gray-500">
+                  <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-400 dark:text-gray-500">
                     <a 
                       href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-365-copilot-agents"
                       target="_blank"
@@ -2407,6 +2421,16 @@
                     >
                       <Zap className="w-3 h-3" />
                       FastTrack Service Description
+                    </a>
+                    <span className="text-gray-200 dark:text-gray-700">·</span>
+                    <a 
+                      href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-agent-365"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    >
+                      <Shield className="w-3 h-3" />
+                      Agent 365 — FastTrack Scope
                     </a>
                     <span className="text-gray-200 dark:text-gray-700">·</span>
                     <a 
