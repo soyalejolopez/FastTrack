@@ -413,7 +413,7 @@
                 'No external integrations',
                 'Up to 20 source items per agent — sites, document libraries, folders, and files combined',
                 'Teams 1:1 chat with SharePoint-created agents is not supported yet',
-                'Cross-site requires M365 Copilot license'
+                'Cross-site sources require Microsoft 365 Copilot or SharePoint agents pay-as-you-go — creating or editing an agent, including adding knowledge beyond the current site, needs one of them'
               ],
               whenToUse: [
                 'Site-specific knowledge bases',
@@ -476,7 +476,9 @@
                 'No custom code or complex business logic',
                 'Limited to declarative agent functionality only',
                 'Cannot integrate with external APIs directly',
-                'SharePoint list attachments and lookup columns are not yet supported'
+                'SharePoint list attachments and lookup columns are not yet supported',
+                'Agents created in Agent Builder cannot be used in Teams Chat',
+                'Embedded files do not support Purview Information Barriers — anyone who can use the agent can receive answers grounded in them'
               ],
               whenToUse: [
                 'Quick prototyping and proof of concepts',
@@ -530,7 +532,7 @@
                 'Agent Store publishing and distribution',
                 'Classic experience: external agent connections over the A2A protocol (generally available)',
                 'New agent experience: connected agents (preview) — currently limited to other Copilot Studio agents',
-                'Available in Microsoft 365 Copilot and Microsoft 365 apps (Teams, Word, Excel, Outlook)',
+                'Available in Microsoft 365 Copilot and Microsoft 365 apps, including Teams, Word, Excel, Outlook, and PowerPoint',
                 'Inherits M365 Copilot security'
               ],
               limitations: [
@@ -605,6 +607,8 @@
                 'Copilot Studio license required',
                 'Agents created in the new agent experience cannot be converted to the classic experience, and vice versa',
                 'FastTrack remote guidance covers custom engine agents only when the deployment channel is Teams, Microsoft 365 Copilot, or SharePoint',
+                'Billing follows the harness: agents and workflows on the GitHub Copilot harness use Copilot Credits for usage-based billing, while standard-harness agents follow Copilot Studio licensing',
+                'Standard harness: 500 knowledge sources per agent, and up to 25 SharePoint site URLs when using generative orchestration',
                 'Higher development time investment required',
                 'Ongoing maintenance and monitoring needed'
               ],
@@ -1003,7 +1007,7 @@
                         </div>
                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">Start with Copilot Cowork and first-party agents like Researcher, Analyst, Viva Engage Community Agent, or SharePoint agents — these are the fastest way to demonstrate personal productivity value. Prove adoption with Agent Builder, then scale to Copilot Studio or the Toolkit when you need repeatable multi-user processes, compliance guardrails, governance, or external channels.</p>
                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">FastTrack provides remote guidance within its published scope — agent fundamentals, adoption guidance, and an overview of Microsoft prebuilt agents; agent management and governance, including premium capabilities in Agent 365 subscriptions; declarative and SharePoint agent deployment; custom engine agents on Teams, Microsoft 365 Copilot, or SharePoint channels; Cowork and consumption controls; enabling People Skills; Microsoft-published Copilot connectors; Application Lifecycle Management; data protection and cost controls; agent usage reporting; and Copilot Control System setup.</p>
-                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-2">Out of scope: hands-on implementation and project management; creating custom agents with Teams Toolkit, Azure AI Foundry, Semantic Kernel, the Agents SDK, or Fabric data agents; Azure DevOps or Git for ALM; non-Microsoft-published or custom connectors; People Skills agents; Dynamics 365 agent creation; consumption licensing setup; custom reports or content; end-user training; and creating and implementing an adoption and change management strategy or plan. <a href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-365-copilot-agents" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600 dark:hover:text-blue-400">See the FastTrack service description.</a></p>
+                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-2">Out of scope: hands-on implementation and project management; creating custom agents with Teams Toolkit, Azure AI Foundry, Semantic Kernel, the Agents SDK, or Fabric data agents; Azure DevOps or Git for ALM; non-Microsoft-published or custom connectors; People Skills agents; Dynamics 365 agent creation; consumption licensing setup; data governance assessment; custom reports, scenarios, or content; end-user training; and creating and implementing an adoption and change management strategy or plan. <a href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-365-copilot-agents" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600 dark:hover:text-blue-400">See the FastTrack service description.</a></p>
                       </div>
                     </div>
                   </div>

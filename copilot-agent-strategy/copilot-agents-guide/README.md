@@ -6,9 +6,9 @@ summary: >-
   Compare Microsoft Copilot agent platforms with capability views, decision guidance, support
   indicators, and scenarios.
 author: Microsoft FastTrack
-version: 3.2.0
+version: 3.3.0
 published: "2025-10-28"
-updated: "2026-08-03"
+updated: "2026-08-10"
 tags:
   - guide
   - decision
@@ -278,8 +278,8 @@ This guide is provided as-is for informational and planning purposes. Microsoft,
 
 ---
 
-**Version:** 3.2 (August 2026)  
-**Includes:** Agent 365 prerequisite licensing (effective June 1, 2026), corrected E7 Frontier Suite composition, FastTrack published scope for Copilot agents and Agent 365, People Skills licensing and scope boundary, Agent Builder SharePoint-list grounding and Agent Store submission  
+**Version:** 3.3 (August 2026)  
+**Includes:** FastTrack out-of-scope correction (data governance assessment), SharePoint agent cross-site licensing including pay-as-you-go, Agent Builder Teams Chat and Purview Information Barriers boundaries, declarative agent PowerPoint availability, Copilot Studio harness billing and standard-harness knowledge limits  
 **Format:** Single-file HTML application  
 
 *Built to help you navigate the Microsoft Copilot agent ecosystem with confidence.*
