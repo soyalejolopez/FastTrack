@@ -523,21 +523,18 @@
               technicalLevel: 'Intermediate',
               shortName: 'Copilot Studio Declarative',
               fastTrackSupported: true,
-              description: 'Declarative agents built in Copilot Studio Full that extend Microsoft 365 Copilot using its orchestrator, with Agent Store publishing and support for connecting to other agents for advanced scenarios.',
+              description: 'Declarative agents built in Copilot Studio Full that extend Microsoft 365 Copilot using its orchestrator. They run on the Copilot chat harness, the Copilot Studio harness for extending Microsoft 365 Copilot, and publish through the organization catalog for internal distribution.',
               capabilities: [
                 'Uses M365 Copilot orchestrator',
                 'Custom instructions and behavior',
                 'Enterprise knowledge integration',
                 'Plugin actions for external systems',
-                'Agent Store publishing and distribution',
-                'Classic experience: external agent connections over the A2A protocol (generally available)',
-                'New agent experience: connected agents (preview) — currently limited to other Copilot Studio agents',
+                'Agent Store publishing for org-wide distribution',
                 'Available in Microsoft 365 Copilot and Microsoft 365 apps, including Teams, Word, Excel, Outlook, and PowerPoint',
                 'Inherits M365 Copilot security'
               ],
               limitations: [
                 "Access and billing depend on the agent's grounding and capabilities: agents grounded only in instructions or public web data can be used without pay-as-you-go, while SharePoint, file, Dataverse, and Copilot connector grounding requires pay-as-you-go or a Microsoft 365 Copilot license, and email, people, and Teams grounding requires a Microsoft 365 Copilot license. Eligible licensed usage is included, subject to fair-use limits.",
-                'Agents created in the new agent experience cannot be converted to the classic experience, and vice versa',
                 'Limited to Microsoft 365 ecosystem',
                 'Plugin development requires technical skills',
                 'RAI validation checks required for publishing'
@@ -592,12 +589,13 @@
                 'Advanced conversation flows and logic',
                 'Custom connectors and API integrations',
                 'Multi-channel publishing',
-                'Multi-agent orchestration (agent collaboration)',
+                'Multi-agent orchestration (agent collaboration), including external agent connections over the A2A protocol on the standard harness',
+                'GitHub Copilot harness: connected agents, limited to other Copilot Studio agents',
                 'Agent Store marketplace publishing',
                 'Computer use for browser and Windows desktop UI automation (generally available)',
                 'Human-in-the-loop (HITL) controls',
                 'Automated agent evaluation and testing',
-                'Choice of supported OpenAI and Anthropic models; availability varies by region and agent experience',
+                'Choice of supported OpenAI and Anthropic models; availability varies by region and harness',
                 'Power Platform integration',
                 'Advanced analytics and monitoring',
                 'Custom authentication and security'
@@ -605,7 +603,7 @@
               limitations: [
                 'Requires technical expertise and training',
                 'Copilot Studio license required',
-                'Agents created in the new agent experience cannot be converted to the classic experience, and vice versa',
+                'Agents created with the GitHub Copilot harness cannot be transferred to the standard harness, and vice versa',
                 'FastTrack remote guidance covers custom engine agents only when the deployment channel is Teams, Microsoft 365 Copilot, or SharePoint',
                 'Billing follows the harness: agents and workflows on the GitHub Copilot harness use Copilot Credits for usage-based billing, while standard-harness agents follow Copilot Studio licensing',
                 'Standard harness: 500 knowledge sources per agent, and up to 25 SharePoint site URLs when using generative orchestration',
@@ -639,7 +637,8 @@
                   'Use the evaluation and testing framework to maintain quality as you scale',
                   'Implement human-in-the-loop for high-stakes decisions',
                   'Monitor analytics closely in the first 30 days to catch issues early',
-                  'Forecast Copilot Credit consumption based on agent design, enabled features, and expected usage volume'
+                  'Forecast Copilot Credit consumption based on agent design, enabled features, and expected usage volume',
+                  'In Copilot Studio, standard-harness agents are reached by turning off the New experience toggle on the Homepage'
                 ],
                 deploymentChecklist: [
                   { item: 'Copilot Studio license procured', critical: true },
@@ -1006,7 +1005,7 @@
                           <span className="font-semibold text-gray-800 dark:text-gray-100">Scale Up</span>
                         </div>
                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">Start with Copilot Cowork and first-party agents like Researcher, Analyst, Viva Engage Community Agent, or SharePoint agents — these are the fastest way to demonstrate personal productivity value. Prove adoption with Agent Builder, then scale to Copilot Studio or the Toolkit when you need repeatable multi-user processes, compliance guardrails, governance, or external channels.</p>
-                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">FastTrack provides remote guidance within its published scope — agent fundamentals, adoption guidance, and an overview of Microsoft prebuilt agents; agent management and governance, including premium capabilities in Agent 365 subscriptions; declarative and SharePoint agent deployment; custom engine agents on Teams, Microsoft 365 Copilot, or SharePoint channels; Cowork and consumption controls; enabling People Skills; Microsoft-published Copilot connectors; Application Lifecycle Management; data protection and cost controls; agent usage reporting; and Copilot Control System setup.</p>
+                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">FastTrack provides remote guidance within its published scope — agent fundamentals, adoption guidance, and an overview of Microsoft prebuilt agents; agent management and governance, including premium capabilities in Agent 365 subscriptions; declarative and SharePoint agent deployment; custom engine agents on Teams, Microsoft 365 Copilot, or SharePoint channels; Cowork and consumption controls; enabling People Skills; Microsoft-published Copilot connectors; Application Lifecycle Management; data protection, management controls, and cost controls; agent usage reporting; and Copilot Control System setup.</p>
                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-2">Out of scope: hands-on implementation and project management; creating custom agents with Teams Toolkit, Azure AI Foundry, Semantic Kernel, the Agents SDK, or Fabric data agents; Azure DevOps or Git for ALM; non-Microsoft-published or custom connectors; People Skills agents; Dynamics 365 agent creation; consumption licensing setup; data governance assessment; custom reports, scenarios, or content; end-user training; and creating and implementing an adoption and change management strategy or plan. <a href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-365-copilot-agents" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600 dark:hover:text-blue-400">See the FastTrack service description.</a></p>
                       </div>
                     </div>

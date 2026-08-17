@@ -6,9 +6,9 @@ summary: >-
   Compare Microsoft Copilot agent platforms with capability views, decision guidance, support
   indicators, and scenarios.
 author: Microsoft FastTrack
-version: 3.3.0
+version: 3.4.0
 published: "2025-10-28"
-updated: "2026-08-10"
+updated: "2026-08-17"
 tags:
   - guide
   - decision
@@ -278,8 +278,8 @@ This guide is provided as-is for informational and planning purposes. Microsoft,
 
 ---
 
-**Version:** 3.3 (August 2026)  
-**Includes:** FastTrack out-of-scope correction (data governance assessment), SharePoint agent cross-site licensing including pay-as-you-go, Agent Builder Teams Chat and Purview Information Barriers boundaries, declarative agent PowerPoint availability, Copilot Studio harness billing and standard-harness knowledge limits  
+**Version:** 3.4 (August 2026)  
+**Includes:** Copilot Studio harness vocabulary migration, relocation of A2A and connected-agent capabilities from the declarative card to the custom engine card, declarative agent Copilot chat harness identity and internal publishing scope, and the FastTrack management controls scope item  
 **Format:** Single-file HTML application  
 
 *Built to help you navigate the Microsoft Copilot agent ecosystem with confidence.*
