@@ -591,8 +591,10 @@
                 'Multi-channel publishing',
                 'Multi-agent orchestration (agent collaboration), including external agent connections over the A2A protocol on the standard harness',
                 'GitHub Copilot harness: connected agents, limited to other Copilot Studio agents',
+                'Standard harness: Model Context Protocol (MCP) servers as tools and resources; requires generative orchestration',
+                'GitHub Copilot harness: workflows as tools for multistep processes, and MCP servers as tools (preview)',
                 'Agent Store marketplace publishing',
-                'Computer use for browser and Windows desktop UI automation (generally available)',
+                'Standard harness: computer use for browser and Windows desktop UI automation; requires generative orchestration, with a mix of generally available and experimental models',
                 'Human-in-the-loop (HITL) controls',
                 'Automated agent evaluation and testing',
                 'Choice of supported OpenAI and Anthropic models; availability varies by region and harness',
@@ -1006,7 +1008,7 @@
                         </div>
                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">Start with Copilot Cowork and first-party agents like Researcher, Analyst, Viva Engage Community Agent, or SharePoint agents — these are the fastest way to demonstrate personal productivity value. Prove adoption with Agent Builder, then scale to Copilot Studio or the Toolkit when you need repeatable multi-user processes, compliance guardrails, governance, or external channels.</p>
                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">FastTrack provides remote guidance within its published scope — agent fundamentals, adoption guidance, and an overview of Microsoft prebuilt agents; agent management and governance, including premium capabilities in Agent 365 subscriptions; declarative and SharePoint agent deployment; custom engine agents on Teams, Microsoft 365 Copilot, or SharePoint channels; Cowork and consumption controls; enabling People Skills; Microsoft-published Copilot connectors; Application Lifecycle Management; data protection, management controls, and cost controls; agent usage reporting; and Copilot Control System setup.</p>
-                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-2">Out of scope: hands-on implementation and project management; creating custom agents with Teams Toolkit, Azure AI Foundry, Semantic Kernel, the Agents SDK, or Fabric data agents; Azure DevOps or Git for ALM; non-Microsoft-published or custom connectors; People Skills agents; Dynamics 365 agent creation; consumption licensing setup; data governance assessment; custom reports, scenarios, or content; end-user training; and creating and implementing an adoption and change management strategy or plan. <a href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-365-copilot-agents" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600 dark:hover:text-blue-400">See the FastTrack service description.</a></p>
+                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-2">Out of scope: hands-on implementation and project management; creating custom agents with Teams Toolkit, Azure AI Foundry, Semantic Kernel, the Agents SDK, or Fabric data agents; Azure DevOps or Git for ALM; non-Microsoft-published or custom connectors; People Skills agents; Dynamics 365 agent creation; consumption licensing setup; data governance assessment; custom reports, scenarios, or content; end-user training; and creating and implementing an adoption and change management strategy or plan. <a href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-copilot-agents" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600 dark:hover:text-blue-400">See the FastTrack service description.</a></p>
                       </div>
                     </div>
                   </div>
@@ -1153,6 +1155,10 @@
                       <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded">
                         <p className="font-semibold text-blue-800 mb-1"><a href="https://learn.microsoft.com/en-us/microsoft-agent-365/overview" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600">Agent 365</a> — enterprise agent governance:</p>
                         <p className="text-gray-700 dark:text-gray-200 text-xs">Control plane for observing, securing, and governing agents at scale via Admin Center, Defender, Entra, and Purview. Generally available for the Commercial segment on a per-user basis, and at least one qualifying licence is required to enable it. New purchases beginning June 1, 2026 also require one of: Microsoft 365 E5, A5, or Business Premium; Microsoft Defender Suite and Microsoft Purview Suite; the equivalent Education suites; or Microsoft Defender and Purview Suite FLW.</p>
+                      </div>
+                      <div className="p-3 bg-cyan-50 dark:bg-cyan-950/30 rounded">
+                        <p className="font-semibold text-cyan-800 mb-1"><a href="https://learn.microsoft.com/en-us/microsoft-copilot-studio/admin-use-entra-agent-identities" target="_blank" rel="noopener noreferrer" className="underline hover:text-cyan-600">Copilot Studio agent identity</a> — Microsoft Entra Agent ID:</p>
+                        <p className="text-gray-700 dark:text-gray-200 text-xs">Copilot Studio automatically creates a Microsoft Entra Agent ID for each new agent. Starting July 2026, automatic agent identity creation can no longer be turned off at the environment level. Agents created before the rollout continue to use app registrations until Microsoft migrates them, and Microsoft documents governance capabilities as working for both during the transition. Connector permissions are attached as API permissions on the agent identity, so admins can target them with Microsoft Entra Conditional Access policies.</p>
                       </div>
                       <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded">
                         <p className="font-semibold text-indigo-800 mb-1"><a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-license-feature-overview#whats-in-each-license" target="_blank" rel="noopener noreferrer" className="underline hover:text-indigo-600">Microsoft 365 E7 Frontier Suite</a>:</p>
@@ -2417,7 +2423,7 @@
                   </p>
                   <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-400 dark:text-gray-500">
                     <a 
-                      href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-365-copilot-agents"
+                      href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-copilot-agents"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"

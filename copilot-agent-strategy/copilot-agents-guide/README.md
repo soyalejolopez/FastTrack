@@ -6,9 +6,9 @@ summary: >-
   Compare Microsoft Copilot agent platforms with capability views, decision guidance, support
   indicators, and scenarios.
 author: Microsoft FastTrack
-version: 3.4.0
+version: 3.5.0
 published: "2025-10-28"
-updated: "2026-08-17"
+updated: "2026-08-24"
 tags:
   - guide
   - decision
@@ -261,11 +261,13 @@ We're always looking to enhance the guide with:
 - [Microsoft Copilot Studio](https://www.microsoft.com/microsoft-copilot-studio)
 - [Microsoft 365 Agents Toolkit](https://github.com/officedev/microsoft-365-agents-toolkit)
 - [FastTrack for Microsoft 365](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/)
-- [FastTrack scope — Microsoft 365 Copilot](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-365-copilot-agents)
+- [FastTrack scope — Microsoft 365 Copilot](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-copilot-agents)
 - [FastTrack scope — Microsoft Agent 365](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-agent-365)
 - [Microsoft Agent 365 overview](https://learn.microsoft.com/en-us/microsoft-agent-365/overview)
 - [Compare Microsoft 365 E3, E5, and E7 license features](https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-license-feature-overview)
 - [People Skills overview](https://learn.microsoft.com/en-us/microsoft-365/copilot/people-skills-overview)
+- [Microsoft Entra Agent ID in Copilot Studio](https://learn.microsoft.com/en-us/microsoft-copilot-studio/admin-use-entra-agent-identities)
+- [Extend your agent with Model Context Protocol](https://learn.microsoft.com/en-us/microsoft-copilot-studio/agent-extend-action-mcp)
 - [Microsoft 365 Copilot release notes](https://learn.microsoft.com/en-us/microsoft-365/copilot/release-notes)
 - [Researcher & Analyst Announcement](https://www.microsoft.com/en-us/microsoft-365/blog/2025/03/25/introducing-researcher-and-analyst-in-microsoft-365-copilot/)
 - [Wave 3 — Powering Frontier Transformation](https://www.microsoft.com/en-us/microsoft-365/blog/2026/03/09/powering-frontier-transformation-with-copilot-and-agents/)
@@ -278,8 +280,8 @@ This guide is provided as-is for informational and planning purposes. Microsoft,
 
 ---
 
-**Version:** 3.4 (August 2026)  
-**Includes:** Copilot Studio harness vocabulary migration, relocation of A2A and connected-agent capabilities from the declarative card to the custom engine card, declarative agent Copilot chat harness identity and internal publishing scope, and the FastTrack management controls scope item  
+**Version:** 3.5 (August 2026)  
+**Includes:** Corrected FastTrack service description deep-link anchor, Copilot Studio Microsoft Entra Agent ID automatic creation and removal of environment-level opt-out, MCP server and workflow tool support split by harness, and computer use scoped to its documented harness, orchestration prerequisite, and model status mix  
 **Format:** Single-file HTML application  
 
 *Built to help you navigate the Microsoft Copilot agent ecosystem with confidence.*
