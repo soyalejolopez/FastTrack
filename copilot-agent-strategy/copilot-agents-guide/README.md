@@ -6,9 +6,9 @@ summary: >-
   Compare Microsoft Copilot agent platforms with capability views, decision guidance, support
   indicators, and scenarios.
 author: Microsoft FastTrack
-version: 3.0.0
+version: 3.6.0
 published: "2025-10-28"
-updated: "2026-04-17"
+updated: "2026-08-31"
 tags:
   - guide
   - decision
@@ -76,20 +76,20 @@ The **Copilot Agents Guide** is a comprehensive, interactive web-based tool that
 - Key takeaways
 
 ### ⚡ FastTrack Support Indicators
-- Subtle badges showing which agents qualify for Microsoft FastTrack deployment support
+- Subtle badges showing which agents qualify for Microsoft FastTrack remote guidance
 - Link to official FastTrack service description
-- 5 of 6 agent types include FastTrack support
+- 5 of 6 agent types include FastTrack remote guidance
 
 ## 🤖 Agent Types Covered
 
 ### 1. **Researcher & Analyst Agents** 
 Built-in reasoning agents for research and data analysis
-- **Researcher:** Complex multi-step research with multi-model Critique (generation + evaluation) and Model Council (side-by-side model comparison)
+- **Researcher:** Complex multi-step research across work data and the web. You can choose the model and mode from the model picker when working in the Researcher agent; the picker is disabled and defaults to auto when you add @Researcher to a Copilot chat
 - **Analyst:** Data analysis with Python execution
 - **Availability:** Immediate (pre-pinned in M365 Copilot)
 - **Cost:** Included with M365 Copilot license (25 queries/month)
 
-### 2. **Copilot Studio Lite Agents**
+### 2. **Agent Builder**
 Low-code agents built within Microsoft 365 Copilot
 - Natural language creation
 - Quick prototyping
@@ -152,7 +152,7 @@ Upload the HTML file to any web server or hosting platform:
 1. **Start with Overview** - Understand each agent type's value proposition
 2. **Check Guidance Tab** - Review the 4-step decision framework
 3. **Compare Costs** - See time-to-market and licensing requirements
-4. **Consider FastTrack** - Note which agents include deployment support
+4. **Consider FastTrack** - Note which agents include remote guidance
 
 ### For IT Architects
 1. **Review Comparison Tab** - Analyze technical capabilities side-by-side
@@ -213,7 +213,7 @@ All agent information verified from official Microsoft sources:
 - FastTrack for Microsoft 365 service descriptions
 - Official Microsoft 365 Blog announcements
 
-**Last Verified:** April 2026
+**Last Verified:** August 2026
 
 ## 🔄 Updates & Maintenance
 
@@ -227,8 +227,9 @@ This guide is updated to reflect:
 
 ## ⚠️ Important Notes
 
-### FastTrack Support
-- 5 of 6 agent types qualify for FastTrack deployment assistance
+### FastTrack Remote Guidance
+- 5 of 6 agent types qualify for FastTrack remote guidance
+- Custom engine agents are covered only when the deployment channel is Teams, Microsoft 365 Copilot, or SharePoint
 - Microsoft 365 Agents Toolkit (pro-code) is self-service only
 - See footer link for detailed FastTrack service description
 
@@ -260,10 +261,22 @@ We're always looking to enhance the guide with:
 - [Microsoft Copilot Studio](https://www.microsoft.com/microsoft-copilot-studio)
 - [Microsoft 365 Agents Toolkit](https://github.com/officedev/microsoft-365-agents-toolkit)
 - [FastTrack for Microsoft 365](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/)
+- [FastTrack scope — Microsoft 365 Copilot](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-copilot-agents)
+- [FastTrack scope — Microsoft Agent 365](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-agent-365)
+- [Microsoft Agent 365 overview](https://learn.microsoft.com/en-us/microsoft-agent-365/overview)
+- [Compare Microsoft 365 E3, E5, and E7 license features](https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-license-feature-overview)
+- [People Skills overview](https://learn.microsoft.com/en-us/microsoft-365/copilot/people-skills-overview)
+- [Microsoft Entra Agent ID in Copilot Studio](https://learn.microsoft.com/en-us/microsoft-copilot-studio/admin-use-entra-agent-identities)
+- [Extend your agent with Model Context Protocol](https://learn.microsoft.com/en-us/microsoft-copilot-studio/agent-extend-action-mcp)
+- [Microsoft 365 Copilot release notes](https://learn.microsoft.com/en-us/microsoft-365/copilot/release-notes)
+- [Copilot Cowork FAQ](https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/cowork-faq)
+- [What's new in Copilot Cowork](https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/whats-new)
+- [Use the local browser in Copilot Cowork](https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/cowork-local-browser)
+- [Researcher agent FAQ](https://learn.microsoft.com/en-us/microsoft-365/copilot/faq-researcher)
+- [Cost considerations for agents](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/cost-considerations)
 - [Researcher & Analyst Announcement](https://www.microsoft.com/en-us/microsoft-365/blog/2025/03/25/introducing-researcher-and-analyst-in-microsoft-365-copilot/)
 - [Wave 3 — Powering Frontier Transformation](https://www.microsoft.com/en-us/microsoft-365/blog/2026/03/09/powering-frontier-transformation-with-copilot-and-agents/)
 - [Copilot Cowork Announcement](https://www.microsoft.com/en-us/microsoft-365/blog/2026/03/09/copilot-cowork-a-new-way-of-getting-work-done/)
-- [Researcher Critique & Model Council](https://techcommunity.microsoft.com/blog/microsoft365copilotblog/introducing-the-new-and-improved-researcher-%E2%80%93-powered-by-multi-model-intelligenc/4506011)
 
 ## 📄 License
 
@@ -271,8 +284,8 @@ This guide is provided as-is for informational and planning purposes. Microsoft,
 
 ---
 
-**Version:** 3.0 (April 2026)  
-**Includes:** Researcher Critique & Model Council, Copilot Cowork (Frontier), Agent 365 GA, Wave 3 updates, E7 Frontier Suite  
+**Version:** 3.6 (August 2026)  
+**Includes:** Copilot Cowork availability corrected to tier-1 languages within Anthropic-supported regions with Anthropic models as an optional admin choice, Cowork local browser use updated from Frontier to general availability with its admin enablement requirement, Copilot Studio Entra Agent ID environment-level opt-out removal corrected to May 2026, agent cost guidance aligned to published cost considerations, and Researcher described from its current documented capabilities  
 **Format:** Single-file HTML application  
 
 *Built to help you navigate the Microsoft Copilot agent ecosystem with confidence.*
