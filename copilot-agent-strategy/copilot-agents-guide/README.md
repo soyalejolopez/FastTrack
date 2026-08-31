@@ -6,9 +6,9 @@ summary: >-
   Compare Microsoft Copilot agent platforms with capability views, decision guidance, support
   indicators, and scenarios.
 author: Microsoft FastTrack
-version: 3.5.0
+version: 3.6.0
 published: "2025-10-28"
-updated: "2026-08-24"
+updated: "2026-08-31"
 tags:
   - guide
   - decision
@@ -84,7 +84,7 @@ The **Copilot Agents Guide** is a comprehensive, interactive web-based tool that
 
 ### 1. **Researcher & Analyst Agents** 
 Built-in reasoning agents for research and data analysis
-- **Researcher:** Complex multi-step research with a model picker for GPT and Claude. Critique (a second reasoning pass by Claude) and Model Council (parallel GPT and Claude comparison) require the Frontier program
+- **Researcher:** Complex multi-step research across work data and the web. You can choose the model and mode from the model picker when working in the Researcher agent; the picker is disabled and defaults to auto when you add @Researcher to a Copilot chat
 - **Analyst:** Data analysis with Python execution
 - **Availability:** Immediate (pre-pinned in M365 Copilot)
 - **Cost:** Included with M365 Copilot license (25 queries/month)
@@ -269,10 +269,14 @@ We're always looking to enhance the guide with:
 - [Microsoft Entra Agent ID in Copilot Studio](https://learn.microsoft.com/en-us/microsoft-copilot-studio/admin-use-entra-agent-identities)
 - [Extend your agent with Model Context Protocol](https://learn.microsoft.com/en-us/microsoft-copilot-studio/agent-extend-action-mcp)
 - [Microsoft 365 Copilot release notes](https://learn.microsoft.com/en-us/microsoft-365/copilot/release-notes)
+- [Copilot Cowork FAQ](https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/cowork-faq)
+- [What's new in Copilot Cowork](https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/whats-new)
+- [Use the local browser in Copilot Cowork](https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/cowork-local-browser)
+- [Researcher agent FAQ](https://learn.microsoft.com/en-us/microsoft-365/copilot/faq-researcher)
+- [Cost considerations for agents](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/cost-considerations)
 - [Researcher & Analyst Announcement](https://www.microsoft.com/en-us/microsoft-365/blog/2025/03/25/introducing-researcher-and-analyst-in-microsoft-365-copilot/)
 - [Wave 3 — Powering Frontier Transformation](https://www.microsoft.com/en-us/microsoft-365/blog/2026/03/09/powering-frontier-transformation-with-copilot-and-agents/)
 - [Copilot Cowork Announcement](https://www.microsoft.com/en-us/microsoft-365/blog/2026/03/09/copilot-cowork-a-new-way-of-getting-work-done/)
-- [Researcher Critique & Model Council](https://techcommunity.microsoft.com/blog/microsoft365copilotblog/introducing-the-new-and-improved-researcher-%E2%80%93-powered-by-multi-model-intelligenc/4506011)
 
 ## 📄 License
 
@@ -280,8 +284,8 @@ This guide is provided as-is for informational and planning purposes. Microsoft,
 
 ---
 
-**Version:** 3.5 (August 2026)  
-**Includes:** Corrected FastTrack service description deep-link anchor, Copilot Studio Microsoft Entra Agent ID automatic creation and removal of environment-level opt-out, MCP server and workflow tool support split by harness, and computer use scoped to its documented harness, orchestration prerequisite, and model status mix  
+**Version:** 3.6 (August 2026)  
+**Includes:** Copilot Cowork availability corrected to tier-1 languages within Anthropic-supported regions with Anthropic models as an optional admin choice, Cowork local browser use updated from Frontier to general availability with its admin enablement requirement, Copilot Studio Entra Agent ID environment-level opt-out removal corrected to May 2026, agent cost guidance aligned to published cost considerations, and Researcher described from its current documented capabilities  
 **Format:** Single-file HTML application  
 
 *Built to help you navigate the Microsoft Copilot agent ecosystem with confidence.*
