@@ -38,6 +38,9 @@ One or more intended pilot site URLs for optional SharePoint target-site checks.
 .PARAMETER AuditWindowDays
 Purview Audit Search lookback from 1 through 90 days.
 
+.PARAMETER AuditQueryTimeoutSeconds
+Overall Purview Audit Search query timeout from 30 through 900 seconds. Defaults to 300 seconds.
+
 .PARAMETER IncludeSanitizedCopy
 Writes redacted HTML and JSON support copies beside the full reports.
 
@@ -160,6 +163,10 @@ param(
     [Parameter()]
     [ValidateRange(1, 90)]
     [int]$AuditWindowDays = 7,
+
+    [Parameter()]
+    [ValidateRange(30, 900)]
+    [int]$AuditQueryTimeoutSeconds = 300,
 
     [Parameter()]
     [switch]$IncludeSanitizedCopy,

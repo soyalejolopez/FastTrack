@@ -394,6 +394,170 @@ Describe 'Paging and throttling' {
     }
 }
 
+Describe 'Purview Audit Search polling' {
+    It 'continues beyond 60 seconds and succeeds before the default 300-second deadline' {
+        InModuleScope Agent365Preflight {
+            $script:auditClock = [DateTimeOffset]'2026-09-02T00:00:00Z'
+            $script:auditPolls = 0
+            $result = Wait-A365AuditQuery `
+                -InitialResponse ([pscustomobject]@{ status = 'running' }) `
+                -QueryId '11111111-2222-3333-4444-555555555555' `
+                -Allowlist ([pscustomobject]@{}) `
+                -TimeoutSeconds 300 `
+                -PollIntervalSeconds 5 `
+                -RequestScript {
+                    param($uri, $allowlist)
+                    $script:auditPolls++
+                    [pscustomobject]@{
+                        status = if ($script:auditPolls -ge 13) { 'succeeded' } else { 'running' }
+                    }
+                } `
+                -SleepScript {
+                    param($seconds)
+                    $script:auditClock = $script:auditClock.AddSeconds($seconds)
+                } `
+                -UtcNowScript { $script:auditClock }
+
+            $result.Status | Should -Be 'succeeded'
+            $result.TimedOut | Should -BeFalse
+            $result.PollCount | Should -Be 13
+            $result.ElapsedSeconds | Should -Be 65
+        }
+    }
+
+    It 'stops at the deadline when a query remains running' {
+        InModuleScope Agent365Preflight {
+            $script:auditClock = [DateTimeOffset]'2026-09-02T00:00:00Z'
+            $result = Wait-A365AuditQuery `
+                -InitialResponse ([pscustomobject]@{ status = 'running' }) `
+                -QueryId '11111111-2222-3333-4444-555555555555' `
+                -Allowlist ([pscustomobject]@{}) `
+                -TimeoutSeconds 30 `
+                -PollIntervalSeconds 5 `
+                -RequestScript {
+                    param($uri, $allowlist)
+                    [pscustomobject]@{ status = 'running' }
+                } `
+                -SleepScript {
+                    param($seconds)
+                    $script:auditClock = $script:auditClock.AddSeconds($seconds)
+                } `
+                -UtcNowScript { $script:auditClock }
+
+            $result.Status | Should -Be 'running'
+            $result.TimedOut | Should -BeTrue
+            $result.PollCount | Should -Be 5
+            $result.ElapsedSeconds | Should -Be 30
+        }
+    }
+
+    It 'honors Retry-After surfaced by an audit status response' {
+        InModuleScope Agent365Preflight {
+            $script:auditClock = [DateTimeOffset]'2026-09-02T00:00:00Z'
+            $script:auditDelays = [System.Collections.Generic.List[int]]::new()
+            $result = Wait-A365AuditQuery `
+                -InitialResponse ([pscustomobject]@{
+                    status = 'running'
+                    retryAfterSeconds = 20
+                }) `
+                -QueryId '11111111-2222-3333-4444-555555555555' `
+                -Allowlist ([pscustomobject]@{}) `
+                -TimeoutSeconds 300 `
+                -PollIntervalSeconds 5 `
+                -RequestScript {
+                    param($uri, $allowlist)
+                    [pscustomobject]@{ status = 'succeeded' }
+                } `
+                -SleepScript {
+                    param($seconds)
+                    $script:auditDelays.Add($seconds)
+                    $script:auditClock = $script:auditClock.AddSeconds($seconds)
+                } `
+                -UtcNowScript { $script:auditClock }
+
+            $result.Status | Should -Be 'succeeded'
+            $script:auditDelays.Count | Should -Be 1
+            $script:auditDelays[0] | Should -Be 20
+            $result.ElapsedSeconds | Should -Be 20
+        }
+    }
+
+    It 'stops immediately on failed and cancelled terminal states' {
+        InModuleScope Agent365Preflight {
+            foreach ($terminalStatus in @('failed', 'cancelled')) {
+                $result = Wait-A365AuditQuery `
+                    -InitialResponse ([pscustomobject]@{ status = $terminalStatus }) `
+                    -QueryId '11111111-2222-3333-4444-555555555555' `
+                    -Allowlist ([pscustomobject]@{}) `
+                    -TimeoutSeconds 300
+
+                $result.Status | Should -Be $terminalStatus
+                $result.TimedOut | Should -BeFalse
+                $result.PollCount | Should -Be 0
+            }
+        }
+    }
+
+    It 'classifies deadline expiry as Timeout and keeps the verdict incomplete' {
+        $fixturePath = New-SyntheticFixture -Name 'purview-timeout' -Mutator {
+            param($fixture)
+            $fixture.purview.audit.available = $false
+            $fixture.purview.audit.queryStatus = 'running'
+            $fixture.purview.audit | Add-Member -NotePropertyName pollingElapsedSeconds -NotePropertyValue 300 -Force
+            $fixture.purview.audit | Add-Member -NotePropertyName pollCount -NotePropertyValue 60 -Force
+            $fixture.purview.audit | Add-Member -NotePropertyName timedOut -NotePropertyValue $true -Force
+            $fixture.collectionIssues = @(
+                [pscustomobject]@{
+                    Adapter = 'Graph'
+                    Operation = 'Purview Audit Search aggregate query'
+                    Category = 'Timeout'
+                    StatusCode = $null
+                    Message = "Purview Audit Search timed out after 300 seconds while status remained 'running'. The retained query job may continue server-side."
+                    RequiredPermission = 'AuditLogsQuery.Read.All'
+                    DocsUrl = 'https://learn.microsoft.com/graph/api/security-auditcoreroot-post-auditlogqueries?view=graph-rest-1.0'
+                    QueryStatus = 'running'
+                    PollingElapsedSeconds = 300
+                    TimedOut = $true
+                }
+            )
+        }
+
+        $outcome = Invoke-FixturePreflight -Name 'purview-timeout-output' -FixturePath $fixturePath
+        $result = $outcome.Report.Results | Where-Object Id -eq 'A365-PURVIEW-001'
+
+        $result.Status | Should -Be 'Error'
+        $result.Observed | Should -Match '\[Timeout\]'
+        $result.Details.QueryStatus | Should -Be 'running'
+        $result.Details.PollingElapsedSeconds | Should -Be 300
+        $outcome.Report.Verdict.Label | Should -Be 'Incomplete'
+        $outcome.ExitCode | Should -Be 2
+    }
+
+    It 'validates the public timeout parameter range and records it in runtime metadata' {
+        {
+            Invoke-Agent365Preflight `
+                -FixturePath $readyFixturePath `
+                -AuditQueryTimeoutSeconds 29 `
+                -OutputPath (Join-Path $TestDrive 'timeout-too-low')
+        } | Should -Throw
+
+        {
+            Invoke-Agent365Preflight `
+                -FixturePath $readyFixturePath `
+                -AuditQueryTimeoutSeconds 901 `
+                -OutputPath (Join-Path $TestDrive 'timeout-too-high')
+        } | Should -Throw
+
+        $outcome = Invoke-Agent365Preflight `
+            -FixturePath $readyFixturePath `
+            -AnswersPath $answersPath `
+            -AuditQueryTimeoutSeconds 30 `
+            -OutputPath (Join-Path $TestDrive 'timeout-minimum')
+
+        $outcome.Report.Runtime.AuditQueryTimeoutSeconds | Should -Be 30
+    }
+}
+
 Describe 'Collector-scoped consent and stable profile identity' {
     It 'derives scopes only from selected collectors plus tenant foundation' {
         $scopes = @(Get-Agent365RequiredScopes -Collector Registry)

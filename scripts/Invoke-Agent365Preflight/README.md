@@ -5,7 +5,7 @@ category: "PowerShell"
 summary: "Run a read-only Agent 365 technical pre-flight and generate self-contained HTML and JSON reports."
 author:
   - "Microsoft FastTrack"
-version: 1.1.2
+version: 1.1.3
 published: 2026-09-01
 updated: 2026-09-02
 tags:
@@ -337,6 +337,7 @@ Fixture mode never authenticates or calls a tenant. It is suitable for demos and
 | `-FixturePath` | Offline synthetic evidence file. No authentication or tenant calls occur. |
 | `-SharePointSiteUrl` | Intended target sites for optional SharePoint evidence. |
 | `-AuditWindowDays` | Purview audit window, from 1 through 90 days. |
+| `-AuditQueryTimeoutSeconds` | Overall Purview Audit Search query timeout, from 30 through 900 seconds. Defaults to 300. |
 | `-IncludeSanitizedCopy` | Writes redacted HTML and JSON support copies. |
 | `-InstallDependencies` | Explicitly opts in to CurrentUser installation of the required Graph authentication module. |
 | `-IncludeBeta` | Records explicit beta opt-in. Version 1 rules do not require beta endpoints. |
@@ -474,6 +475,7 @@ drift; it does not prove that configuration changes caused the drift.
 | The report shows the commercial availability gate | Agent 365 Commercial availability is not inferred for national clouds. Confirm current availability before proceeding; dependent checks are `NotApplicable`. |
 | `AgentsInfo` or `BehaviorInfo` is empty | Empty evidence is not proof that Defender is disabled. Confirm Agent 365 licensing, Defender Security for AI setup, telemetry timing, and the selected audit window. |
 | Purview audit returns zero records | Zero means no matching evidence in the window. Confirm the window, recent agent activity, permissions, and Purview Audit availability. |
+| Purview audit remains `running` until timeout | The default deadline is 300 seconds. The result is `Error` and the verdict is `Incomplete`; the retained query job may continue server-side. Retry later or increase `-AuditQueryTimeoutSeconds` up to 900. |
 | Purview policy metadata is manual | Install the supported first-party module and establish its read session before running. Policy counts still do not prove policy scope or enforcement. |
 | SharePoint target checks are manual or unavailable | Select `SharePointAgents` and the `SharePoint` collector, supply intended site URLs, install the supported SharePoint Online module, and establish a read session first. |
 | A collector reports 429, timeout, 404, or schema error | Review `CollectionIssues`, `Retry-After`, workload availability, cloud support, and the rule/API review date. Rerun after resolving the underlying issue. |
@@ -493,7 +495,8 @@ drift; it does not prove that configuration changes caused the drift.
 - `-IncludeBeta` records explicit opt-in, but the current v1 rules use no beta API.
 - Certificate app-only mode covers Microsoft Graph only. Optional Purview and SharePoint module
   collectors are skipped.
-- The Purview Audit Search API creates a query-job record that the service can retain.
+- The Purview Audit Search API creates a query-job record that the service can retain. A query that
+  times out locally can continue running server-side.
 - The report can contain tenant identifiers, account information, site URLs, summarized policy
   metadata, target-assertion evidence, errors, and customer-entered attestation notes. Store it in
   an approved location.

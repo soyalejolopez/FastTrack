@@ -2,6 +2,12 @@
 
 All notable changes to this resource are documented in this file.
 
+## 1.1.3 - 2026-09-02
+
+- Replaced the fixed Purview Audit Search poll count with a configurable deadline.
+- Added timeout, terminal-state, elapsed-time, and Retry-After handling for audit queries.
+- Kept timed-out Purview evidence incomplete while allowing the server-side query job to continue.
+
 ## 1.1.2 - 2026-09-02
 
 - Fixed strict-mode evaluation when active or eligible role evidence contains exactly one item.

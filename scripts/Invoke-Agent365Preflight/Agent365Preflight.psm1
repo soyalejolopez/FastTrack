@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:ToolVersion = '1.1.2'
+$script:ToolVersion = '1.1.3'
 $script:ModuleRoot = $PSScriptRoot
 $script:RulesPath = Join-Path $PSScriptRoot 'config\rules.v1.json'
 $script:SkuCatalogPath = Join-Path $PSScriptRoot 'config\sku-catalog.v1.json'
@@ -417,6 +417,111 @@ function Invoke-A365GraphRequest {
     }
 }
 
+function Get-A365RetryAfterSeconds {
+    param(
+        [AllowNull()]
+        [object]$Response
+    )
+
+    foreach ($propertyName in @('retryAfterSeconds', 'retryAfter', 'Retry-After')) {
+        $value = Get-A365Property -InputObject $Response -Name $propertyName -Default $null
+        if ($null -eq $value) {
+            continue
+        }
+
+        $seconds = 0
+        if ([int]::TryParse([string]$value, [ref]$seconds) -and $seconds -gt 0) {
+            return $seconds
+        }
+    }
+
+    return $null
+}
+
+function Wait-A365AuditQuery {
+    param(
+        [Parameter(Mandatory)]
+        [object]$InitialResponse,
+
+        [Parameter(Mandatory)]
+        [string]$QueryId,
+
+        [Parameter(Mandatory)]
+        [object]$Allowlist,
+
+        [Parameter(Mandatory)]
+        [ValidateRange(30, 900)]
+        [int]$TimeoutSeconds,
+
+        [Parameter()]
+        [ValidateRange(1, 30)]
+        [int]$PollIntervalSeconds = 5,
+
+        [Parameter()]
+        [scriptblock]$RequestScript = {
+            param($RequestUri, $RequestAllowlist)
+            Invoke-A365GraphRequest -Method GET -Uri $RequestUri -Allowlist $RequestAllowlist
+        },
+
+        [Parameter()]
+        [scriptblock]$SleepScript = {
+            param([int]$Seconds)
+            Start-Sleep -Seconds $Seconds
+        },
+
+        [Parameter()]
+        [scriptblock]$UtcNowScript = {
+            [DateTimeOffset]::UtcNow
+        }
+    )
+
+    $startedAt = [DateTimeOffset](& $UtcNowScript)
+    $deadline = $startedAt.AddSeconds($TimeoutSeconds)
+    $response = $InitialResponse
+    $status = ([string](Get-A365Property -InputObject $response -Name 'status' -Default 'unknownFutureValue')).Trim().ToLowerInvariant()
+    $pollCount = 0
+    $terminalStatuses = @('succeeded', 'failed', 'cancelled')
+
+    while ($status -notin $terminalStatuses) {
+        $now = [DateTimeOffset](& $UtcNowScript)
+        if ($now -ge $deadline) {
+            break
+        }
+
+        $remainingSeconds = [int][Math]::Ceiling(($deadline - $now).TotalSeconds)
+        $retryAfterSeconds = Get-A365RetryAfterSeconds -Response $response
+        $delaySeconds = if ($null -ne $retryAfterSeconds) {
+            $retryAfterSeconds
+        }
+        else {
+            $PollIntervalSeconds
+        }
+        $delaySeconds = [Math]::Min($delaySeconds, $remainingSeconds)
+        if ($delaySeconds -le 0) {
+            break
+        }
+
+        $null = & $SleepScript $delaySeconds
+        if ([DateTimeOffset](& $UtcNowScript) -ge $deadline) {
+            break
+        }
+        $pollCount++
+        $response = & $RequestScript `
+            "https://graph.microsoft.com/v1.0/security/auditLog/queries/$QueryId" `
+            $Allowlist
+        $status = ([string](Get-A365Property -InputObject $response -Name 'status' -Default 'unknownFutureValue')).Trim().ToLowerInvariant()
+    }
+
+    $finishedAt = [DateTimeOffset](& $UtcNowScript)
+    $timedOut = $status -notin $terminalStatuses -and $finishedAt -ge $deadline
+    return [pscustomobject]@{
+        Status = $status
+        TimedOut = $timedOut
+        PollCount = $pollCount
+        ElapsedSeconds = [Math]::Round(($finishedAt - $startedAt).TotalSeconds, 2)
+    }
+}
+
 function Invoke-A365GraphPages {
     param(
         [Parameter(Mandatory)]
@@ -756,6 +861,10 @@ function Get-A365LiveEvidence {
 
         [Parameter()]
         [int]$AuditWindowDays = 7,
+
+        [Parameter()]
+        [ValidateRange(30, 900)]
+        [int]$AuditQueryTimeoutSeconds = 300,
 
         [Parameter()]
         [string]$TenantId,
@@ -1259,6 +1368,10 @@ function Get-A365LiveEvidence {
         queryStatus = 'notStarted'
         recordCount = 0
         windowDays = $AuditWindowDays
+        queryTimeoutSeconds = $AuditQueryTimeoutSeconds
+        pollingElapsedSeconds = 0
+        pollCount = 0
+        timedOut = $false
     }
     try {
         $end = (Get-Date).ToUniversalTime()
@@ -1274,16 +1387,24 @@ function Get-A365LiveEvidence {
             throw 'Purview Audit Search did not return a query id.'
         }
 
-        $status = [string](Get-A365Property -InputObject $queryResponse -Name 'status' -Default 'notStarted')
-        for ($poll = 0; $poll -lt 12 -and $status -notin @('succeeded', 'failed', 'cancelled'); $poll++) {
-            Start-Sleep -Seconds 5
-            $queryResponse = Invoke-A365GraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/security/auditLog/queries/$queryId" -Allowlist $Allowlist
-            $status = [string](Get-A365Property -InputObject $queryResponse -Name 'status' -Default 'unknownFutureValue')
-        }
+        $pollResult = Wait-A365AuditQuery `
+            -InitialResponse $queryResponse `
+            -QueryId $queryId `
+            -Allowlist $Allowlist `
+            -TimeoutSeconds $AuditQueryTimeoutSeconds
+        $audit.queryStatus = $pollResult.Status
+        $audit.pollingElapsedSeconds = $pollResult.ElapsedSeconds
+        $audit.pollCount = $pollResult.PollCount
+        $audit.timedOut = $pollResult.TimedOut
 
-        $audit.queryStatus = $status
-        if ($status -ne 'succeeded') {
-            throw "Purview Audit Search query did not complete successfully within the collection window. Status: $status"
+        if ($pollResult.TimedOut) {
+            throw "Purview Audit Search timed out after $($pollResult.ElapsedSeconds) seconds while status remained '$($pollResult.Status)'. The retained query job may continue server-side."
+        }
+        if ($pollResult.Status -in @('failed', 'cancelled')) {
+            throw "Purview Audit Search query reached terminal status '$($pollResult.Status)' after $($pollResult.ElapsedSeconds) seconds."
+        }
+        if ($pollResult.Status -ne 'succeeded') {
+            throw "Purview Audit Search returned unexpected status '$($pollResult.Status)' after $($pollResult.ElapsedSeconds) seconds."
         }
 
         $recordCounter = [pscustomobject]@{ Count = 0 }
@@ -1295,7 +1416,11 @@ function Get-A365LiveEvidence {
         $audit.available = $true
     }
     catch {
-        $Issues.Add((New-A365CollectionIssue -Adapter Graph -Operation 'Purview Audit Search aggregate query' -ErrorRecord $_ -RequiredPermission 'AuditLogsQuery.Read.All' -DocsUrl 'https://learn.microsoft.com/graph/api/security-auditcoreroot-post-auditlogqueries?view=graph-rest-1.0'))
+        $auditIssue = New-A365CollectionIssue -Adapter Graph -Operation 'Purview Audit Search aggregate query' -ErrorRecord $_ -RequiredPermission 'AuditLogsQuery.Read.All' -DocsUrl 'https://learn.microsoft.com/graph/api/security-auditcoreroot-post-auditlogqueries?view=graph-rest-1.0'
+        $auditIssue | Add-Member -NotePropertyName QueryStatus -NotePropertyValue $audit.queryStatus
+        $auditIssue | Add-Member -NotePropertyName PollingElapsedSeconds -NotePropertyValue $audit.pollingElapsedSeconds
+        $auditIssue | Add-Member -NotePropertyName TimedOut -NotePropertyValue $audit.timedOut
+        $Issues.Add($auditIssue)
     }
 
     $policyMetadata = [ordered]@{
@@ -2273,6 +2398,10 @@ function Invoke-Agent365Preflight {
         [int]$AuditWindowDays = 7,
 
         [Parameter()]
+        [ValidateRange(30, 900)]
+        [int]$AuditQueryTimeoutSeconds = 300,
+
+        [Parameter()]
         [switch]$IncludeSanitizedCopy,
 
         [Parameter()]
@@ -2359,7 +2488,7 @@ function Invoke-Agent365Preflight {
         Read-A365Json -Path $FixturePath -Description 'Fixture file'
     }
     else {
-        Get-A365LiveEvidence -Profiles $profiles -Collectors $collectors -Scopes $scopes -SkuCatalog $skuCatalog -Allowlist $allowlist -Issues $issues -InstallDependencies:$InstallDependencies -SharePointSiteUrl $SharePointSiteUrl -AuditWindowDays $AuditWindowDays -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint
+        Get-A365LiveEvidence -Profiles $profiles -Collectors $collectors -Scopes $scopes -SkuCatalog $skuCatalog -Allowlist $allowlist -Issues $issues -InstallDependencies:$InstallDependencies -SharePointSiteUrl $SharePointSiteUrl -AuditWindowDays $AuditWindowDays -AuditQueryTimeoutSeconds $AuditQueryTimeoutSeconds -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint
     }
 
     $fixtureIssues = @(Get-A365Property -InputObject $evidence -Name 'collectionIssues' -Default @())
@@ -2462,6 +2591,8 @@ function Invoke-Agent365Preflight {
             PowerShellVersion = $PSVersionTable.PSVersion.ToString()
             Platform = "$($PSVersionTable.Platform) $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
             DurationSeconds = 0
+            AuditWindowDays = $AuditWindowDays
+            AuditQueryTimeoutSeconds = $AuditQueryTimeoutSeconds
             OutputFiles = @()
         }
     }
