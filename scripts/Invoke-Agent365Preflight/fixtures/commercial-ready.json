@@ -1,0 +1,183 @@
+{
+  "fixtureVersion": "1.0",
+  "scenario": "Commercial tenant ready for a controlled pilot",
+  "generatedAtUtc": "2026-09-01T15:00:00Z",
+  "local": {
+    "powerShellVersion": "7.6.5",
+    "platform": "Windows ARM64",
+    "graphModuleVersion": "2.38.1",
+    "graphEndpointReachable": true
+  },
+  "authentication": {
+    "mode": "Fixture",
+    "account": "fixture-admin@contoso.example",
+    "requestedScopes": [
+      "AgentIdentityBlueprint.Read.All",
+      "Application.Read.All",
+      "AuditLogsQuery.Read.All",
+      "CopilotPackages.Read.All",
+      "Organization.Read.All",
+      "Policy.Read.All",
+      "RoleEligibilitySchedule.Read.Directory",
+      "RoleManagement.Read.Directory",
+      "ServiceHealth.Read.All",
+      "ThreatHunting.Read.All",
+      "User.Read.All"
+    ],
+    "grantedScopes": [
+      "AgentIdentityBlueprint.Read.All",
+      "Application.Read.All",
+      "AuditLogsQuery.Read.All",
+      "CopilotPackages.Read.All",
+      "Organization.Read.All",
+      "Policy.Read.All",
+      "RoleEligibilitySchedule.Read.Directory",
+      "RoleManagement.Read.Directory",
+      "ServiceHealth.Read.All",
+      "ThreatHunting.Read.All",
+      "User.Read.All"
+    ]
+  },
+  "tenant": {
+    "displayName": "Contoso Fixture",
+    "tenantId": "11111111-2222-3333-4444-555555555555",
+    "primaryDomain": "contoso.example",
+    "cloud": "Global",
+    "commercialAvailability": true
+  },
+  "licensing": {
+    "subscribedSkus": [
+      {
+        "skuPartNumber": "AGENT_365",
+        "skuId": "796a6fb4-740b-4d36-bf56-9c12ca7fa069",
+        "capabilityStatus": "Enabled",
+        "consumedUnits": 12,
+        "servicePlans": [
+          {
+            "servicePlanName": "AGENT_365",
+            "servicePlanId": "d0ce5ebb-9db0-491f-b780-8973a1d815fe",
+            "provisioningStatus": "Success"
+          }
+        ]
+      },
+      {
+        "skuPartNumber": "MICROSOFT_365_E5",
+        "skuId": "fixture-e5",
+        "capabilityStatus": "Enabled",
+        "consumedUnits": 30,
+        "servicePlans": []
+      }
+    ],
+    "qualifyingAssignedUsers": 8,
+    "unknownSkuMappings": []
+  },
+  "roles": {
+    "active": [
+      {
+        "role": "AI Administrator",
+        "assignmentCount": 2
+      },
+      {
+        "role": "Security Reader",
+        "assignmentCount": 3
+      }
+    ],
+    "eligible": [
+      {
+        "role": "Global Reader",
+        "assignmentCount": 1
+      }
+    ]
+  },
+  "serviceHealth": {
+    "available": true,
+    "activeIssueCount": 0,
+    "affectedServices": []
+  },
+  "registry": {
+    "available": true,
+    "packageCount": 4,
+    "summary": [
+      {
+        "platform": "Copilot Studio",
+        "type": "custom",
+        "blocked": false,
+        "deploymentScope": "specificUsers",
+        "count": 2
+      },
+      {
+        "platform": "Microsoft 365 Copilot Agent Builder",
+        "type": "declarative",
+        "blocked": false,
+        "deploymentScope": "all",
+        "count": 1
+      },
+      {
+        "platform": "external",
+        "type": "external",
+        "blocked": true,
+        "deploymentScope": "none",
+        "count": 1
+      }
+    ]
+  },
+  "agentIdentity": {
+    "available": true,
+    "blueprintCount": 3,
+    "missingOwnerCount": 0,
+    "missingSponsorCount": 0,
+    "ownerReadAvailable": true,
+    "expiredCredentialCount": 0,
+    "expiringCredentialCount": 0,
+    "requestedResourceCount": 3,
+    "requestedPermissionCount": 7,
+    "sponsorReadAvailable": true
+  },
+  "conditionalAccess": {
+    "securityDefaultsKnown": true,
+    "securityDefaultsEnabled": false,
+    "policyInventoryAvailable": true,
+    "enabledPolicyCount": 9,
+    "reportOnlyPolicyCount": 2,
+    "disabledPolicyCount": 4
+  },
+  "defender": {
+    "agentsInfo": {
+      "available": true,
+      "agentCount": 17,
+      "platformCount": 4,
+      "latestEvidenceUtc": "2026-09-01T14:58:00Z"
+    },
+    "behaviorInfo": {
+      "available": true,
+      "behaviorCount": 5,
+      "latestEvidenceUtc": "2026-09-01T14:57:00Z"
+    }
+  },
+  "purview": {
+    "audit": {
+      "available": true,
+      "queryStatus": "succeeded",
+      "recordCount": 24,
+      "windowDays": 7
+    },
+    "policyMetadata": {
+      "available": true,
+      "dlpPolicyCount": 4,
+      "retentionPolicyCount": 3,
+      "labelCount": 12
+    }
+  },
+  "sharePoint": {
+    "moduleAvailable": true,
+    "sites": [
+      {
+        "url": "https://contoso.example/sites/agent365-pilot",
+        "readable": true,
+        "sharingCapability": "ExistingExternalUserSharingOnly",
+        "restrictedAccessControl": true
+      }
+    ]
+  },
+  "collectionIssues": []
+}

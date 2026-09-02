@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0",
+  "version": "1.0.0",
+  "reviewDate": "2026-09-01",
+  "source": "https://learn.microsoft.com/entra/identity/users/licensing-service-plan-reference",
+  "qualifyingProducts": [
+    {
+      "productName": "Agent 365",
+      "skuPartNumber": "AGENT_365",
+      "skuId": "796a6fb4-740b-4d36-bf56-9c12ca7fa069",
+      "qualifyingServicePlanName": "AGENT_365",
+      "qualifyingServicePlanId": "d0ce5ebb-9db0-491f-b780-8973a1d815fe"
+    },
+    {
+      "productName": "Microsoft 365 E7",
+      "skuPartNumber": "MICROSOFT_365_E7",
+      "skuId": "9a18296a-025f-4e37-9ffa-30bf8d1ce775",
+      "qualifyingServicePlanName": "AGENT_365",
+      "qualifyingServicePlanId": "d0ce5ebb-9db0-491f-b780-8973a1d815fe"
+    }
+  ],
+  "e5SkuPartNumbers": [
+    "MICROSOFT_365_E5",
+    "SPE_E5",
+    "ENTERPRISEPREMIUM",
+    "ENTERPRISEPREMIUM_NOPSTNCONF"
+  ],
+  "agent365ServicePlans": [
+    {
+      "name": "AGENT_365",
+      "id": "d0ce5ebb-9db0-491f-b780-8973a1d815fe"
+    },
+    {
+      "name": "AUDIT_FOR_AGENTS",
+      "id": "6d9b0ae5-e6a0-4f04-991a-e5700fd84930"
+    },
+    {
+      "name": "COMMUNICATION_COMPLIANCE_FOR_AGENTS",
+      "id": "135fe762-031a-4e79-bd3c-ac376addddec"
+    },
+    {
+      "name": "COMPLIANCE_MANAGER_FOR_AGENTS",
+      "id": "d1f65d05-a302-4861-bd35-da8933ba7655"
+    },
+    {
+      "name": "DATA_LIFECYCLE_MANAGEMENT_FOR_AGENTS",
+      "id": "30d56d35-9be2-41c1-b4b8-7a8d6f073152"
+    },
+    {
+      "name": "DATA_LOSS_PREVENTION_FOR_AGENTS",
+      "id": "46d3c309-0ba7-461f-9d0e-eaca165794c2"
+    },
+    {
+      "name": "DEFENDER_FOR_AI",
+      "id": "a1c15058-5559-4c1a-ba05-8040847f91bb"
+    },
+    {
+      "name": "EDISCOVERY_FOR_AGENTS",
+      "id": "92cedcb2-3fb2-40b4-9df4-f9a5603d9631"
+    },
+    {
+      "name": "ENTRA_ID_GOV_FOR_ASSISTIVE_AGENTS",
+      "id": "a9e85e05-1687-4958-8a4c-bdacda2943db"
+    },
+    {
+      "name": "ENTRA_NETWORK_CONTROLS_FOR_ASSISTIVE_AGENTS",
+      "id": "27e196a4-8b80-4930-bd65-53fd28581878"
+    },
+    {
+      "name": "INFORMATION_PROTECTION_FOR_AGENTS",
+      "id": "48478b49-91a1-4ded-94f0-066db80035ca"
+    },
+    {
+      "name": "INSIDER_RISK_MANAGEMENT_FOR_AGENTS",
+      "id": "004ddfc0-c92f-4b0a-90c5-c60646299d71"
+    }
+  ]
+}

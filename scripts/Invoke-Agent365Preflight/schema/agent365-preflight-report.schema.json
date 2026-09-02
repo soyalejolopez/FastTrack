@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/microsoft/FastTrack/blob/master/scripts/Invoke-Agent365Preflight/schema/agent365-preflight-report.schema.json",
+  "title": "Microsoft Agent 365 technical pre-flight report",
+  "type": "object",
+  "required": [
+    "SchemaVersion",
+    "ToolVersion",
+    "GeneratedAtUtc",
+    "RuleSetVersion",
+    "RuleReviewDate",
+    "Stage",
+    "Profiles",
+    "Collectors",
+    "Verdict",
+    "Tenant",
+    "Coverage",
+    "Authentication",
+    "Results",
+    "Actions",
+    "ManualAttestations",
+    "Drift",
+    "Sources",
+    "CollectionIssues",
+    "Runtime"
+  ],
+  "properties": {
+    "SchemaVersion": {
+      "const": "1.0"
+    },
+    "ToolVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "GeneratedAtUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "RuleSetVersion": {
+      "type": "string"
+    },
+    "RuleReviewDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "Stage": {
+      "enum": ["Pilot", "Production"]
+    },
+    "Profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "Collectors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "Sanitized": {
+      "type": "boolean"
+    },
+    "BetaEnabled": {
+      "type": "boolean"
+    },
+    "FixtureMode": {
+      "type": "boolean"
+    },
+    "Verdict": {
+      "type": "object",
+      "required": ["Label", "Summary", "BlockerCount", "ActionRequiredCount", "AuthorizationGapCount"],
+      "properties": {
+        "Label": {
+          "enum": ["Ready for pilot", "Blocked", "Incomplete", "Technical pre-flight complete"]
+        },
+        "Summary": {
+          "type": "string"
+        },
+        "BlockerCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ActionRequiredCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "AuthorizationGapCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "Tenant": {
+      "type": "object"
+    },
+    "Coverage": {
+      "type": "object"
+    },
+    "Authentication": {
+      "type": "object"
+    },
+    "Results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/result"
+      }
+    },
+    "Actions": {
+      "type": "array"
+    },
+    "ManualAttestations": {
+      "type": "array"
+    },
+    "Drift": {
+      "type": "object"
+    },
+    "Sources": {
+      "type": "array"
+    },
+    "CollectionIssues": {
+      "type": "array"
+    },
+    "Runtime": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "result": {
+      "type": "object",
+      "required": [
+        "Id",
+        "Title",
+        "Pillar",
+        "Area",
+        "Profiles",
+        "Applicability",
+        "Status",
+        "Expected",
+        "Observed",
+        "EvidenceMethod",
+        "EvidenceTimeUtc",
+        "RequiredPermission",
+        "RequiredRole",
+        "Remediation",
+        "DocsUrl",
+        "RuleReviewDate"
+      ],
+      "properties": {
+        "Id": {
+          "type": "string",
+          "pattern": "^A365-(?:[A-Z]+-[0-9]{3}|PROFILE-[A-Z0-9]+)$"
+        },
+        "Title": {
+          "type": "string"
+        },
+        "Pillar": {
+          "enum": ["Observe", "Govern", "Secure"]
+        },
+        "Area": {
+          "type": "string"
+        },
+        "Profiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Applicability": {
+          "type": "string"
+        },
+        "Status": {
+          "enum": ["Passed", "Blocker", "ActionRequired", "Advisory", "ManualValidation", "NotApplicable", "NotAuthorized", "Error"]
+        },
+        "Expected": {},
+        "Observed": {},
+        "EvidenceMethod": {
+          "type": "string"
+        },
+        "EvidenceTimeUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "RequiredPermission": {
+          "type": "string"
+        },
+        "RequiredRole": {
+          "type": "string"
+        },
+        "Remediation": {
+          "type": "string"
+        },
+        "DocsUrl": {
+          "type": "string",
+          "pattern": "^https://learn\\.microsoft\\.com/"
+        },
+        "RuleReviewDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "Details": {},
+        "IsSensitive": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

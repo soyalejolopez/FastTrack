@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "1.0",
+  "version": "1.0.0",
+  "reviewDate": "2026-09-01",
+  "graph": {
+    "hosts": [
+      "graph.microsoft.com"
+    ],
+    "GET": [
+      "^/v1\\.0/\\$metadata$",
+      "^/v1\\.0/organization(?:\\?.*)?$",
+      "^/v1\\.0/subscribedSkus(?:\\?.*)?$",
+      "^/v1\\.0/users(?:\\?.*)?$",
+      "^/v1\\.0/admin/serviceAnnouncement/healthOverviews(?:\\?.*)?$",
+      "^/v1\\.0/copilot/admin/catalog/packages(?:\\?.*)?$",
+      "^/v1\\.0/applications/microsoft\\.graph\\.agentIdentityBlueprint(?:\\?.*)?$",
+      "^/v1\\.0/applications/[0-9a-fA-F-]+/microsoft\\.graph\\.agentIdentityBlueprint/owners(?:\\?.*)?$",
+      "^/v1\\.0/applications/[0-9a-fA-F-]+/microsoft\\.graph\\.agentIdentityBlueprint/sponsors(?:\\?.*)?$",
+      "^/v1\\.0/policies/identitySecurityDefaultsEnforcementPolicy(?:\\?.*)?$",
+      "^/v1\\.0/identity/conditionalAccess/policies(?:\\?.*)?$",
+      "^/v1\\.0/roleManagement/directory/roleAssignments(?:\\?.*)?$",
+      "^/v1\\.0/roleManagement/directory/roleEligibilityScheduleInstances(?:\\?.*)?$",
+      "^/v1\\.0/security/auditLog/queries/[0-9a-fA-F-]+(?:\\?.*)?$",
+      "^/v1\\.0/security/auditLog/queries/[0-9a-fA-F-]+/records(?:\\?.*)?$"
+    ],
+    "POST": [
+      "^/v1\\.0/security/runHuntingQuery$",
+      "^/v1\\.0/security/auditLog/queries$"
+    ]
+  },
+  "modules": {
+    "ExchangeOnlineManagement": [
+      "Search-UnifiedAuditLog",
+      "Get-DlpCompliancePolicy",
+      "Get-RetentionCompliancePolicy",
+      "Get-Label"
+    ],
+    "Microsoft.Online.SharePoint.PowerShell": [
+      "Get-SPOSite"
+    ]
+  }
+}

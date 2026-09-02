@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/microsoft/FastTrack/blob/master/scripts/Invoke-Agent365Preflight/schema/agent365-preflight-answers.schema.json",
+  "title": "Microsoft Agent 365 pre-flight manual answers",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "answers"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "answer"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^A365-MANUAL-[0-9]{3}$"
+          },
+          "answer": {
+            "enum": ["Yes", "No", "NotApplicable"]
+          },
+          "owner": {
+            "type": "string"
+          },
+          "evidenceReference": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

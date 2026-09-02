@@ -1,0 +1,55 @@
+{
+  "$schema": "../schema/agent365-preflight-answers.schema.json",
+  "schemaVersion": "1.0",
+  "answers": [
+    {
+      "id": "A365-MANUAL-001",
+      "answer": "Yes",
+      "owner": "AI governance lead",
+      "evidenceReference": "Agent ownership register",
+      "notes": "Example only. Replace with the customer-confirmed owner and sponsor decision."
+    },
+    {
+      "id": "A365-MANUAL-002",
+      "answer": "Yes",
+      "owner": "AI governance lead",
+      "evidenceReference": "Pilot approval record",
+      "notes": "Example only. Replace with the customer-approved tool, data, and permission boundary."
+    },
+    {
+      "id": "A365-MANUAL-003",
+      "answer": "Yes",
+      "owner": "Responsible AI lead",
+      "evidenceReference": "Scenario review record",
+      "notes": "Example only. Replace with the customer-confirmed responsible AI, privacy, and legal review."
+    },
+    {
+      "id": "A365-MANUAL-004",
+      "answer": "Yes",
+      "owner": "Security operations lead",
+      "evidenceReference": "Incident response runbook",
+      "notes": "Example only. Replace with the customer-confirmed triage and escalation path."
+    },
+    {
+      "id": "A365-MANUAL-005",
+      "answer": "Yes",
+      "owner": "Pilot owner",
+      "evidenceReference": "Pilot scorecard",
+      "notes": "Example only. Replace with the customer-approved success and stop criteria."
+    },
+    {
+      "id": "A365-MANUAL-006",
+      "answer": "Yes",
+      "owner": "Pilot owner",
+      "evidenceReference": "Rollback runbook",
+      "notes": "Example only. Replace with the customer-confirmed rollback test evidence."
+    },
+    {
+      "id": "A365-MANUAL-007",
+      "answer": "Yes",
+      "owner": "AI governance lead",
+      "evidenceReference": "Agent retirement standard",
+      "notes": "Example only. Replace with the customer-confirmed retirement process."
+    }
+  ]
+}
