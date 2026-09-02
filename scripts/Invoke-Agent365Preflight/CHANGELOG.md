@@ -2,6 +2,11 @@
 
 All notable changes to this resource are documented in this file.
 
+## 1.1.2 - 2026-09-02
+
+- Fixed strict-mode evaluation when active or eligible role evidence contains exactly one item.
+- Normalized live role collections to arrays before evaluation and report rendering.
+
 ## 1.1.1 - 2026-09-02
 
 - Added delegated tenant targeting with `-TenantId`.

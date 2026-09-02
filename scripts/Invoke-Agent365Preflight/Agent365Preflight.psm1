@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:ToolVersion = '1.1.1'
+$script:ToolVersion = '1.1.2'
 $script:ModuleRoot = $PSScriptRoot
 $script:RulesPath = Join-Path $PSScriptRoot 'config\rules.v1.json'
 $script:SkuCatalogPath = Join-Path $PSScriptRoot 'config\sku-catalog.v1.json'
@@ -992,17 +992,21 @@ function Get-A365LiveEvidence {
     }
 
     if ($Collectors -contains 'Roles') {
-    $activeRoles = $null
+    [object[]]$activeRoles = @()
     try {
-        $activeRoles = Get-A365RoleSummary -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?$expand=roleDefinition&$top=999' -Allowlist $Allowlist
+        $activeRoles = @(
+            Get-A365RoleSummary -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?$expand=roleDefinition&$top=999' -Allowlist $Allowlist
+        )
     }
     catch {
         $Issues.Add((New-A365CollectionIssue -Adapter Graph -Operation 'Active directory roles' -ErrorRecord $_ -RequiredPermission 'RoleManagement.Read.Directory' -DocsUrl 'https://learn.microsoft.com/microsoft-365/admin/manage/agent-roles-perms'))
     }
 
-    $eligibleRoles = $null
+    [object[]]$eligibleRoles = @()
     try {
-        $eligibleRoles = Get-A365RoleSummary -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleInstances?$expand=roleDefinition&$top=999' -Allowlist $Allowlist
+        $eligibleRoles = @(
+            Get-A365RoleSummary -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleInstances?$expand=roleDefinition&$top=999' -Allowlist $Allowlist
+        )
     }
     catch {
         $Issues.Add((New-A365CollectionIssue -Adapter Graph -Operation 'Eligible directory roles' -ErrorRecord $_ -RequiredPermission 'RoleEligibilitySchedule.Read.Directory' -DocsUrl 'https://learn.microsoft.com/graph/api/rbacapplication-list-roleeligibilityscheduleinstances?view=graph-rest-1.0'))
@@ -1709,9 +1713,14 @@ function Get-A365Evaluation {
             }
             'A365-FOUNDATION-004' {
                 $roles = Get-A365Property -InputObject $Evidence -Name 'roles' -Default $null
-                $active = @(Get-A365Property -InputObject $roles -Name 'active' -Default @())
+                [object[]]$active = @(Get-A365Property -InputObject $roles -Name 'active' -Default @())
                 $targetRoles = @('AI Administrator', 'AI Reader', 'Global Reader', 'Global Administrator')
-                $found = @($active | Where-Object { (Get-A365Property -InputObject $_ -Name 'role' -Default '') -in $targetRoles })
+                [object[]]$found = @(
+                    $active |
+                        Where-Object {
+                            (Get-A365Property -InputObject $_ -Name 'role' -Default '') -in $targetRoles
+                        }
+                )
                 $status = if ($null -eq $roles -or $null -eq (Get-A365Property -InputObject $roles -Name 'active' -Default $null)) { 'Error' } elseif ($found.Count -gt 0) { 'Passed' } else { 'ActionRequired' }
                 $observed = if ($found.Count -gt 0) { ($found | ForEach-Object { "$($_.role): $($_.assignmentCount)" }) -join '; ' } else { 'No visible active Agent 365 management read role assignment.' }
                 $results.Add((New-A365Result -Rules $Rules -Id $rule.id -Status $status -Applicability 'Applicable' -Observed $observed -EvidenceMethod 'Microsoft Graph role assignments aggregate' -Details $active -EvidenceTimeUtc $evidenceTimeUtc))
@@ -1719,7 +1728,10 @@ function Get-A365Evaluation {
             'A365-FOUNDATION-005' {
                 $roles = Get-A365Property -InputObject $Evidence -Name 'roles' -Default $null
                 $eligibleProperty = if ($roles) { $roles.PSObject.Properties['eligible'] } else { $null }
-                $eligible = if ($eligibleProperty) { @($eligibleProperty.Value) } else { @() }
+                [object[]]$eligible = @()
+                if ($eligibleProperty) {
+                    $eligible = @($eligibleProperty.Value)
+                }
                 $issue = Get-A365IssueForOperation -Issues $issues -OperationPattern 'Eligible directory roles'
                 $status = if ($issue) { if ($issue.Category -in @('Authentication', 'TenantConsent', 'Authorization', 'PermissionOrRole')) { 'NotAuthorized' } else { 'Error' } } elseif ($null -eq $eligibleProperty) { 'Error' } elseif ($eligible.Count -gt 0) { 'Passed' } else { 'Advisory' }
                 $observed = if ($issue) { $issue.Message } elseif ($eligible.Count -gt 0) { "$($eligible.Count) eligible role definition(s) are visible." } else { 'No eligible role assignments were returned.' }
@@ -1873,7 +1885,10 @@ function Get-A365Evaluation {
         $results.Add((New-A365ProfileResult -Profile $profile -DocsUrl $docsUrl -EvidenceTimeUtc $evidenceTimeUtc -RuleReviewDate $Rules.reviewDate))
     }
 
-    $answerList = if ($null -eq $Answers) { @() } else { @(Get-A365Property -InputObject $Answers -Name 'answers' -Default @()) }
+    [object[]]$answerList = @()
+    if ($null -ne $Answers) {
+        $answerList = @(Get-A365Property -InputObject $Answers -Name 'answers' -Default @())
+    }
     foreach ($attestation in @($Rules.manualAttestations)) {
         $answer = @($answerList | Where-Object { $_.id -eq $attestation.id }) | Select-Object -First 1
         $answerValue = [string](Get-A365Property -InputObject $answer -Name 'answer' -Default '')

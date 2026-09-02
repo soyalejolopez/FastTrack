@@ -270,6 +270,44 @@ Describe 'Agent 365 fixture evaluation' {
         $outcome.Report.Verdict.Label | Should -Be 'Ready for pilot'
     }
 
+    It 'evaluates and renders exactly one active target role under strict mode' {
+        $fixturePath = New-SyntheticFixture -Name 'single-active-role' -Mutator {
+            param($fixture)
+            $fixture.roles.active = [pscustomobject]@{
+                role = 'AI Administrator'
+                assignmentCount = 1
+            }
+        }
+
+        $outcome = Invoke-FixturePreflight -Name 'single-active-role-output' -FixturePath $fixturePath
+        $roleResult = $outcome.Report.Results | Where-Object Id -eq 'A365-FOUNDATION-004'
+        $html = Get-Content -LiteralPath $outcome.Paths.Html -Raw
+
+        $roleResult.Status | Should -Be 'Passed'
+        @($roleResult.Details).Count | Should -Be 1
+        $roleResult.Observed | Should -Match 'AI Administrator: 1'
+        $html | Should -Match 'AI Administrator'
+    }
+
+    It 'evaluates and renders exactly one eligible role under strict mode' {
+        $fixturePath = New-SyntheticFixture -Name 'single-eligible-role' -Mutator {
+            param($fixture)
+            $fixture.roles.eligible = [pscustomobject]@{
+                role = 'Global Reader'
+                assignmentCount = 1
+            }
+        }
+
+        $outcome = Invoke-FixturePreflight -Name 'single-eligible-role-output' -FixturePath $fixturePath
+        $roleResult = $outcome.Report.Results | Where-Object Id -eq 'A365-FOUNDATION-005'
+        $html = Get-Content -LiteralPath $outcome.Paths.Html -Raw
+
+        $roleResult.Status | Should -Be 'Passed'
+        @($roleResult.Details).Count | Should -Be 1
+        $roleResult.Observed | Should -Be '1 eligible role definition(s) are visible.'
+        $html | Should -Match 'Global Reader'
+    }
+
     It 'blocks readiness when a required manual attestation is answered No' {
         $answers = Get-Content -LiteralPath $answersPath -Raw | ConvertFrom-Json -Depth 100
         ($answers.answers | Where-Object id -eq 'A365-MANUAL-003').answer = 'No'

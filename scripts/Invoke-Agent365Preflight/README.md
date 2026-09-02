@@ -5,9 +5,9 @@ category: "PowerShell"
 summary: "Run a read-only Agent 365 technical pre-flight and generate self-contained HTML and JSON reports."
 author:
   - "Microsoft FastTrack"
-version: 1.1.1
+version: 1.1.2
 published: 2026-09-01
-updated: 2026-09-01
+updated: 2026-09-02
 tags:
   - agent-365
   - readiness
