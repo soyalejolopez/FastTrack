@@ -607,6 +607,11 @@ table.data tbody tr:hover { background: var(--bg-sunken); }
 .chip.ok { color: var(--pass); background: var(--pass-bg); border-color: color-mix(in srgb, var(--pass) 35%, transparent); }
 .chip.miss { color: var(--block); background: var(--block-bg); border-color: color-mix(in srgb, var(--block) 35%, transparent); }
 
+.tenant-target { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--surface-border); }
+.tenant-target .tt-label { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 8px; }
+.tenant-target .chip { display: inline-flex; align-items: center; gap: 5px; }
+.tenant-target .chip [aria-hidden] { font-weight: 700; line-height: 1; }
+
 .badge-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .badge { font-size: .76rem; font-weight: 600; padding: 4px 10px; border-radius: 6px; background: var(--bg-sunken); border: 1px solid var(--surface-border-strong); color: var(--text-secondary); }
 .badge.beta { color: var(--action); border-color: var(--action); background: var(--action-bg); }
@@ -1464,6 +1469,50 @@ function New-Agent365PreflightHtml {
     Line ('<dt>Cloud</dt><dd>' + (ConvertTo-A365Html (Get-A365Member $tenant 'Cloud' '(not reported)')) + '</dd>')
     Line ('<dt>Commercial availability</dt><dd>' + (ConvertTo-A365Html (Get-A365Member $tenant 'CommercialAvailability' '(not reported)')) + '</dd>')
     Line '</dl>'
+    # --- Tenant target / assertion (plain-English) ---
+    $ta = Get-A365Member $tenant 'TargetAssertion'
+    $taRequested = Get-A365Bool (Get-A365Member $ta 'Requested')
+    $taMethod = [string](Get-A365Member $ta 'Method' 'NotRequested')
+    Line '<div class="tenant-target">'
+    Line '<p class="tt-label">Tenant target</p>'
+    Line '<dl class="kv">'
+    if (-not $taRequested -or $taMethod -eq 'NotRequested') {
+        Line '<dt>Assertion</dt><dd>Not explicitly pinned <span class="muted small">(this run did not assert a specific tenant)</span></dd>'
+    } else {
+        $taExpectedRaw = Get-A365Member $ta 'Expected'
+        $taExpected = if ($null -ne $taExpectedRaw -and -not [string]::IsNullOrWhiteSpace([string]$taExpectedRaw)) { [string]$taExpectedRaw } else { '(not specified)' }
+        Line ('<dt>Expected target</dt><dd>' + (ConvertTo-A365Html $taExpected) + '</dd>')
+
+        if ($taMethod -eq 'TenantId') { $taMethodLabel = 'Tenant ID match' }
+        elseif ($taMethod -eq 'VerifiedDomain') { $taMethodLabel = 'Verified domain match' }
+        elseif ($taMethod -eq 'Unverified') { $taMethodLabel = 'Requested, but could not be verified' }
+        else { $taMethodLabel = $taMethod }
+        Line ('<dt>Assertion method</dt><dd>' + (ConvertTo-A365Html $taMethodLabel) + '</dd>')
+
+        $taActualRaw = Get-A365Member $ta 'ActualTenantId'
+        if ($null -ne $taActualRaw -and -not [string]::IsNullOrWhiteSpace([string]$taActualRaw)) {
+            Line ('<dt>Actual tenant ID</dt><dd class="mono">' + (ConvertTo-A365Html ([string]$taActualRaw)) + '</dd>')
+        } elseif ($isSanitized) {
+            Line '<dt>Actual tenant ID</dt><dd class="muted">[redacted in sanitized report]</dd>'
+        } else {
+            Line '<dt>Actual tenant ID</dt><dd class="muted">(not reported)</dd>'
+        }
+
+        if ($taMethod -eq 'Unverified') {
+            Line '<dt>Result</dt><dd><span class="chip"><span aria-hidden="true">&#8210;</span> Not verified</span></dd>'
+        } elseif (Get-A365Bool (Get-A365Member $ta 'Matched')) {
+            Line '<dt>Result</dt><dd><span class="chip ok"><span aria-hidden="true">&#10003;</span> Matched expected tenant</span></dd>'
+        } else {
+            Line '<dt>Result</dt><dd><span class="chip miss"><span aria-hidden="true">&#10007;</span> Did not match expected tenant</span></dd>'
+        }
+
+        $taDomainRaw = Get-A365Member $ta 'MatchedVerifiedDomain'
+        if ($null -ne $taDomainRaw -and -not [string]::IsNullOrWhiteSpace([string]$taDomainRaw)) {
+            Line ('<dt>Matched verified domain</dt><dd>' + (ConvertTo-A365Html ([string]$taDomainRaw)) + '</dd>')
+        }
+    }
+    Line '</dl>'
+    Line '</div>'
     Line '</div>'
     Line '<div class="card">'
     Line '<h3>Run parameters</h3>'

@@ -5,7 +5,7 @@ category: "PowerShell"
 summary: "Run a read-only Agent 365 technical pre-flight and generate self-contained HTML and JSON reports."
 author:
   - "Microsoft FastTrack"
-version: 1.1.0
+version: 1.1.1
 published: 2026-09-01
 updated: 2026-09-01
 tags:
@@ -110,6 +110,8 @@ that auditing is disabled.
 - Defender and Purview data is reduced to counts and timestamps while it is collected.
 - Partial failures still produce a report.
 - A sanitized support copy removes tenant identity and sensitive result details.
+- When `-TenantId` is supplied, the full report records the requested tenant, assertion method,
+  connected tenant ID, and matched domain. Sanitized copies remove those identifiers.
 
 Review local report handling with your security and privacy teams. The full report can contain
 tenant name, tenant ID, primary domain, signed-in account, site URLs, and summarized configuration
@@ -184,7 +186,9 @@ role.
 ### Certificate app-only mode
 
 Certificate app-only authentication is Microsoft Graph only. Client secrets are not accepted.
-Configure the required application permissions and admin consent on the app registration, then run:
+Supplying `-ClientId` or `-CertificateThumbprint` selects app-only mode, which requires all three
+certificate parameters. Configure the required application permissions and admin consent on the app
+registration, then run:
 
 ```powershell
 .\Invoke-Agent365Preflight.ps1 `
@@ -240,6 +244,7 @@ Start with tenant foundation, licensing, roles, registry, and Agent Identity evi
 
 ```powershell
 .\Invoke-Agent365Preflight.ps1 `
+  -TenantId "contoso.onmicrosoft.com" `
   -Collector TenantFoundation,Licensing,Roles,Registry,AgentIdentity `
   -Stage Pilot `
   -OutputPath "C:\Temp\Agent365Preflight"
@@ -248,6 +253,20 @@ Start with tenant foundation, licensing, roles, registry, and Agent Identity evi
 Read the printed scope list before the sign-in prompt. If consent or a required role is missing, the
 script continues where possible and records the gap. Because this first run omits an answers file,
 the verdict remains `Incomplete` until the required customer attestations are supplied.
+
+### Pin delegated sign-in to the intended tenant
+
+Use `-TenantId` by itself with either the tenant GUID or a verified domain. The script passes that
+value to `Connect-MgGraph` for interactive delegated sign-in, then performs a second assertion before
+running non-foundation collectors:
+
+- For a GUID, the requested value must match the tenant ID returned by `Get-MgContext`.
+- For a verified domain, the organization query is the first authorized Graph request and the
+  requested domain must exist in `verifiedDomains`.
+
+If either assertion fails, the script stops immediately and writes no normal tenant report. A
+successful full report records the expected and connected tenant evidence under
+**Tenant > TargetAssertion**. Sanitized copies remove the tenant identifiers.
 
 ## Recommended pilot run
 
@@ -321,7 +340,8 @@ Fixture mode never authenticates or calls a tenant. It is suitable for demos and
 | `-IncludeSanitizedCopy` | Writes redacted HTML and JSON support copies. |
 | `-InstallDependencies` | Explicitly opts in to CurrentUser installation of the required Graph authentication module. |
 | `-IncludeBeta` | Records explicit beta opt-in. Version 1 rules do not require beta endpoints. |
-| `-TenantId`, `-ClientId`, `-CertificateThumbprint` | Enables Graph-only certificate app authentication. All three are required together. |
+| `-TenantId` | Pins delegated sign-in to a tenant GUID or verified domain. With app-only parameters, identifies the app's tenant. |
+| `-ClientId`, `-CertificateThumbprint` | Selects Graph-only certificate app authentication. TenantId, ClientId, and CertificateThumbprint are all required together. |
 
 ## Profiles
 
@@ -450,6 +470,7 @@ drift; it does not prove that configuration changes caused the drift.
 | Sign-in succeeds but checks show `NotAuthorized` | Compare `RequestedScopes`, `GrantedScopes`, and `MissingScopes`. Confirm tenant consent and the signed-in user's required role separately. |
 | Package catalog returns 403 | Confirm `CopilotPackages.Read.All` and an AI Administrator or Global Administrator role. AI Reader and Global Reader aren't sufficient for this API. |
 | Agent Identity owners or sponsors return 403 | Owners use `AgentIdentityBlueprint.Read.All`; sponsors require `Application.Read.All`. Nonowners also need Agent ID Administrator. |
+| The script stops with a tenant target mismatch | Confirm the `-TenantId` GUID or verified domain and the account selected during sign-in. No normal report is written after a mismatch. |
 | The report shows the commercial availability gate | Agent 365 Commercial availability is not inferred for national clouds. Confirm current availability before proceeding; dependent checks are `NotApplicable`. |
 | `AgentsInfo` or `BehaviorInfo` is empty | Empty evidence is not proof that Defender is disabled. Confirm Agent 365 licensing, Defender Security for AI setup, telemetry timing, and the selected audit window. |
 | Purview audit returns zero records | Zero means no matching evidence in the window. Confirm the window, recent agent activity, permissions, and Purview Audit availability. |
@@ -474,7 +495,8 @@ drift; it does not prove that configuration changes caused the drift.
   collectors are skipped.
 - The Purview Audit Search API creates a query-job record that the service can retain.
 - The report can contain tenant identifiers, account information, site URLs, summarized policy
-  metadata, errors, and customer-entered attestation notes. Store it in an approved location.
+  metadata, target-assertion evidence, errors, and customer-entered attestation notes. Store it in
+  an approved location.
 - The sanitized copy is a reduced support artifact, not a guarantee that all information is
   non-sensitive.
 

@@ -48,17 +48,20 @@ Explicitly opts in to CurrentUser installation of Microsoft.Graph.Authentication
 Records beta opt-in. The current v1 rules do not call a beta endpoint.
 
 .PARAMETER TenantId
-Tenant ID for Graph-only certificate app authentication. Requires ClientId and CertificateThumbprint.
+Tenant GUID or verified domain. By itself, pins interactive delegated sign-in and enables a
+post-connect tenant assertion. With app-only parameters, identifies the app's tenant.
 
 .PARAMETER ClientId
-Application client ID for Graph-only certificate app authentication. Requires TenantId and
-CertificateThumbprint.
+Application client ID for Graph-only certificate app authentication. Supplying it selects app-only
+mode and requires TenantId and CertificateThumbprint.
 
 .PARAMETER CertificateThumbprint
-Certificate thumbprint for Graph-only app authentication. Client secrets are not supported.
+Certificate thumbprint for Graph-only app authentication. Supplying it selects app-only mode and
+requires TenantId and ClientId. Client secrets are not supported.
 
 .EXAMPLE
 .\Invoke-Agent365Preflight.ps1 `
+    -TenantId "contoso.onmicrosoft.com" `
     -Collector TenantFoundation,Licensing,Roles,Registry,AgentIdentity `
     -Stage Pilot `
     -OutputPath C:\Temp\Agent365Preflight

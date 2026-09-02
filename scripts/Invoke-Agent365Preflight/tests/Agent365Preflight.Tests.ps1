@@ -7,6 +7,7 @@ $reportSchemaPath = Join-Path $resourceRoot 'schema\agent365-preflight-report.sc
 $allowlistPath = Join-Path $resourceRoot 'config\operation-allowlist.v1.json'
 
 Import-Module $modulePath -Force
+Import-Module Microsoft.Graph.Authentication -MinimumVersion 2.20.0 -Force
 
 function New-SyntheticFixture {
     param(
@@ -398,6 +399,231 @@ Describe 'Collector-scoped consent and stable profile identity' {
     }
 }
 
+Describe 'Tenant targeting safety' {
+    It 'passes a GUID TenantId to delegated Connect-MgGraph and verifies the context tenant' {
+        $expectedTenant = '11111111-2222-3333-4444-555555555555'
+
+        InModuleScope Agent365Preflight -Parameters @{ ExpectedTenant = $expectedTenant } {
+            Mock Connect-MgGraph {}
+            Mock Get-A365ActiveContext {
+                [pscustomobject]@{
+                    TenantId = $ExpectedTenant.ToUpperInvariant()
+                    Scopes = @('Organization.Read.All')
+                    Environment = 'Global'
+                    Account = 'fixture@example.invalid'
+                }
+            }
+
+            $connection = Connect-A365GraphContext `
+                -Scopes @('Organization.Read.All') `
+                -TenantId $ExpectedTenant `
+                -ClientId $null `
+                -CertificateThumbprint $null
+
+            $connection.AppOnly | Should -BeFalse
+            $connection.TargetAssertion.Method | Should -Be 'TenantId'
+            $connection.TargetAssertion.Matched | Should -BeTrue
+            $connection.TargetAssertion.ActualTenantId | Should -Be $ExpectedTenant.ToUpperInvariant()
+            Should -Invoke Connect-MgGraph -Times 1 -Exactly -ParameterFilter {
+                $TenantId -eq $ExpectedTenant -and
+                $Scopes -contains 'Organization.Read.All' -and
+                -not $ClientId -and
+                -not $CertificateThumbprint
+            }
+        }
+    }
+
+    It 'passes a verified domain to delegated auth and verifies the first organization response' {
+        $expectedDomain = 'fixture.onmicrosoft.com'
+        $actualTenant = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+
+        InModuleScope Agent365Preflight -Parameters @{
+            ExpectedDomain = $expectedDomain
+            ActualTenant = $actualTenant
+        } {
+            Mock Connect-MgGraph {}
+            Mock Get-A365ActiveContext {
+                [pscustomobject]@{
+                    TenantId = $ActualTenant
+                    Scopes = @('Organization.Read.All')
+                    Environment = 'Global'
+                    Account = 'fixture@example.invalid'
+                }
+            }
+            Mock Invoke-A365GraphRequest {
+                [pscustomobject]@{
+                    value = @(
+                        [pscustomobject]@{
+                            id = $ActualTenant
+                            displayName = 'Fixture organization'
+                            verifiedDomains = @(
+                                [pscustomobject]@{
+                                    name = $ExpectedDomain.ToUpperInvariant()
+                                    isDefault = $true
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+
+            $connection = Connect-A365GraphContext `
+                -Scopes @('Organization.Read.All') `
+                -TenantId $ExpectedDomain `
+                -ClientId $null `
+                -CertificateThumbprint $null
+            $organization = Get-A365OrganizationContext `
+                -Allowlist ([pscustomobject]@{}) `
+                -TargetAssertion $connection.TargetAssertion
+
+            $connection.AppOnly | Should -BeFalse
+            $organization.TargetAssertion.Method | Should -Be 'VerifiedDomain'
+            $organization.TargetAssertion.Matched | Should -BeTrue
+            $organization.TargetAssertion.MatchedVerifiedDomain | Should -Be $ExpectedDomain.ToUpperInvariant()
+            Should -Invoke Connect-MgGraph -Times 1 -Exactly -ParameterFilter {
+                $TenantId -eq $ExpectedDomain -and
+                $Scopes -contains 'Organization.Read.All' -and
+                -not $ClientId -and
+                -not $CertificateThumbprint
+            }
+            Should -Invoke Invoke-A365GraphRequest -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'GET' -and $Uri -match '/v1\.0/organization'
+            }
+        }
+    }
+
+    It 'marks GUID and verified-domain mismatches as safe startup aborts' {
+        InModuleScope Agent365Preflight {
+            Mock Connect-MgGraph {}
+            Mock Get-A365ActiveContext {
+                [pscustomobject]@{
+                    TenantId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                    Scopes = @('Organization.Read.All')
+                    Environment = 'Global'
+                    Account = 'fixture@example.invalid'
+                }
+            }
+
+            $guidError = $null
+            try {
+                $null = Connect-A365GraphContext `
+                    -Scopes @('Organization.Read.All') `
+                    -TenantId '11111111-2222-3333-4444-555555555555' `
+                    -ClientId $null `
+                    -CertificateThumbprint $null
+            }
+            catch {
+                $guidError = $_
+            }
+
+            $domainAssertion = [pscustomobject]@{
+                requested = $true
+                expected = 'expected.onmicrosoft.com'
+                method = 'VerifiedDomain'
+                matched = $null
+                actualTenantId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                matchedVerifiedDomain = $null
+            }
+            $domainError = $null
+            try {
+                $null = Confirm-A365DomainTenantTarget `
+                    -TargetAssertion $domainAssertion `
+                    -Organization ([pscustomobject]@{
+                        verifiedDomains = @([pscustomobject]@{ name = 'other.onmicrosoft.com' })
+                    })
+            }
+            catch {
+                $domainError = $_
+            }
+
+            $guidError.Exception.Message | Should -Match 'Tenant target mismatch'
+            $guidError.Exception.Data['Agent365SafeStartupAbort'] | Should -BeTrue
+            $domainError.Exception.Message | Should -Match 'Tenant target mismatch'
+            $domainError.Exception.Data['Agent365SafeStartupAbort'] | Should -BeTrue
+        }
+    }
+
+    It 'rejects every partial certificate app-only tuple before authentication' {
+        InModuleScope Agent365Preflight {
+            Mock Connect-MgGraph {}
+
+            {
+                Connect-A365GraphContext `
+                    -Scopes @('Organization.Read.All') `
+                    -TenantId 'contoso.onmicrosoft.com' `
+                    -ClientId 'client-id' `
+                    -CertificateThumbprint $null
+            } | Should -Throw '*Missing: CertificateThumbprint*'
+
+            {
+                Connect-A365GraphContext `
+                    -Scopes @('Organization.Read.All') `
+                    -TenantId 'contoso.onmicrosoft.com' `
+                    -ClientId $null `
+                    -CertificateThumbprint 'thumbprint'
+            } | Should -Throw '*Missing: ClientId*'
+
+            {
+                Connect-A365GraphContext `
+                    -Scopes @('Organization.Read.All') `
+                    -TenantId $null `
+                    -ClientId 'client-id' `
+                    -CertificateThumbprint 'thumbprint'
+            } | Should -Throw '*Missing: TenantId*'
+
+            Should -Invoke Connect-MgGraph -Times 0 -Exactly
+        }
+    }
+
+    It 'writes no normal report after a safe startup abort' {
+        $outputPath = Join-Path $TestDrive 'tenant-mismatch-abort'
+
+        InModuleScope Agent365Preflight -Parameters @{ OutputPath = $outputPath } {
+            Mock Get-A365LiveEvidence {
+                throw (New-A365SafeStartupException -Message 'Tenant target mismatch. No report was written.')
+            }
+
+            {
+                Invoke-Agent365Preflight `
+                    -TenantId 'expected.onmicrosoft.com' `
+                    -Collector TenantFoundation `
+                    -OutputPath $OutputPath
+            } | Should -Throw '*Tenant target mismatch*'
+        }
+
+        @(Get-ChildItem -LiteralPath $outputPath -File -ErrorAction SilentlyContinue).Count | Should -Be 0
+    }
+
+    It 'records successful target evidence and redacts it from support copies' {
+        $fixturePath = New-SyntheticFixture -Name 'target-assertion-evidence' -Mutator {
+            param($fixture)
+            $fixture.tenant | Add-Member -NotePropertyName targetAssertion -NotePropertyValue ([pscustomobject]@{
+                requested = $true
+                expected = 'fixture.onmicrosoft.com'
+                method = 'VerifiedDomain'
+                matched = $true
+                actualTenantId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                matchedVerifiedDomain = 'fixture.onmicrosoft.com'
+            })
+        }
+
+        $outcome = Invoke-FixturePreflight -Name 'target-assertion-output' -FixturePath $fixturePath
+        $fullHtml = Get-Content -LiteralPath $outcome.Paths.Html -Raw
+        $sanitizedHtml = Get-Content -LiteralPath $outcome.Paths.SanitizedHtml -Raw
+        $sanitizedJson = Get-Content -LiteralPath $outcome.Paths.SanitizedJson -Raw | ConvertFrom-Json -Depth 100
+
+        $outcome.Report.Tenant.TargetAssertion.Method | Should -Be 'VerifiedDomain'
+        $outcome.Report.Tenant.TargetAssertion.Matched | Should -BeTrue
+        $fullHtml | Should -Match 'fixture\.onmicrosoft\.com'
+        $fullHtml | Should -Match 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+        $sanitizedHtml | Should -Not -Match 'fixture\.onmicrosoft\.com'
+        $sanitizedHtml | Should -Not -Match 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+        $sanitizedJson.Tenant.TargetAssertion.Expected | Should -Be 'Redacted'
+        $sanitizedJson.Tenant.TargetAssertion.ActualTenantId | Should -BeNullOrEmpty
+        $sanitizedJson.Tenant.TargetAssertion.MatchedVerifiedDomain | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Operation safety allowlists' {
     It 'allows only approved Graph read and query operations' {
         Test-Agent365OperationAllowed -Adapter Graph -Method GET -Target 'https://graph.microsoft.com/v1.0/copilot/admin/catalog/packages?$top=10' | Should -Be $true
@@ -462,6 +688,12 @@ Describe 'Report comparison, redaction, and rendering' {
 
     It 'redacts tenant identity, email, identifiers, paths, and sensitive details' {
         $outcome = Invoke-FixturePreflight -Name 'redaction-source'
+        $outcome.Report.Tenant.TargetAssertion.Requested = $true
+        $outcome.Report.Tenant.TargetAssertion.Expected = 'contoso.onmicrosoft.com'
+        $outcome.Report.Tenant.TargetAssertion.Method = 'VerifiedDomain'
+        $outcome.Report.Tenant.TargetAssertion.Matched = $true
+        $outcome.Report.Tenant.TargetAssertion.ActualTenantId = '11111111-2222-3333-4444-555555555555'
+        $outcome.Report.Tenant.TargetAssertion.MatchedVerifiedDomain = 'contoso.onmicrosoft.com'
         $outcome.Report.CollectionIssues = @(
             [pscustomobject]@{
                 Adapter = 'Graph'
@@ -479,6 +711,9 @@ Describe 'Report comparison, redaction, and rendering' {
 
         $sanitized.Tenant.DisplayName | Should -Be 'Redacted tenant'
         $sanitized.Tenant.TenantId | Should -BeNullOrEmpty
+        $sanitized.Tenant.TargetAssertion.Expected | Should -Be 'Redacted'
+        $sanitized.Tenant.TargetAssertion.ActualTenantId | Should -BeNullOrEmpty
+        $sanitized.Tenant.TargetAssertion.MatchedVerifiedDomain | Should -BeNullOrEmpty
         $text | Should -Not -Match 'admin@contoso.com'
         $text | Should -Not -Match '11111111-2222-3333-4444-555555555555'
         $text | Should -Not -Match 'C:\\Secret'
@@ -492,6 +727,8 @@ Describe 'Report comparison, redaction, and rendering' {
 
         $html | Should -Match '<!DOCTYPE html>'
         $html | Should -Match 'not a security or compliance certification'
+        $html | Should -Match 'Tenant target'
+        $html | Should -Match 'Not explicitly pinned'
         $html | Should -Not -Match '<link[^>]+stylesheet'
         $html | Should -Not -Match '<script[^>]+src='
         $json | Test-Json -SchemaFile $reportSchemaPath | Should -Be $true

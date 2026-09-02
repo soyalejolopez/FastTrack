@@ -94,7 +94,47 @@
       }
     },
     "Tenant": {
-      "type": "object"
+      "type": "object",
+      "required": [
+        "DisplayName",
+        "TenantId",
+        "PrimaryDomain",
+        "Cloud",
+        "CommercialAvailability",
+        "TargetAssertion"
+      ],
+      "properties": {
+        "DisplayName": {},
+        "TenantId": {},
+        "PrimaryDomain": {},
+        "Cloud": {
+          "type": "string"
+        },
+        "CommercialAvailability": {},
+        "TargetAssertion": {
+          "type": "object",
+          "required": [
+            "Requested",
+            "Expected",
+            "Method",
+            "Matched",
+            "ActualTenantId",
+            "MatchedVerifiedDomain"
+          ],
+          "properties": {
+            "Requested": {
+              "type": "boolean"
+            },
+            "Expected": {},
+            "Method": {
+              "enum": ["NotRequested", "Unverified", "TenantId", "VerifiedDomain"]
+            },
+            "Matched": {},
+            "ActualTenantId": {},
+            "MatchedVerifiedDomain": {}
+          }
+        }
+      }
     },
     "Coverage": {
       "type": "object"

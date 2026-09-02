@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:ToolVersion = '1.1.0'
+$script:ToolVersion = '1.1.1'
 $script:ModuleRoot = $PSScriptRoot
 $script:RulesPath = Join-Path $PSScriptRoot 'config\rules.v1.json'
 $script:SkuCatalogPath = Join-Path $PSScriptRoot 'config\sku-catalog.v1.json'
@@ -446,6 +446,227 @@ function Get-A365ActiveContext {
     return $context
 }
 
+function New-A365SafeStartupException {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Message
+    )
+
+    $exception = [System.InvalidOperationException]::new($Message)
+    $exception.Data['Agent365SafeStartupAbort'] = $true
+    return $exception
+}
+
+function Test-A365GraphEndpointReachability {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Allowlist
+    )
+
+    $httpClient = $null
+    $httpRequest = $null
+    $httpResponse = $null
+    try {
+        $metadataUri = 'https://graph.microsoft.com/v1.0/$metadata'
+        if (-not (Test-Agent365OperationAllowed -Adapter Graph -Method GET -Target $metadataUri -Allowlist $Allowlist)) {
+            throw 'The Microsoft Graph metadata reachability probe is not allowed by the operation allowlist.'
+        }
+
+        $httpClient = [System.Net.Http.HttpClient]::new()
+        $httpClient.Timeout = [TimeSpan]::FromSeconds(15)
+        $httpRequest = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Get, $metadataUri)
+        $httpResponse = $httpClient.SendAsync(
+            $httpRequest,
+            [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead
+        ).GetAwaiter().GetResult()
+        return [int]$httpResponse.StatusCode -lt 500
+    }
+    finally {
+        if ($null -ne $httpResponse) { $httpResponse.Dispose() }
+        if ($null -ne $httpRequest) { $httpRequest.Dispose() }
+        if ($null -ne $httpClient) { $httpClient.Dispose() }
+    }
+}
+
+function New-A365TenantTargetAssertion {
+    param(
+        [AllowNull()]
+        [string]$RequestedTenant,
+
+        [AllowNull()]
+        [string]$ActualTenantId
+    )
+
+    if ([string]::IsNullOrWhiteSpace($RequestedTenant)) {
+        return [pscustomobject][ordered]@{
+            requested = $false
+            expected = $null
+            method = 'NotRequested'
+            matched = $null
+            actualTenantId = $ActualTenantId
+            matchedVerifiedDomain = $null
+        }
+    }
+
+    $expected = $RequestedTenant.Trim()
+    $parsedGuid = [Guid]::Empty
+    if ([Guid]::TryParse($expected, [ref]$parsedGuid)) {
+        $matched = [string]::Equals(
+            $parsedGuid.ToString(),
+            ([string]$ActualTenantId).Trim(),
+            [StringComparison]::OrdinalIgnoreCase
+        )
+        if (-not $matched) {
+            throw (New-A365SafeStartupException -Message "Tenant target mismatch. Expected tenant ID '$expected' but Microsoft Graph connected to tenant ID '$ActualTenantId'. No tenant collectors were run and no report was written.")
+        }
+
+        return [pscustomobject][ordered]@{
+            requested = $true
+            expected = $expected
+            method = 'TenantId'
+            matched = $true
+            actualTenantId = $ActualTenantId
+            matchedVerifiedDomain = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        requested = $true
+        expected = $expected
+        method = 'VerifiedDomain'
+        matched = $null
+        actualTenantId = $ActualTenantId
+        matchedVerifiedDomain = $null
+    }
+}
+
+function Connect-A365GraphContext {
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Scopes,
+
+        [AllowNull()]
+        [string]$TenantId,
+
+        [AllowNull()]
+        [string]$ClientId,
+
+        [AllowNull()]
+        [string]$CertificateThumbprint
+    )
+
+    $hasClientId = -not [string]::IsNullOrWhiteSpace($ClientId)
+    $hasCertificate = -not [string]::IsNullOrWhiteSpace($CertificateThumbprint)
+    $appOnly = $hasClientId -or $hasCertificate
+
+    if ($appOnly) {
+        $missing = @()
+        if ([string]::IsNullOrWhiteSpace($TenantId)) { $missing += 'TenantId' }
+        if (-not $hasClientId) { $missing += 'ClientId' }
+        if (-not $hasCertificate) { $missing += 'CertificateThumbprint' }
+        if ($missing.Count -gt 0) {
+            throw (New-A365SafeStartupException -Message "Certificate app-only authentication requires TenantId, ClientId, and CertificateThumbprint together. Missing: $($missing -join ', ').")
+        }
+
+        $null = Connect-MgGraph `
+            -TenantId $TenantId `
+            -ClientId $ClientId `
+            -CertificateThumbprint $CertificateThumbprint `
+            -ContextScope Process `
+            -NoWelcome `
+            -ErrorAction Stop
+    }
+    else {
+        $connectParameters = @{
+            Scopes = $Scopes
+            ContextScope = 'Process'
+            NoWelcome = $true
+            ErrorAction = 'Stop'
+        }
+        if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+            $connectParameters.TenantId = $TenantId.Trim()
+        }
+        $null = Connect-MgGraph @connectParameters
+    }
+
+    $context = Get-A365ActiveContext
+    if ($null -eq $context) {
+        throw 'Microsoft Graph authentication completed without an active context.'
+    }
+
+    return [pscustomobject]@{
+        Context = $context
+        AppOnly = $appOnly
+        TargetAssertion = New-A365TenantTargetAssertion `
+            -RequestedTenant $TenantId `
+            -ActualTenantId ([string](Get-A365Property -InputObject $context -Name 'TenantId' -Default ''))
+    }
+}
+
+function Confirm-A365DomainTenantTarget {
+    param(
+        [Parameter(Mandatory)]
+        [object]$TargetAssertion,
+
+        [AllowNull()]
+        [object]$Organization
+    )
+
+    if ((Get-A365Property -InputObject $TargetAssertion -Name 'method' -Default '') -ne 'VerifiedDomain') {
+        return $TargetAssertion
+    }
+
+    $expectedDomain = [string](Get-A365Property -InputObject $TargetAssertion -Name 'expected' -Default '')
+    $verifiedDomains = @(
+        Get-A365Property -InputObject $Organization -Name 'verifiedDomains' -Default @() |
+            ForEach-Object { [string](Get-A365Property -InputObject $_ -Name 'name' -Default '') }
+    )
+    $matchedDomain = @(
+        $verifiedDomains |
+            Where-Object {
+                [string]::Equals(
+                    $_.TrimEnd('.'),
+                    $expectedDomain.TrimEnd('.'),
+                    [StringComparison]::OrdinalIgnoreCase
+                )
+            }
+    ) | Select-Object -First 1
+
+    if (-not $matchedDomain) {
+        $actualTenantId = Get-A365Property -InputObject $TargetAssertion -Name 'actualTenantId' -Default 'unknown'
+        throw (New-A365SafeStartupException -Message "Tenant target mismatch. Expected verified domain '$expectedDomain', but connected tenant ID '$actualTenantId' does not list that domain. No non-foundation collectors were run and no report was written.")
+    }
+
+    $TargetAssertion.matched = $true
+    $TargetAssertion.matchedVerifiedDomain = $matchedDomain
+    return $TargetAssertion
+}
+
+function Get-A365OrganizationContext {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Allowlist,
+
+        [Parameter(Mandatory)]
+        [object]$TargetAssertion
+    )
+
+    $response = Invoke-A365GraphRequest `
+        -Method GET `
+        -Uri 'https://graph.microsoft.com/v1.0/organization?$select=id,displayName,verifiedDomains' `
+        -Allowlist $Allowlist
+    $organization = @(Get-A365Property -InputObject $response -Name 'value' -Default @()) |
+        Select-Object -First 1
+    $confirmedAssertion = Confirm-A365DomainTenantTarget `
+        -TargetAssertion $TargetAssertion `
+        -Organization $organization
+
+    return [pscustomobject]@{
+        Organization = $organization
+        TargetAssertion = $confirmedAssertion
+    }
+}
+
 function Get-A365RoleSummary {
     param(
         [Parameter(Mandatory)]
@@ -524,6 +745,7 @@ function Get-A365LiveEvidence {
         [object]$Allowlist,
 
         [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [System.Collections.Generic.List[object]]$Issues,
 
         [Parameter()]
@@ -563,31 +785,11 @@ function Get-A365LiveEvidence {
         graphEndpointReachable = $false
     }
 
-    $httpClient = $null
-    $httpRequest = $null
-    $httpResponse = $null
     try {
-        $metadataUri = 'https://graph.microsoft.com/v1.0/$metadata'
-        if (-not (Test-Agent365OperationAllowed -Adapter Graph -Method GET -Target $metadataUri -Allowlist $Allowlist)) {
-            throw 'The Microsoft Graph metadata reachability probe is not allowed by the operation allowlist.'
-        }
-
-        $httpClient = [System.Net.Http.HttpClient]::new()
-        $httpClient.Timeout = [TimeSpan]::FromSeconds(15)
-        $httpRequest = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Get, $metadataUri)
-        $httpResponse = $httpClient.SendAsync(
-            $httpRequest,
-            [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead
-        ).GetAwaiter().GetResult()
-        $local.graphEndpointReachable = [int]$httpResponse.StatusCode -lt 500
+        $local.graphEndpointReachable = Test-A365GraphEndpointReachability -Allowlist $Allowlist
     }
     catch {
         $Issues.Add((New-A365CollectionIssue -Adapter Local -Operation 'Graph endpoint reachability' -ErrorRecord $_ -DocsUrl 'https://learn.microsoft.com/graph/deployments'))
-    }
-    finally {
-        if ($null -ne $httpResponse) { $httpResponse.Dispose() }
-        if ($null -ne $httpRequest) { $httpRequest.Dispose() }
-        if ($null -ne $httpClient) { $httpClient.Dispose() }
     }
 
     if ($null -eq $graphModule) {
@@ -606,6 +808,14 @@ function Get-A365LiveEvidence {
                 primaryDomain = $null
                 cloud = 'Unknown'
                 commercialAvailability = $null
+                targetAssertion = [pscustomobject]@{
+                    requested = -not [string]::IsNullOrWhiteSpace($TenantId)
+                    expected = $TenantId
+                    method = 'Unverified'
+                    matched = $false
+                    actualTenantId = $null
+                    matchedVerifiedDomain = $null
+                }
             }
             collectionIssues = $Issues.ToArray()
         }
@@ -613,26 +823,20 @@ function Get-A365LiveEvidence {
 
     Import-Module Microsoft.Graph.Authentication -MinimumVersion 2.20.0 -ErrorAction Stop
 
-    $certificateParameters = @($TenantId, $ClientId, $CertificateThumbprint) | Where-Object { $_ }
-    $appOnly = $certificateParameters.Count -gt 0
-    if ($appOnly -and $certificateParameters.Count -ne 3) {
-        throw 'TenantId, ClientId, and CertificateThumbprint must all be supplied for certificate app-only authentication.'
-    }
-
     try {
-        if ($appOnly) {
-            $null = Connect-MgGraph -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint -ContextScope Process -NoWelcome -ErrorAction Stop
-        }
-        else {
-            $null = Connect-MgGraph -Scopes $Scopes -ContextScope Process -NoWelcome -ErrorAction Stop
-        }
-
-        $context = Get-A365ActiveContext
-        if ($null -eq $context) {
-            throw 'Microsoft Graph authentication completed without an active context.'
-        }
+        $connection = Connect-A365GraphContext `
+            -Scopes $Scopes `
+            -TenantId $TenantId `
+            -ClientId $ClientId `
+            -CertificateThumbprint $CertificateThumbprint
+        $context = $connection.Context
+        $appOnly = [bool]$connection.AppOnly
+        $targetAssertion = $connection.TargetAssertion
     }
     catch {
+        if ($_.Exception.Data['Agent365SafeStartupAbort']) {
+            throw
+        }
         $Issues.Add((New-A365CollectionIssue -Adapter Graph -Operation 'Microsoft Graph authentication' -ErrorRecord $_ -RequiredPermission ($Scopes -join ', ') -DocsUrl 'https://learn.microsoft.com/powershell/microsoftgraph/authentication-commands'))
         return [pscustomobject][ordered]@{
             generatedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
@@ -649,6 +853,14 @@ function Get-A365LiveEvidence {
                 primaryDomain = $null
                 cloud = 'Unknown'
                 commercialAvailability = $null
+                targetAssertion = [pscustomobject]@{
+                    requested = -not [string]::IsNullOrWhiteSpace($TenantId)
+                    expected = $TenantId
+                    method = 'Unverified'
+                    matched = $false
+                    actualTenantId = $null
+                    matchedVerifiedDomain = $null
+                }
             }
             collectionIssues = $Issues.ToArray()
         }
@@ -674,6 +886,7 @@ function Get-A365LiveEvidence {
             primaryDomain = $null
             cloud = $environment
             commercialAvailability = $commercial
+            targetAssertion = $targetAssertion
         }
         licensing = $null
         roles = $null
@@ -687,8 +900,11 @@ function Get-A365LiveEvidence {
     }
 
     try {
-        $organizationResponse = Invoke-A365GraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization?$select=id,displayName,verifiedDomains' -Allowlist $Allowlist
-        $organization = @(Get-A365Property -InputObject $organizationResponse -Name 'value' -Default @()) | Select-Object -First 1
+        $organizationContext = Get-A365OrganizationContext `
+            -Allowlist $Allowlist `
+            -TargetAssertion $targetAssertion
+        $organization = $organizationContext.Organization
+        $evidence.tenant.targetAssertion = $organizationContext.TargetAssertion
         if ($organization) {
             $evidence.tenant.displayName = Get-A365Property -InputObject $organization -Name 'displayName' -Default $null
             $evidence.tenant.tenantId = Get-A365Property -InputObject $organization -Name 'id' -Default $context.TenantId
@@ -699,6 +915,12 @@ function Get-A365LiveEvidence {
         }
     }
     catch {
+        if ($_.Exception.Data['Agent365SafeStartupAbort']) {
+            throw
+        }
+        if ((Get-A365Property -InputObject $targetAssertion -Name 'method' -Default '') -eq 'VerifiedDomain') {
+            throw (New-A365SafeStartupException -Message "Unable to verify requested tenant domain '$TenantId' from Microsoft Graph organization data. No non-foundation collectors were run and no report was written. $($_.Exception.Message)")
+        }
         $Issues.Add((New-A365CollectionIssue -Adapter Graph -Operation 'Organization context' -ErrorRecord $_ -RequiredPermission 'Organization.Read.All' -DocsUrl 'https://learn.microsoft.com/graph/api/organization-get'))
     }
 
@@ -1932,6 +2154,11 @@ function New-Agent365SanitizedReport {
     $sanitized.Tenant.DisplayName = 'Redacted tenant'
     $sanitized.Tenant.TenantId = $null
     $sanitized.Tenant.PrimaryDomain = 'redacted.invalid'
+    if ($sanitized.Tenant.PSObject.Properties['TargetAssertion']) {
+        $sanitized.Tenant.TargetAssertion.Expected = if ($sanitized.Tenant.TargetAssertion.Expected) { 'Redacted' } else { $null }
+        $sanitized.Tenant.TargetAssertion.ActualTenantId = $null
+        $sanitized.Tenant.TargetAssertion.MatchedVerifiedDomain = $null
+    }
     $sanitized.Authentication.Account = 'Redacted'
 
     foreach ($result in @($sanitized.Results)) {
@@ -2135,6 +2362,14 @@ function Invoke-Agent365Preflight {
     }
 
     $tenantEvidence = Get-A365Property -InputObject $evidence -Name 'tenant' -Default ([pscustomobject]@{})
+    $targetAssertionEvidence = Get-A365Property -InputObject $tenantEvidence -Name 'targetAssertion' -Default ([pscustomobject]@{
+        requested = $false
+        expected = $null
+        method = 'NotRequested'
+        matched = $null
+        actualTenantId = $null
+        matchedVerifiedDomain = $null
+    })
     $report = [pscustomobject][ordered]@{
         SchemaVersion = '1.0'
         ToolVersion = $script:ToolVersion
@@ -2160,6 +2395,14 @@ function Invoke-Agent365Preflight {
             PrimaryDomain = Get-A365Property -InputObject $tenantEvidence -Name 'primaryDomain' -Default $null
             Cloud = Get-A365Property -InputObject $tenantEvidence -Name 'cloud' -Default 'Unknown'
             CommercialAvailability = Get-A365Property -InputObject $tenantEvidence -Name 'commercialAvailability' -Default $null
+            TargetAssertion = [pscustomobject][ordered]@{
+                Requested = [bool](Get-A365Property -InputObject $targetAssertionEvidence -Name 'requested' -Default $false)
+                Expected = Get-A365Property -InputObject $targetAssertionEvidence -Name 'expected' -Default $null
+                Method = Get-A365Property -InputObject $targetAssertionEvidence -Name 'method' -Default 'NotRequested'
+                Matched = Get-A365Property -InputObject $targetAssertionEvidence -Name 'matched' -Default $null
+                ActualTenantId = Get-A365Property -InputObject $targetAssertionEvidence -Name 'actualTenantId' -Default $null
+                MatchedVerifiedDomain = Get-A365Property -InputObject $targetAssertionEvidence -Name 'matchedVerifiedDomain' -Default $null
+            }
         }
         Coverage = $coverage
         Authentication = [pscustomobject][ordered]@{

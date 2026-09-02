@@ -2,6 +2,13 @@
 
 All notable changes to this resource are documented in this file.
 
+## 1.1.1 - 2026-09-02
+
+- Added delegated tenant targeting with `-TenantId`.
+- Added post-connect assertions for tenant GUIDs and verified domains.
+- Added full-report assertion evidence with sanitized-copy redaction.
+- Added safe startup failures for tenant mismatch and incomplete app-only parameters.
+
 ## 1.1.0 - 2026-09-01
 
 - Added report-wide search, status pills, and compact advanced filters.

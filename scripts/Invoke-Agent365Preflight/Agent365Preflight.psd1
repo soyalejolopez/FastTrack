@@ -1,6 +1,6 @@
 @{
     RootModule = 'Agent365Preflight.psm1'
-    ModuleVersion = '1.1.0'
+    ModuleVersion = '1.1.1'
     GUID = '87c4af68-5403-4cf6-8aca-0d649c9e5ca5'
     Author = 'Microsoft FastTrack'
     CompanyName = 'Microsoft'
@@ -23,7 +23,7 @@
             Tags = @('Agent365', 'Microsoft365', 'Readiness', 'Preflight')
             ProjectUri = 'https://github.com/microsoft/FastTrack'
             LicenseUri = 'https://github.com/microsoft/FastTrack/blob/master/LICENSE-CODE'
-            ReleaseNotes = 'Adds interactive search, filters, collapsible findings, and an accessible detail blade.'
+            ReleaseNotes = 'Adds delegated tenant targeting and post-connect tenant identity assertions.'
         }
     }
 }
