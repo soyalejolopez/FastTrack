@@ -2,6 +2,11 @@
 
 All notable changes to this resource are documented in this file.
 
+## 1.1.4 - 2026-09-02
+
+- Fixed strict-mode authentication failure handling before a Graph connection context is returned.
+- Preserved the original authentication error and intended delegated or app-only mode.
+
 ## 1.1.3 - 2026-09-02
 
 - Replaced the fixed Purview Audit Search poll count with a configurable deadline.

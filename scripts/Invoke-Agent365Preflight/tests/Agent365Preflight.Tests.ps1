@@ -824,6 +824,95 @@ Describe 'Tenant targeting safety' {
         $sanitizedJson.Tenant.TargetAssertion.ActualTenantId | Should -BeNullOrEmpty
         $sanitizedJson.Tenant.TargetAssertion.MatchedVerifiedDomain | Should -BeNullOrEmpty
     }
+
+    It 'preserves the original delegated authentication failure and mode under strict mode' {
+        InModuleScope Agent365Preflight {
+            Mock Get-Module {
+                [pscustomobject]@{ Name = 'Microsoft.Graph.Authentication'; Version = [Version]'2.38.1' }
+            }
+            Mock Import-Module {}
+            Mock Test-A365GraphEndpointReachability { $true }
+            Mock Connect-A365GraphContext {
+                throw [System.InvalidOperationException]::new('Original delegated authentication failure.')
+            }
+            $issues = [System.Collections.Generic.List[object]]::new()
+
+            $evidence = Get-A365LiveEvidence `
+                -Profiles @('ControlPlane') `
+                -Collectors @('TenantFoundation') `
+                -Scopes @('Organization.Read.All') `
+                -SkuCatalog ([pscustomobject]@{}) `
+                -Allowlist ([pscustomobject]@{}) `
+                -Issues $issues `
+                -TenantId 'fixture.onmicrosoft.com'
+
+            $evidence.authentication.mode | Should -Be 'InteractiveDelegated'
+            $evidence.tenant.targetAssertion.method | Should -Be 'Unverified'
+            $issues.Count | Should -Be 1
+            $issues[0].Category | Should -Be 'Authentication'
+            $issues[0].Message | Should -Be 'Original delegated authentication failure.'
+            $issues[0].Message | Should -Not -Match '\$appOnly'
+        }
+    }
+
+    It 'preserves the original app-only authentication failure and intended mode under strict mode' {
+        InModuleScope Agent365Preflight {
+            Mock Get-Module {
+                [pscustomobject]@{ Name = 'Microsoft.Graph.Authentication'; Version = [Version]'2.38.1' }
+            }
+            Mock Import-Module {}
+            Mock Test-A365GraphEndpointReachability { $true }
+            Mock Connect-A365GraphContext {
+                throw [System.InvalidOperationException]::new('Original certificate authentication failure.')
+            }
+            $issues = [System.Collections.Generic.List[object]]::new()
+
+            $evidence = Get-A365LiveEvidence `
+                -Profiles @('ControlPlane') `
+                -Collectors @('TenantFoundation') `
+                -Scopes @('Organization.Read.All') `
+                -SkuCatalog ([pscustomobject]@{}) `
+                -Allowlist ([pscustomobject]@{}) `
+                -Issues $issues `
+                -TenantId '11111111-2222-3333-4444-555555555555' `
+                -ClientId 'client-id' `
+                -CertificateThumbprint 'thumbprint'
+
+            $evidence.authentication.mode | Should -Be 'CertificateAppOnly'
+            $evidence.tenant.targetAssertion.method | Should -Be 'Unverified'
+            $issues.Count | Should -Be 1
+            $issues[0].Category | Should -Be 'Authentication'
+            $issues[0].Message | Should -Be 'Original certificate authentication failure.'
+            $issues[0].Message | Should -Not -Match '\$appOnly'
+        }
+    }
+
+    It 'still rethrows safe-startup tenant mismatch failures from the live collector' {
+        InModuleScope Agent365Preflight {
+            Mock Get-Module {
+                [pscustomobject]@{ Name = 'Microsoft.Graph.Authentication'; Version = [Version]'2.38.1' }
+            }
+            Mock Import-Module {}
+            Mock Test-A365GraphEndpointReachability { $true }
+            Mock Connect-A365GraphContext {
+                throw (New-A365SafeStartupException -Message 'Tenant target mismatch. No report was written.')
+            }
+            $issues = [System.Collections.Generic.List[object]]::new()
+
+            {
+                Get-A365LiveEvidence `
+                    -Profiles @('ControlPlane') `
+                    -Collectors @('TenantFoundation') `
+                    -Scopes @('Organization.Read.All') `
+                    -SkuCatalog ([pscustomobject]@{}) `
+                    -Allowlist ([pscustomobject]@{}) `
+                    -Issues $issues `
+                    -TenantId 'fixture.onmicrosoft.com'
+            } | Should -Throw '*Tenant target mismatch*'
+
+            $issues.Count | Should -Be 0
+        }
+    }
 }
 
 Describe 'Operation safety allowlists' {

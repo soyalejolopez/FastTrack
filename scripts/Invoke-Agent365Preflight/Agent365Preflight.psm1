@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:ToolVersion = '1.1.3'
+$script:ToolVersion = '1.1.4'
 $script:ModuleRoot = $PSScriptRoot
 $script:RulesPath = Join-Path $PSScriptRoot 'config\rules.v1.json'
 $script:SkuCatalogPath = Join-Path $PSScriptRoot 'config\sku-catalog.v1.json'
@@ -932,6 +932,19 @@ function Get-A365LiveEvidence {
 
     Import-Module Microsoft.Graph.Authentication -MinimumVersion 2.20.0 -ErrorAction Stop
 
+    $appOnly = -not [string]::IsNullOrWhiteSpace($ClientId) -or
+        -not [string]::IsNullOrWhiteSpace($CertificateThumbprint)
+    $context = $null
+    $connection = $null
+    $targetAssertion = [pscustomobject][ordered]@{
+        requested = -not [string]::IsNullOrWhiteSpace($TenantId)
+        expected = $TenantId
+        method = 'Unverified'
+        matched = $false
+        actualTenantId = $null
+        matchedVerifiedDomain = $null
+    }
+
     try {
         $connection = Connect-A365GraphContext `
             -Scopes $Scopes `
@@ -946,7 +959,9 @@ function Get-A365LiveEvidence {
         if ($_.Exception.Data['Agent365SafeStartupAbort']) {
             throw
         }
-        $Issues.Add((New-A365CollectionIssue -Adapter Graph -Operation 'Microsoft Graph authentication' -ErrorRecord $_ -RequiredPermission ($Scopes -join ', ') -DocsUrl 'https://learn.microsoft.com/powershell/microsoftgraph/authentication-commands'))
+        $authenticationIssue = New-A365CollectionIssue -Adapter Graph -Operation 'Microsoft Graph authentication' -ErrorRecord $_ -RequiredPermission ($Scopes -join ', ') -DocsUrl 'https://learn.microsoft.com/powershell/microsoftgraph/authentication-commands'
+        $authenticationIssue.Category = 'Authentication'
+        $Issues.Add($authenticationIssue)
         return [pscustomobject][ordered]@{
             generatedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
             local = $local
@@ -962,14 +977,7 @@ function Get-A365LiveEvidence {
                 primaryDomain = $null
                 cloud = 'Unknown'
                 commercialAvailability = $null
-                targetAssertion = [pscustomobject]@{
-                    requested = -not [string]::IsNullOrWhiteSpace($TenantId)
-                    expected = $TenantId
-                    method = 'Unverified'
-                    matched = $false
-                    actualTenantId = $null
-                    matchedVerifiedDomain = $null
-                }
+                targetAssertion = $targetAssertion
             }
             collectionIssues = $Issues.ToArray()
         }
