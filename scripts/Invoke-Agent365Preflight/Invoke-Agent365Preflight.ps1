@@ -50,6 +50,10 @@ Explicitly opts in to CurrentUser installation of Microsoft.Graph.Authentication
 .PARAMETER IncludeBeta
 Records beta opt-in. The current v1 rules do not call a beta endpoint.
 
+.PARAMETER UseDeviceCode
+Uses device-code authentication for a new interactive delegated connection. It cannot be combined
+with certificate app-only parameters. If a compatible process context already exists, it is reused.
+
 .PARAMETER TenantId
 Tenant GUID or verified domain. By itself, pins interactive delegated sign-in and enables a
 post-connect tenant assertion. With app-only parameters, identifies the app's tenant.
@@ -176,6 +180,9 @@ param(
 
     [Parameter()]
     [switch]$IncludeBeta,
+
+    [Parameter()]
+    [switch]$UseDeviceCode,
 
     [Parameter()]
     [string]$TenantId,

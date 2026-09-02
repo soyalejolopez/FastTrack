@@ -607,10 +607,16 @@ Describe 'Tenant targeting safety' {
 
         InModuleScope Agent365Preflight -Parameters @{ ExpectedTenant = $expectedTenant } {
             Mock Connect-MgGraph {}
+            $script:contextCalls = 0
             Mock Get-A365ActiveContext {
+                $script:contextCalls++
+                if ($script:contextCalls -eq 1) {
+                    return $null
+                }
                 [pscustomobject]@{
                     TenantId = $ExpectedTenant.ToUpperInvariant()
                     Scopes = @('Organization.Read.All')
+                    AuthType = 'Delegated'
                     Environment = 'Global'
                     Account = 'fixture@example.invalid'
                 }
@@ -644,10 +650,16 @@ Describe 'Tenant targeting safety' {
             ActualTenant = $actualTenant
         } {
             Mock Connect-MgGraph {}
+            $script:contextCalls = 0
             Mock Get-A365ActiveContext {
+                $script:contextCalls++
+                if ($script:contextCalls -eq 1) {
+                    return $null
+                }
                 [pscustomobject]@{
                     TenantId = $ActualTenant
                     Scopes = @('Organization.Read.All')
+                    AuthType = 'Delegated'
                     Environment = 'Global'
                     Account = 'fixture@example.invalid'
                 }
@@ -911,6 +923,330 @@ Describe 'Tenant targeting safety' {
             } | Should -Throw '*Tenant target mismatch*'
 
             $issues.Count | Should -Be 0
+        }
+    }
+
+    It 'treats empty granted scopes as missing and still writes an incomplete report' {
+        InModuleScope Agent365Preflight {
+            Test-A365RequiredPermissionMissing `
+                -RequiredPermission 'Organization.Read.All' `
+                -GrantedScopes @() `
+                -AuthenticationMode 'InteractiveDelegated' |
+                Should -BeTrue
+        }
+
+        $fixturePath = New-SyntheticFixture -Name 'empty-granted-scopes' -Mutator {
+            param($fixture)
+            $fixture.authentication.grantedScopes = @()
+            $fixture.collectionIssues = @(
+                [pscustomobject]@{
+                    Adapter = 'Graph'
+                    Operation = 'Microsoft Graph authentication'
+                    Category = 'Authentication'
+                    StatusCode = $null
+                    Message = 'Delegated authentication did not return granted scopes.'
+                    RequiredPermission = 'Organization.Read.All'
+                    DocsUrl = 'https://learn.microsoft.com/powershell/microsoftgraph/authentication-commands'
+                }
+            )
+        }
+
+        $outcome = Invoke-FixturePreflight -Name 'empty-granted-scopes-output' -FixturePath $fixturePath
+
+        $outcome.Report.Authentication.GrantedScopes.Count | Should -Be 0
+        $outcome.Report.Authentication.MissingScopes.Count | Should -BeGreaterThan 0
+        ($outcome.Report.Results | Where-Object Id -eq 'A365-FOUNDATION-002').Status | Should -Be 'NotAuthorized'
+        $outcome.Report.Verdict.Label | Should -Be 'Incomplete'
+        $outcome.Paths.Html | Should -Exist
+        $outcome.Paths.Json | Should -Exist
+    }
+
+    It 'reuses an existing delegated context with the requested tenant and all scopes' {
+        InModuleScope Agent365Preflight {
+            Mock Connect-MgGraph {}
+            Mock Get-A365ActiveContext {
+                [pscustomobject]@{
+                    TenantId = '11111111-2222-3333-4444-555555555555'
+                    Scopes = @('organization.read.all', 'Policy.Read.All')
+                    AuthType = 'Delegated'
+                    Environment = 'Global'
+                    Account = 'fixture@example.invalid'
+                }
+            }
+
+            $connection = Connect-A365GraphContext `
+                -Scopes @('Organization.Read.All', 'Policy.Read.All') `
+                -TenantId '11111111-2222-3333-4444-555555555555' `
+                -ClientId $null `
+                -CertificateThumbprint $null
+
+            $connection.ReusedExistingContext | Should -BeTrue
+            $connection.AppOnly | Should -BeFalse
+            $connection.TargetAssertion.Matched | Should -BeTrue
+            Should -Invoke Connect-MgGraph -Times 0 -Exactly
+        }
+    }
+
+    It 'reconnects when the existing delegated context is missing a requested scope' {
+        InModuleScope Agent365Preflight {
+            Mock Connect-MgGraph {}
+            $script:contextCalls = 0
+            Mock Get-A365ActiveContext {
+                $script:contextCalls++
+                if ($script:contextCalls -eq 1) {
+                    return [pscustomobject]@{
+                        TenantId = '11111111-2222-3333-4444-555555555555'
+                        Scopes = @('Organization.Read.All')
+                        AuthType = 'Delegated'
+                        Account = 'fixture@example.invalid'
+                    }
+                }
+                return [pscustomobject]@{
+                    TenantId = '11111111-2222-3333-4444-555555555555'
+                    Scopes = @('Organization.Read.All', 'Policy.Read.All')
+                    AuthType = 'Delegated'
+                    Account = 'fixture@example.invalid'
+                }
+            }
+
+            $connection = Connect-A365GraphContext `
+                -Scopes @('Organization.Read.All', 'Policy.Read.All') `
+                -TenantId '11111111-2222-3333-4444-555555555555' `
+                -ClientId $null `
+                -CertificateThumbprint $null
+
+            $connection.ReusedExistingContext | Should -BeFalse
+            Should -Invoke Connect-MgGraph -Times 1 -Exactly -ParameterFilter {
+                $Scopes -contains 'Policy.Read.All'
+            }
+        }
+    }
+
+    It 'does not reuse an existing delegated context for the wrong requested tenant GUID' {
+        InModuleScope Agent365Preflight {
+            Mock Connect-MgGraph {}
+            $script:contextCalls = 0
+            Mock Get-A365ActiveContext {
+                $script:contextCalls++
+                if ($script:contextCalls -eq 1) {
+                    return [pscustomobject]@{
+                        TenantId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                        Scopes = @('Organization.Read.All')
+                        AuthType = 'Delegated'
+                        Account = 'fixture@example.invalid'
+                    }
+                }
+                return [pscustomobject]@{
+                    TenantId = '11111111-2222-3333-4444-555555555555'
+                    Scopes = @('Organization.Read.All')
+                    AuthType = 'Delegated'
+                    Account = 'fixture@example.invalid'
+                }
+            }
+
+            $connection = Connect-A365GraphContext `
+                -Scopes @('Organization.Read.All') `
+                -TenantId '11111111-2222-3333-4444-555555555555' `
+                -ClientId $null `
+                -CertificateThumbprint $null
+
+            $connection.ReusedExistingContext | Should -BeFalse
+            $connection.TargetAssertion.Matched | Should -BeTrue
+            Should -Invoke Connect-MgGraph -Times 1 -Exactly
+        }
+    }
+
+    It 'does not reuse a delegated context that has no actual tenant ID' {
+        InModuleScope Agent365Preflight {
+            Mock Connect-MgGraph {}
+            $script:contextCalls = 0
+            Mock Get-A365ActiveContext {
+                $script:contextCalls++
+                if ($script:contextCalls -eq 1) {
+                    return [pscustomobject]@{
+                        TenantId = ''
+                        Scopes = @('Organization.Read.All')
+                        AuthType = 'Delegated'
+                        Account = 'fixture@example.invalid'
+                    }
+                }
+                return [pscustomobject]@{
+                    TenantId = '11111111-2222-3333-4444-555555555555'
+                    Scopes = @('Organization.Read.All')
+                    AuthType = 'Delegated'
+                    Account = 'fixture@example.invalid'
+                }
+            }
+
+            $connection = Connect-A365GraphContext `
+                -Scopes @('Organization.Read.All') `
+                -TenantId '11111111-2222-3333-4444-555555555555' `
+                -ClientId $null `
+                -CertificateThumbprint $null
+
+            $connection.ReusedExistingContext | Should -BeFalse
+            Should -Invoke Connect-MgGraph -Times 1 -Exactly
+        }
+    }
+
+    It 'reuses a delegated domain context only after the organization assertion succeeds' {
+        InModuleScope Agent365Preflight {
+            Mock Connect-MgGraph {}
+            Mock Get-A365ActiveContext {
+                [pscustomobject]@{
+                    TenantId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                    Scopes = @('Organization.Read.All')
+                    AuthType = 'Delegated'
+                    Account = 'fixture@example.invalid'
+                }
+            }
+            Mock Invoke-A365GraphRequest {
+                [pscustomobject]@{
+                    value = @(
+                        [pscustomobject]@{
+                            id = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                            verifiedDomains = @(
+                                [pscustomobject]@{ name = 'fixture.onmicrosoft.com'; isDefault = $true }
+                            )
+                        }
+                    )
+                }
+            }
+
+            $connection = Connect-A365GraphContext `
+                -Scopes @('Organization.Read.All') `
+                -TenantId 'fixture.onmicrosoft.com' `
+                -ClientId $null `
+                -CertificateThumbprint $null
+            $organization = Get-A365OrganizationContext `
+                -Allowlist ([pscustomobject]@{}) `
+                -TargetAssertion $connection.TargetAssertion
+
+            $connection.ReusedExistingContext | Should -BeTrue
+            $organization.TargetAssertion.Matched | Should -BeTrue
+            Should -Invoke Connect-MgGraph -Times 0 -Exactly
+            Should -Invoke Invoke-A365GraphRequest -Times 1 -Exactly -ParameterFilter {
+                $Uri -match '/v1\.0/organization'
+            }
+        }
+    }
+
+    It 'never reuses an app-only context for a delegated run' {
+        InModuleScope Agent365Preflight {
+            Mock Connect-MgGraph {}
+            $script:contextCalls = 0
+            Mock Get-A365ActiveContext {
+                $script:contextCalls++
+                if ($script:contextCalls -eq 1) {
+                    return [pscustomobject]@{
+                        TenantId = '11111111-2222-3333-4444-555555555555'
+                        Scopes = @('Organization.Read.All')
+                        AuthType = 'AppOnly'
+                        Account = $null
+                    }
+                }
+                return [pscustomobject]@{
+                    TenantId = '11111111-2222-3333-4444-555555555555'
+                    Scopes = @('Organization.Read.All')
+                    AuthType = 'Delegated'
+                    Account = 'fixture@example.invalid'
+                }
+            }
+
+            $connection = Connect-A365GraphContext `
+                -Scopes @('Organization.Read.All') `
+                -TenantId '11111111-2222-3333-4444-555555555555' `
+                -ClientId $null `
+                -CertificateThumbprint $null
+
+            $connection.ReusedExistingContext | Should -BeFalse
+            $connection.AppOnly | Should -BeFalse
+            Should -Invoke Connect-MgGraph -Times 1 -Exactly
+        }
+    }
+
+    It 'never reuses a delegated context for an app-only run' {
+        InModuleScope Agent365Preflight {
+            Mock Connect-MgGraph {}
+            $script:contextCalls = 0
+            Mock Get-A365ActiveContext {
+                $script:contextCalls++
+                if ($script:contextCalls -eq 1) {
+                    return [pscustomobject]@{
+                        TenantId = '11111111-2222-3333-4444-555555555555'
+                        Scopes = @('Organization.Read.All')
+                        AuthType = 'Delegated'
+                        Account = 'fixture@example.invalid'
+                    }
+                }
+                return [pscustomobject]@{
+                    TenantId = '11111111-2222-3333-4444-555555555555'
+                    Scopes = @()
+                    AuthType = 'AppOnly'
+                    Account = $null
+                }
+            }
+
+            $connection = Connect-A365GraphContext `
+                -Scopes @('Organization.Read.All') `
+                -TenantId '11111111-2222-3333-4444-555555555555' `
+                -ClientId 'client-id' `
+                -CertificateThumbprint 'thumbprint'
+
+            $connection.ReusedExistingContext | Should -BeFalse
+            $connection.AppOnly | Should -BeTrue
+            Should -Invoke Connect-MgGraph -Times 1 -Exactly -ParameterFilter {
+                $ClientId -eq 'client-id' -and $CertificateThumbprint -eq 'thumbprint'
+            }
+        }
+    }
+
+    It 'passes UseDeviceCode only to a new delegated connection' {
+        InModuleScope Agent365Preflight {
+            Mock Connect-MgGraph {}
+            $script:contextCalls = 0
+            Mock Get-A365ActiveContext {
+                $script:contextCalls++
+                if ($script:contextCalls -eq 1) {
+                    return $null
+                }
+                return [pscustomobject]@{
+                    TenantId = '11111111-2222-3333-4444-555555555555'
+                    Scopes = @('Organization.Read.All')
+                    AuthType = 'Delegated'
+                    Account = 'fixture@example.invalid'
+                }
+            }
+
+            $connection = Connect-A365GraphContext `
+                -Scopes @('Organization.Read.All') `
+                -TenantId '11111111-2222-3333-4444-555555555555' `
+                -ClientId $null `
+                -CertificateThumbprint $null `
+                -UseDeviceCode
+
+            $connection.UseDeviceCode | Should -BeTrue
+            Should -Invoke Connect-MgGraph -Times 1 -Exactly -ParameterFilter {
+                $UseDeviceCode -eq $true -and -not $ClientId -and -not $CertificateThumbprint
+            }
+        }
+
+    }
+
+    It 'rejects UseDeviceCode with certificate app-only authentication before connect' {
+        InModuleScope Agent365Preflight {
+            Mock Connect-MgGraph {}
+
+            {
+                Connect-A365GraphContext `
+                    -Scopes @('Organization.Read.All') `
+                    -TenantId '11111111-2222-3333-4444-555555555555' `
+                    -ClientId 'client-id' `
+                    -CertificateThumbprint 'thumbprint' `
+                    -UseDeviceCode
+            } | Should -Throw '*cannot be combined with certificate app-only*'
+
+            Should -Invoke Connect-MgGraph -Times 0 -Exactly
         }
     }
 }

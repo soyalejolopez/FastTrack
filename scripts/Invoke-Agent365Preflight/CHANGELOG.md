@@ -2,6 +2,12 @@
 
 All notable changes to this resource are documented in this file.
 
+## 1.1.5 - 2026-09-02
+
+- Added safe reuse of compatible process-scoped delegated Graph contexts.
+- Added `-UseDeviceCode` for terminal-based delegated authentication.
+- Fixed empty granted-scope handling so authentication failures produce incomplete reports.
+
 ## 1.1.4 - 2026-09-02
 
 - Fixed strict-mode authentication failure handling before a Graph connection context is returned.

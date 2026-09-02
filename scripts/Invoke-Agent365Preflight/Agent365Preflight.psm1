@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:ToolVersion = '1.1.4'
+$script:ToolVersion = '1.1.5'
 $script:ModuleRoot = $PSScriptRoot
 $script:RulesPath = Join-Path $PSScriptRoot 'config\rules.v1.json'
 $script:SkuCatalogPath = Join-Path $PSScriptRoot 'config\sku-catalog.v1.json'
@@ -648,6 +648,7 @@ function New-A365TenantTargetAssertion {
 function Connect-A365GraphContext {
     param(
         [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [string[]]$Scopes,
 
         [AllowNull()]
@@ -657,7 +658,10 @@ function Connect-A365GraphContext {
         [string]$ClientId,
 
         [AllowNull()]
-        [string]$CertificateThumbprint
+        [string]$CertificateThumbprint,
+
+        [Parameter()]
+        [switch]$UseDeviceCode
     )
 
     $hasClientId = -not [string]::IsNullOrWhiteSpace($ClientId)
@@ -665,6 +669,10 @@ function Connect-A365GraphContext {
     $appOnly = $hasClientId -or $hasCertificate
 
     if ($appOnly) {
+        if ($UseDeviceCode) {
+            throw (New-A365SafeStartupException -Message 'UseDeviceCode is available only for interactive delegated authentication and cannot be combined with certificate app-only parameters.')
+        }
+
         $missing = @()
         if ([string]::IsNullOrWhiteSpace($TenantId)) { $missing += 'TenantId' }
         if (-not $hasClientId) { $missing += 'ClientId' }
@@ -672,7 +680,22 @@ function Connect-A365GraphContext {
         if ($missing.Count -gt 0) {
             throw (New-A365SafeStartupException -Message "Certificate app-only authentication requires TenantId, ClientId, and CertificateThumbprint together. Missing: $($missing -join ', ').")
         }
+    }
 
+    $existingContext = Get-A365ActiveContext
+    if (-not $appOnly -and (Test-A365ReusableDelegatedContext -Context $existingContext -Scopes $Scopes -TenantId $TenantId)) {
+        return [pscustomobject]@{
+            Context = $existingContext
+            AppOnly = $false
+            ReusedExistingContext = $true
+            UseDeviceCode = [bool]$UseDeviceCode
+            TargetAssertion = New-A365TenantTargetAssertion `
+                -RequestedTenant $TenantId `
+                -ActualTenantId ([string](Get-A365Property -InputObject $existingContext -Name 'TenantId' -Default ''))
+        }
+    }
+
+    if ($appOnly) {
         $null = Connect-MgGraph `
             -TenantId $TenantId `
             -ClientId $ClientId `
@@ -691,6 +714,9 @@ function Connect-A365GraphContext {
         if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
             $connectParameters.TenantId = $TenantId.Trim()
         }
+        if ($UseDeviceCode) {
+            $connectParameters.UseDeviceCode = $true
+        }
         $null = Connect-MgGraph @connectParameters
     }
 
@@ -702,10 +728,73 @@ function Connect-A365GraphContext {
     return [pscustomobject]@{
         Context = $context
         AppOnly = $appOnly
+        ReusedExistingContext = $false
+        UseDeviceCode = [bool]$UseDeviceCode
         TargetAssertion = New-A365TenantTargetAssertion `
             -RequestedTenant $TenantId `
             -ActualTenantId ([string](Get-A365Property -InputObject $context -Name 'TenantId' -Default ''))
     }
+}
+
+function Test-A365ReusableDelegatedContext {
+    param(
+        [AllowNull()]
+        [object]$Context,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [string[]]$Scopes,
+
+        [AllowNull()]
+        [string]$TenantId
+    )
+
+    if ($null -eq $Context) {
+        return $false
+    }
+
+    $actualTenantId = [string](Get-A365Property -InputObject $Context -Name 'TenantId' -Default '')
+    if ([string]::IsNullOrWhiteSpace($actualTenantId)) {
+        return $false
+    }
+
+    $authType = [string](Get-A365Property -InputObject $Context -Name 'AuthType' -Default '')
+    $account = [string](Get-A365Property -InputObject $Context -Name 'Account' -Default '')
+    if ($authType -match '(?i)appOnly|clientCredential' -or
+        ($authType -notmatch '(?i)delegated|user' -and [string]::IsNullOrWhiteSpace($account))) {
+        return $false
+    }
+
+    [object[]]$existingScopes = @(
+        Get-A365Property -InputObject $Context -Name 'Scopes' -Default @() |
+            ForEach-Object { [string]$_ }
+    )
+    foreach ($scope in $Scopes) {
+        $hasScope = @(
+            $existingScopes |
+                Where-Object {
+                    [string]::Equals($_, $scope, [StringComparison]::OrdinalIgnoreCase)
+                }
+        ).Count -gt 0
+        if (-not $hasScope) {
+            return $false
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+        $parsedTenantId = [Guid]::Empty
+        # Verified-domain targets are asserted against organization data after connect or reuse.
+        if ([Guid]::TryParse($TenantId.Trim(), [ref]$parsedTenantId) -and
+            -not [string]::Equals(
+                $parsedTenantId.ToString(),
+                $actualTenantId.Trim(),
+                [StringComparison]::OrdinalIgnoreCase
+            )) {
+            return $false
+        }
+    }
+
+    return $true
 }
 
 function Confirm-A365DomainTenantTarget {
@@ -873,7 +962,10 @@ function Get-A365LiveEvidence {
         [string]$ClientId,
 
         [Parameter()]
-        [string]$CertificateThumbprint
+        [string]$CertificateThumbprint,
+
+        [Parameter()]
+        [switch]$UseDeviceCode
     )
 
     $graphModule = Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
@@ -910,6 +1002,8 @@ function Get-A365LiveEvidence {
                 account = $null
                 requestedScopes = $Scopes
                 grantedScopes = @()
+                useDeviceCode = [bool]$UseDeviceCode
+                reusedExistingContext = $false
             }
             tenant = [pscustomobject]@{
                 displayName = $null
@@ -950,7 +1044,8 @@ function Get-A365LiveEvidence {
             -Scopes $Scopes `
             -TenantId $TenantId `
             -ClientId $ClientId `
-            -CertificateThumbprint $CertificateThumbprint
+            -CertificateThumbprint $CertificateThumbprint `
+            -UseDeviceCode:$UseDeviceCode
         $context = $connection.Context
         $appOnly = [bool]$connection.AppOnly
         $targetAssertion = $connection.TargetAssertion
@@ -970,6 +1065,8 @@ function Get-A365LiveEvidence {
                 account = $null
                 requestedScopes = $Scopes
                 grantedScopes = @()
+                useDeviceCode = [bool]$UseDeviceCode
+                reusedExistingContext = $false
             }
             tenant = [pscustomobject]@{
                 displayName = $null
@@ -989,6 +1086,8 @@ function Get-A365LiveEvidence {
         account = if ($appOnly) { "Application $ClientId" } else { $context.Account }
         requestedScopes = $Scopes
         grantedScopes = $grantedScopes
+        useDeviceCode = [bool]$connection.UseDeviceCode
+        reusedExistingContext = [bool]$connection.ReusedExistingContext
     }
 
     $environment = [string](Get-A365Property -InputObject $context -Name 'Environment' -Default 'Global')
@@ -1578,6 +1677,7 @@ function Test-A365RequiredPermissionMissing {
         [string]$RequiredPermission,
 
         [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [string[]]$GrantedScopes,
 
         [Parameter(Mandatory)]
@@ -2092,6 +2192,7 @@ function Get-A365Evaluation {
 function Get-A365Coverage {
     param(
         [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [object[]]$Results
     )
 
@@ -2117,9 +2218,11 @@ function Get-A365Coverage {
 function Get-A365Verdict {
     param(
         [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [object[]]$Results,
 
         [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [object[]]$ManualAttestations,
 
         [Parameter(Mandatory)]
@@ -2167,6 +2270,7 @@ function Get-A365Verdict {
 function Get-A365Actions {
     param(
         [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [object[]]$Results
     )
 
@@ -2419,6 +2523,9 @@ function Invoke-Agent365Preflight {
         [switch]$IncludeBeta,
 
         [Parameter()]
+        [switch]$UseDeviceCode,
+
+        [Parameter()]
         [string]$TenantId,
 
         [Parameter()]
@@ -2482,7 +2589,9 @@ function Invoke-Agent365Preflight {
     }
     $resolvedOutputPath = (Resolve-Path -LiteralPath $OutputPath).Path
 
-    $scopes = Get-Agent365RequiredScopes -Profile $profiles -Collector $collectors
+    [object[]]$scopes = @(
+        Get-Agent365RequiredScopes -Profile $profiles -Collector $collectors
+    )
     Write-Host 'Microsoft Graph permissions requested by this run:'
     foreach ($scope in $scopes) {
         Write-Host "  $scope"
@@ -2496,7 +2605,7 @@ function Invoke-Agent365Preflight {
         Read-A365Json -Path $FixturePath -Description 'Fixture file'
     }
     else {
-        Get-A365LiveEvidence -Profiles $profiles -Collectors $collectors -Scopes $scopes -SkuCatalog $skuCatalog -Allowlist $allowlist -Issues $issues -InstallDependencies:$InstallDependencies -SharePointSiteUrl $SharePointSiteUrl -AuditWindowDays $AuditWindowDays -AuditQueryTimeoutSeconds $AuditQueryTimeoutSeconds -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint
+        Get-A365LiveEvidence -Profiles $profiles -Collectors $collectors -Scopes $scopes -SkuCatalog $skuCatalog -Allowlist $allowlist -Issues $issues -InstallDependencies:$InstallDependencies -SharePointSiteUrl $SharePointSiteUrl -AuditWindowDays $AuditWindowDays -AuditQueryTimeoutSeconds $AuditQueryTimeoutSeconds -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint -UseDeviceCode:$UseDeviceCode
     }
 
     $fixtureIssues = @(Get-A365Property -InputObject $evidence -Name 'collectionIssues' -Default @())
@@ -2511,6 +2620,12 @@ function Invoke-Agent365Preflight {
     $authMode = [string](Get-A365Property -InputObject $authenticationEvidence -Name 'mode' -Default 'Unavailable')
     if ($authMode -eq 'CertificateAppOnly') {
         $missingScopes = @()
+    }
+    [object[]]$authenticationNotes = @()
+    if ($authMode -eq 'CertificateAppOnly') {
+        $authenticationNotes = @(
+            'Application permissions are configured on the app registration and are not represented as delegated scopes.'
+        )
     }
 
     $tenantEvidence = Get-A365Property -InputObject $evidence -Name 'tenant' -Default ([pscustomobject]@{})
@@ -2563,15 +2678,15 @@ function Invoke-Agent365Preflight {
             RequestedScopes = $scopes
             GrantedScopes = $grantedScopes
             MissingScopes = $missingScopes
+            UseDeviceCode = [bool](Get-A365Property -InputObject $authenticationEvidence -Name 'useDeviceCode' -Default $false)
+            ReusedExistingContext = [bool](Get-A365Property -InputObject $authenticationEvidence -Name 'reusedExistingContext' -Default $false)
             PermissionsUsed = @(
                 @($results | Where-Object Status -ne 'NotApplicable').RequiredPermission -split ',' |
                     ForEach-Object { $_.Trim() } |
                     Where-Object { $_ -match '\.' } |
                     Sort-Object -Unique
             )
-            Notes = if ($authMode -eq 'CertificateAppOnly') {
-                @('Application permissions are configured on the app registration and are not represented as delegated scopes.')
-            } else { @() }
+            Notes = $authenticationNotes
         }
         Results = $results
         Actions = @(Get-A365Actions -Results $results)

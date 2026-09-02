@@ -140,7 +140,57 @@
       "type": "object"
     },
     "Authentication": {
-      "type": "object"
+      "type": "object",
+      "required": [
+        "Mode",
+        "Account",
+        "RequestedScopes",
+        "GrantedScopes",
+        "MissingScopes",
+        "UseDeviceCode",
+        "ReusedExistingContext",
+        "PermissionsUsed",
+        "Notes"
+      ],
+      "properties": {
+        "Mode": {
+          "type": "string"
+        },
+        "Account": {},
+        "RequestedScopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "GrantedScopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "MissingScopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "UseDeviceCode": {
+          "type": "boolean"
+        },
+        "ReusedExistingContext": {
+          "type": "boolean"
+        },
+        "PermissionsUsed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Notes": {
+          "type": "array"
+        }
+      }
     },
     "Results": {
       "type": "array",

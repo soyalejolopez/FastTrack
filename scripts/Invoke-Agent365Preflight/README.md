@@ -5,7 +5,7 @@ category: "PowerShell"
 summary: "Run a read-only Agent 365 technical pre-flight and generate self-contained HTML and JSON reports."
 author:
   - "Microsoft FastTrack"
-version: 1.1.4
+version: 1.1.5
 published: 2026-09-01
 updated: 2026-09-02
 tags:
@@ -183,6 +183,10 @@ availability, HTTP errors, and schema errors where the service response allows t
 Use the least-privileged supported role for each check. See each result's required permission and
 role.
 
+If the current process already has a delegated Graph context for an actual tenant and contains every
+requested scope, the script reuses it. A context with missing scopes, the wrong requested tenant
+GUID, or app-only authentication is never reused for a delegated run.
+
 ### Certificate app-only mode
 
 Certificate app-only authentication is Microsoft Graph only. Client secrets are not accepted.
@@ -199,6 +203,7 @@ registration, then run:
 ```
 
 All three certificate parameters are required together.
+`-UseDeviceCode` cannot be combined with certificate app-only parameters.
 
 ## Setup and first run
 
@@ -245,6 +250,7 @@ Start with tenant foundation, licensing, roles, registry, and Agent Identity evi
 ```powershell
 .\Invoke-Agent365Preflight.ps1 `
   -TenantId "contoso.onmicrosoft.com" `
+  -UseDeviceCode `
   -Collector TenantFoundation,Licensing,Roles,Registry,AgentIdentity `
   -Stage Pilot `
   -OutputPath "C:\Temp\Agent365Preflight"
@@ -253,6 +259,10 @@ Start with tenant foundation, licensing, roles, registry, and Agent Identity evi
 Read the printed scope list before the sign-in prompt. If consent or a required role is missing, the
 script continues where possible and records the gap. Because this first run omits an answers file,
 the verdict remains `Incomplete` until the required customer attestations are supplied.
+
+`-UseDeviceCode` is useful in terminals without a browser control. Follow the module's prompt and
+complete sign-in promptly. Some Microsoft.Graph.Authentication versions display a 120-second
+completion window; if it expires, rerun the command.
 
 ### Pin delegated sign-in to the intended tenant
 
@@ -341,6 +351,7 @@ Fixture mode never authenticates or calls a tenant. It is suitable for demos and
 | `-IncludeSanitizedCopy` | Writes redacted HTML and JSON support copies. |
 | `-InstallDependencies` | Explicitly opts in to CurrentUser installation of the required Graph authentication module. |
 | `-IncludeBeta` | Records explicit beta opt-in. Version 1 rules do not require beta endpoints. |
+| `-UseDeviceCode` | Uses device-code flow for a new delegated connection. Incompatible with certificate app-only parameters. |
 | `-TenantId` | Pins delegated sign-in to a tenant GUID or verified domain. With app-only parameters, identifies the app's tenant. |
 | `-ClientId`, `-CertificateThumbprint` | Selects Graph-only certificate app authentication. TenantId, ClientId, and CertificateThumbprint are all required together. |
 
@@ -469,6 +480,8 @@ drift; it does not prove that configuration changes caused the drift.
 | --- | --- |
 | Microsoft.Graph.Authentication is missing or too old | Install version 2.20.0 or later yourself, or explicitly use `-InstallDependencies`. The default run never installs it. |
 | Sign-in succeeds but checks show `NotAuthorized` | Compare `RequestedScopes`, `GrantedScopes`, and `MissingScopes`. Confirm tenant consent and the signed-in user's required role separately. |
+| Device-code sign-in expires | Complete the code flow within the time shown by Microsoft.Graph.Authentication. Some versions show 120 seconds. Rerun if the window expires. |
+| The script prompts even though Graph is connected | The existing context is reused only when it is delegated, has a tenant ID, matches an explicitly requested tenant GUID, and contains every requested scope. |
 | Package catalog returns 403 | Confirm `CopilotPackages.Read.All` and an AI Administrator or Global Administrator role. AI Reader and Global Reader aren't sufficient for this API. |
 | Agent Identity owners or sponsors return 403 | Owners use `AgentIdentityBlueprint.Read.All`; sponsors require `Application.Read.All`. Nonowners also need Agent ID Administrator. |
 | The script stops with a tenant target mismatch | Confirm the `-TenantId` GUID or verified domain and the account selected during sign-in. No normal report is written after a mismatch. |
