@@ -1,8 +1,9 @@
 Set-StrictMode -Version Latest
 
-$script:ToolVersion = '1.2.1'
+$script:ToolVersion = '1.3.0'
 $script:ModuleRoot = $PSScriptRoot
 $script:RulesPath = Join-Path $PSScriptRoot 'config\rules.v1.json'
+$script:GuidancePath = Join-Path $PSScriptRoot 'config\guidance.v1.json'
 $script:SkuCatalogPath = Join-Path $PSScriptRoot 'config\sku-catalog.v1.json'
 $script:AllowlistPath = Join-Path $PSScriptRoot 'config\operation-allowlist.v1.json'
 
@@ -1772,6 +1773,176 @@ function Get-A365ProfileResultId {
     return "A365-PROFILE-$stableProfileName"
 }
 
+function ConvertTo-A365GuidanceModel {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Guidance
+    )
+
+    [object[]]$yesCriteria = @(Get-A365Property -InputObject $Guidance -Name 'yesCriteria' -Default @())
+    [object[]]$evidenceToRetain = @(Get-A365Property -InputObject $Guidance -Name 'evidenceToRetain' -Default @())
+    [object[]]$verificationSteps = @(
+        @(Get-A365Property -InputObject $Guidance -Name 'verificationSteps' -Default @()) |
+            ForEach-Object {
+                [pscustomobject][ordered]@{
+                    Order = [int](Get-A365Property -InputObject $_ -Name 'order' -Default 0)
+                    Title = [string](Get-A365Property -InputObject $_ -Name 'title' -Default '')
+                    Instruction = [string](Get-A365Property -InputObject $_ -Name 'instruction' -Default '')
+                    Location = [string](Get-A365Property -InputObject $_ -Name 'location' -Default '')
+                }
+            }
+    )
+    [object[]]$publicSources = @(
+        @(Get-A365Property -InputObject $Guidance -Name 'publicSources' -Default @()) |
+            ForEach-Object {
+                [pscustomobject][ordered]@{
+                    Title = [string](Get-A365Property -InputObject $_ -Name 'title' -Default '')
+                    Url = [string](Get-A365Property -InputObject $_ -Name 'url' -Default '')
+                }
+            }
+    )
+    $searchText = @(
+        Get-A365Property -InputObject $Guidance -Name 'intent' -Default ''
+        Get-A365Property -InputObject $Guidance -Name 'whyItMatters' -Default ''
+        Get-A365Property -InputObject $Guidance -Name 'whoShouldAnswer' -Default ''
+        $yesCriteria
+        $evidenceToRetain
+        $verificationSteps | ForEach-Object { "$($_.Title) $($_.Instruction) $($_.Location)" }
+        Get-A365Property -InputObject $Guidance -Name 'noRemediation' -Default ''
+        Get-A365Property -InputObject $Guidance -Name 'notApplicableGuidance' -Default ''
+        $publicSources | ForEach-Object { $_.Title }
+    ) -join ' '
+
+    return [pscustomobject][ordered]@{
+        Intent = [string](Get-A365Property -InputObject $Guidance -Name 'intent' -Default '')
+        WhyItMatters = [string](Get-A365Property -InputObject $Guidance -Name 'whyItMatters' -Default '')
+        WhoShouldAnswer = [string](Get-A365Property -InputObject $Guidance -Name 'whoShouldAnswer' -Default '')
+        YesCriteria = $yesCriteria
+        EvidenceToRetain = $evidenceToRetain
+        VerificationSteps = $verificationSteps
+        NoRemediation = [string](Get-A365Property -InputObject $Guidance -Name 'noRemediation' -Default '')
+        NotApplicableAllowed = [bool](Get-A365Property -InputObject $Guidance -Name 'notApplicableAllowed' -Default $false)
+        NotApplicableGuidance = [string](Get-A365Property -InputObject $Guidance -Name 'notApplicableGuidance' -Default '')
+        PublicSources = $publicSources
+        ReviewDate = [string](Get-A365Property -InputObject $Guidance -Name 'reviewDate' -Default '')
+        SearchText = $searchText.Trim()
+    }
+}
+
+function Test-A365GuidanceItem {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Id,
+
+        [Parameter(Mandatory)]
+        [object]$Guidance,
+
+        [Parameter(Mandatory)]
+        [bool]$AllowNotApplicable
+    )
+
+    foreach ($field in @('intent', 'whyItMatters', 'whoShouldAnswer', 'noRemediation', 'notApplicableGuidance', 'reviewDate')) {
+        if ([string]::IsNullOrWhiteSpace([string](Get-A365Property -InputObject $Guidance -Name $field -Default ''))) {
+            throw "Guidance for $Id is missing required field '$field'."
+        }
+    }
+
+    foreach ($field in @('yesCriteria', 'evidenceToRetain', 'verificationSteps', 'publicSources')) {
+        [object[]]$values = @(Get-A365Property -InputObject $Guidance -Name $field -Default @())
+        if ($values.Count -eq 0) {
+            throw "Guidance for $Id must contain at least one '$field' item."
+        }
+        if ($field -in @('yesCriteria', 'evidenceToRetain') -and
+            @($values | Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0) {
+            throw "Guidance for $Id contains an empty '$field' item."
+        }
+    }
+
+    $guidanceAllowsNotApplicable = [bool](Get-A365Property -InputObject $Guidance -Name 'notApplicableAllowed' -Default $false)
+    if ($guidanceAllowsNotApplicable -ne $AllowNotApplicable) {
+        throw "Guidance for $Id has notApplicableAllowed=$guidanceAllowsNotApplicable but the rule allows NotApplicable=$AllowNotApplicable."
+    }
+    if (-not $AllowNotApplicable -and
+        [string](Get-A365Property -InputObject $Guidance -Name 'notApplicableGuidance' -Default '') -notmatch '(?i)not (?:applicable|allowed)') {
+        throw "Guidance for $Id must explicitly state that NotApplicable is not allowed."
+    }
+
+    $parsedDate = [datetime]::MinValue
+    if (-not [datetime]::TryParseExact(
+            [string](Get-A365Property -InputObject $Guidance -Name 'reviewDate' -Default ''),
+            'yyyy-MM-dd',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::None,
+            [ref]$parsedDate
+        )) {
+        throw "Guidance for $Id reviewDate must use yyyy-MM-dd."
+    }
+
+    [object[]]$steps = @(Get-A365Property -InputObject $Guidance -Name 'verificationSteps' -Default @())
+    foreach ($step in $steps) {
+        if ([int](Get-A365Property -InputObject $step -Name 'order' -Default 0) -lt 1 -or
+            [string]::IsNullOrWhiteSpace([string](Get-A365Property -InputObject $step -Name 'title' -Default '')) -or
+            [string]::IsNullOrWhiteSpace([string](Get-A365Property -InputObject $step -Name 'instruction' -Default '')) -or
+            [string]::IsNullOrWhiteSpace([string](Get-A365Property -InputObject $step -Name 'location' -Default ''))) {
+            throw "Guidance for $Id contains an incomplete verification step."
+        }
+    }
+
+    [object[]]$sources = @(Get-A365Property -InputObject $Guidance -Name 'publicSources' -Default @())
+    foreach ($source in $sources) {
+        $title = [string](Get-A365Property -InputObject $source -Name 'title' -Default '')
+        $url = [string](Get-A365Property -InputObject $source -Name 'url' -Default '')
+        if ([string]::IsNullOrWhiteSpace($title) -or $url -notmatch '^https://learn\.microsoft\.com/') {
+            throw "Guidance for $Id contains an invalid or non-public Microsoft Learn source."
+        }
+    }
+}
+
+function Test-A365GuidanceContract {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Rules,
+
+        [Parameter(Mandatory)]
+        [object]$Guidance
+    )
+
+    if ([string](Get-A365Property -InputObject $Guidance -Name 'schemaVersion' -Default '') -ne '1.0') {
+        throw 'Guidance schemaVersion must be 1.0.'
+    }
+    foreach ($field in @('version', 'reviewDate', 'items', 'profiles')) {
+        if ($null -eq $Guidance.PSObject.Properties[$field]) {
+            throw "Guidance contract is missing required field '$field'."
+        }
+    }
+
+    foreach ($manual in @($Rules.manualAttestations)) {
+        $property = $Guidance.items.PSObject.Properties[[string]$manual.id]
+        if ($null -eq $property) {
+            throw "Guidance is missing required manually attestable item $($manual.id)."
+        }
+        Test-A365GuidanceItem -Id ([string]$manual.id) -Guidance $property.Value -AllowNotApplicable ([bool](Get-A365Property -InputObject $manual -Name 'allowNotApplicable' -Default $false))
+    }
+    foreach ($rule in @($Rules.checks)) {
+        $attestation = Get-A365Property -InputObject $rule -Name 'manualAttestation' -Default $null
+        if ($null -eq $attestation -or -not [bool](Get-A365Property -InputObject $attestation -Name 'allowed' -Default $false)) {
+            continue
+        }
+        $property = $Guidance.items.PSObject.Properties[[string]$rule.id]
+        if ($null -eq $property) {
+            throw "Guidance is missing required manually attestable item $($rule.id)."
+        }
+        Test-A365GuidanceItem -Id ([string]$rule.id) -Guidance $property.Value -AllowNotApplicable ([bool](Get-A365Property -InputObject $attestation -Name 'allowNotApplicable' -Default $false))
+    }
+    foreach ($profile in @($Rules.profileGuidance.PSObject.Properties.Name)) {
+        $property = $Guidance.profiles.PSObject.Properties[$profile]
+        if ($null -eq $property) {
+            throw "Guidance is missing required profile item $profile."
+        }
+        Test-A365GuidanceItem -Id (Get-A365ProfileResultId -Profile $profile) -Guidance $property.Value -AllowNotApplicable $false
+    }
+}
+
 function Get-A365AttestationDefinitions {
     param(
         [Parameter(Mandatory)]
@@ -1780,12 +1951,16 @@ function Get-A365AttestationDefinitions {
         [Parameter(Mandatory)]
         [string[]]$Profiles,
 
+        [Parameter(Mandatory)]
+        [object]$Guidance,
+
         [Parameter()]
         [switch]$IncludeAllProfiles
     )
 
     $definitions = [System.Collections.Generic.List[object]]::new()
     foreach ($manual in @($Rules.manualAttestations)) {
+        $guidanceModel = ConvertTo-A365GuidanceModel -Guidance $Guidance.items.PSObject.Properties[[string]$manual.id].Value
         $definitions.Add([pscustomobject][ordered]@{
             Id = $manual.id
             Title = $manual.question
@@ -1795,6 +1970,8 @@ function Get-A365AttestationDefinitions {
             EvidenceNeeded = [string](Get-A365Property -InputObject $manual -Name 'evidenceNeeded' -Default $manual.remediation)
             DocsUrl = $manual.docsUrl
             Profiles = @($manual.profiles)
+            RequiredRole = $guidanceModel.WhoShouldAnswer
+            Guidance = $guidanceModel
             Source = 'ManualControl'
         })
     }
@@ -1804,6 +1981,7 @@ function Get-A365AttestationDefinitions {
         if ($null -eq $attestation -or -not [bool](Get-A365Property -InputObject $attestation -Name 'allowed' -Default $false)) {
             continue
         }
+        $guidanceModel = ConvertTo-A365GuidanceModel -Guidance $Guidance.items.PSObject.Properties[[string]$rule.id].Value
         $definitions.Add([pscustomobject][ordered]@{
             Id = $rule.id
             Title = $rule.title
@@ -1813,6 +1991,8 @@ function Get-A365AttestationDefinitions {
             EvidenceNeeded = [string](Get-A365Property -InputObject $attestation -Name 'evidenceNeeded' -Default $rule.remediation)
             DocsUrl = $rule.docsUrl
             Profiles = @($rule.profiles)
+            RequiredRole = $rule.requiredRole
+            Guidance = $guidanceModel
             Source = 'ApprovedRule'
         })
     }
@@ -1825,6 +2005,7 @@ function Get-A365AttestationDefinitions {
     }
     foreach ($profile in $profileNames) {
         $docsProperty = $Rules.profileGuidance.PSObject.Properties[$profile]
+        $guidanceModel = ConvertTo-A365GuidanceModel -Guidance $Guidance.profiles.PSObject.Properties[$profile].Value
         $definitions.Add([pscustomobject][ordered]@{
             Id = Get-A365ProfileResultId -Profile $profile
             Title = "$profile workload boundary"
@@ -1834,6 +2015,8 @@ function Get-A365AttestationDefinitions {
             EvidenceNeeded = "Record the accountable workload owner and reference the approved $profile identity, data, tool, connector, and deployment boundary."
             DocsUrl = if ($docsProperty) { [string]$docsProperty.Value } else { 'https://learn.microsoft.com/microsoft-agent-365/' }
             Profiles = @($profile)
+            RequiredRole = $guidanceModel.WhoShouldAnswer
+            Guidance = $guidanceModel
             Source = 'SelectedProfile'
         })
     }
@@ -1924,6 +2107,9 @@ function Get-A365Evaluation {
 
         [Parameter(Mandatory)]
         [object]$Rules,
+
+        [Parameter(Mandatory)]
+        [object]$Guidance,
 
         [Parameter(Mandatory)]
         [object]$SkuCatalog,
@@ -2331,7 +2517,7 @@ function Get-A365Evaluation {
         })
     }
 
-    [object[]]$definitions = @(Get-A365AttestationDefinitions -Rules $Rules -Profiles $Profiles)
+    [object[]]$definitions = @(Get-A365AttestationDefinitions -Rules $Rules -Profiles $Profiles -Guidance $Guidance)
     $definitionById = @{}
     foreach ($definition in $definitions) {
         $definitionById[[string]$definition.Id] = $definition
@@ -2379,6 +2565,8 @@ function Get-A365Evaluation {
             AllowNotApplicable = [bool]$definition.AllowNotApplicable
             NoStatus = [string]$definition.NoStatus
             EvidenceNeeded = [string]$definition.EvidenceNeeded
+            RequiredRole = [string]$definition.RequiredRole
+            Guidance = $definition.Guidance
             Source = [string]$definition.Source
         }) -Force
         $result | Add-Member -NotePropertyName Attestation -NotePropertyValue ([pscustomobject][ordered]@{
@@ -2657,6 +2845,10 @@ function Get-A365ManuallyAttestableGates {
                     EvidenceNeeded = [string]$definition.EvidenceNeeded
                     DocsUrl = $_.DocsUrl
                     Profiles = @($_.Profiles)
+                    RequiredRole = [string]$definition.RequiredRole
+                    Observed = $_.Observed
+                    IsSensitive = [bool](Get-A365Property -InputObject $_ -Name 'IsSensitive' -Default $false)
+                    Guidance = $definition.Guidance
                 }
             }
     )
@@ -2952,6 +3144,15 @@ function New-Agent365SanitizedReport {
         }
     }
 
+    foreach ($gate in @($sanitized.ManuallyAttestableGates)) {
+        if ([bool](Get-A365Property -InputObject $gate -Name 'IsSensitive' -Default $false)) {
+            $gate.Observed = 'Redacted in sanitized support copy.'
+        }
+        else {
+            $gate.Observed = ConvertTo-A365RedactedText $gate.Observed
+        }
+    }
+
     foreach ($issue in @($sanitized.CollectionIssues)) {
         $issue.Message = ConvertTo-A365RedactedText $issue.Message
         if ($issue.PSObject.Properties['Operation']) {
@@ -3082,13 +3283,15 @@ function Invoke-Agent365Preflight {
             Select-Object -Unique
     )
     $rules = Read-A365Json -Path $script:RulesPath -Description 'Rule set'
+    $guidance = Read-A365Json -Path $script:GuidancePath -Description 'Manual evidence guidance'
     $skuCatalog = Read-A365Json -Path $script:SkuCatalogPath -Description 'SKU catalog'
     $allowlist = Read-A365Json -Path $script:AllowlistPath -Description 'Operation allowlist'
     $answers = if ($AnswersPath) { Read-A365Json -Path $AnswersPath -Description 'Answers file' } else { $null }
     $previous = if ($PreviousResultPath) { Read-A365Json -Path $PreviousResultPath -Description 'Previous result' } else { $null }
 
+    Test-A365GuidanceContract -Rules $rules -Guidance $guidance
     [object[]]$attestationDefinitions = @(
-        Get-A365AttestationDefinitions -Rules $rules -Profiles $profiles -IncludeAllProfiles
+        Get-A365AttestationDefinitions -Rules $rules -Profiles $profiles -Guidance $guidance -IncludeAllProfiles
     )
     if ($answers) {
         Test-A365AnswersInput `
@@ -3097,8 +3300,8 @@ function Invoke-Agent365Preflight {
             -Rules $rules
     }
 
-    if ($previous -and (Get-A365Property -InputObject $previous -Name 'SchemaVersion' -Default '') -notin @('1.0', '1.1')) {
-        throw 'Previous result SchemaVersion must be 1.0 or 1.1.'
+    if ($previous -and (Get-A365Property -InputObject $previous -Name 'SchemaVersion' -Default '') -notin @('1.0', '1.1', '1.2')) {
+        throw 'Previous result SchemaVersion must be 1.0, 1.1, or 1.2.'
     }
     if ($previous -and $null -eq $previous.PSObject.Properties['Results']) {
         throw 'Previous result must contain a Results array.'
@@ -3129,7 +3332,7 @@ function Invoke-Agent365Preflight {
     }
 
     $fixtureIssues = @(Get-A365Property -InputObject $evidence -Name 'collectionIssues' -Default @())
-    $evaluation = Get-A365Evaluation -Evidence $evidence -Rules $rules -SkuCatalog $skuCatalog -Profiles $profiles -Collectors $collectors -Answers $answers
+    $evaluation = Get-A365Evaluation -Evidence $evidence -Rules $rules -Guidance $guidance -SkuCatalog $skuCatalog -Profiles $profiles -Collectors $collectors -Answers $answers
     $results = @($evaluation.Results)
     $manualAttestations = @($evaluation.ManualAttestations)
     $passCriteria = Get-A365PassCriteria -Results $results
@@ -3161,11 +3364,13 @@ function Invoke-Agent365Preflight {
         matchedVerifiedDomain = $null
     })
     $report = [pscustomobject][ordered]@{
-        SchemaVersion = '1.1'
+        SchemaVersion = '1.2'
         ToolVersion = $script:ToolVersion
         GeneratedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
         RuleSetVersion = $rules.version
         RuleReviewDate = $rules.reviewDate
+        GuidanceVersion = $guidance.version
+        GuidanceReviewDate = $guidance.reviewDate
         Stage = $Stage
         Profiles = $profiles
         Collectors = $collectors

@@ -164,6 +164,31 @@ function Format-A365Date {
     return $text
 }
 
+function Format-A365ReviewDate {
+    <#
+        Render a guidance ReviewDate as a calendar date only (yyyy-MM-dd). A review
+        date carries no meaningful time-of-day, and ConvertFrom-Json coerces a bare
+        "yyyy-MM-dd" string into a midnight [datetime]; formatting it through the
+        general timestamp helper would surface a spurious "00:00:00 UTC". The date is
+        rendered as-is with no timezone conversion so the calendar day never shifts.
+    #>
+    [CmdletBinding()]
+    param([object]$Value)
+
+    if ($null -eq $Value) { return '' }
+    if ($Value -is [datetime]) { return $Value.ToString('yyyy-MM-dd') }
+
+    $text = ([string]$Value).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) { return '' }
+    if ($text -match '^\d{4}-\d{2}-\d{2}') { return $text.Substring(0, 10) }
+
+    $parsed = [datetime]::MinValue
+    if ([datetime]::TryParse($text, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$parsed)) {
+        return $parsed.ToString('yyyy-MM-dd')
+    }
+    return $text
+}
+
 function Get-A365StatusMeta {
     [CmdletBinding()]
     param([string]$Status)
@@ -532,33 +557,292 @@ function Get-A365RerunModel {
     }
 }
 
-function Get-A365GateModel {
-    <# Normalize ManuallyAttestableGates, deriving from ManualAttestations if absent. #>
+function Get-A365GuidanceModel {
+    <#
+        Normalize a canonical structured Guidance object (attached to a gate or a
+        Result's AttestationDefinition in the 1.3 model). Returns $null when no
+        usable guidance is present so older reports degrade to the existing
+        evidence text and documentation link.
+    #>
     [CmdletBinding()]
-    param([object]$Report, [object[]]$Attestations)
+    param([object]$Guidance)
+
+    if ($null -eq $Guidance) { return $null }
+
+    $intent = [string](Get-A365Member $Guidance 'Intent' '')
+    $why    = [string](Get-A365Member $Guidance 'WhyItMatters' '')
+    $who    = [string](Get-A365Member $Guidance 'WhoShouldAnswer' '')
+    $noRem  = [string](Get-A365Member $Guidance 'NoRemediation' '')
+    $naText = [string](Get-A365Member $Guidance 'NotApplicableGuidance' '')
+    $search = [string](Get-A365Member $Guidance 'SearchText' '')
+    $review = Get-A365Member $Guidance 'ReviewDate'
+
+    $yes = @(@(Get-A365Member $Guidance 'YesCriteria' @()) |
+        ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $evidence = @(@(Get-A365Member $Guidance 'EvidenceToRetain' @()) |
+        ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+
+    $steps = @()
+    foreach ($vs in @(Get-A365Member $Guidance 'VerificationSteps' @())) {
+        if ($null -eq $vs) { continue }
+        $steps += @{
+            Order       = (Get-A365Int (Get-A365Member $vs 'Order' 0) 0)
+            Title       = [string](Get-A365Member $vs 'Title' '')
+            Instruction = [string](Get-A365Member $vs 'Instruction' '')
+            Location    = [string](Get-A365Member $vs 'Location' '')
+        }
+    }
+    $steps = @($steps | Sort-Object -Property @{ Expression = { $_.Order } })
+
+    $sources = @()
+    foreach ($ps in @(Get-A365Member $Guidance 'PublicSources' @())) {
+        if ($null -eq $ps) { continue }
+        $url = [string](Get-A365Member $ps 'Url' '')
+        if ([string]::IsNullOrWhiteSpace($url)) { continue }
+        $title = [string](Get-A365Member $ps 'Title' '')
+        $sources += @{ Title = $(if ($title) { $title } else { $url }); Url = $url }
+    }
+
+    $hasContent = $intent -or $why -or $who -or $noRem -or $naText -or
+        ($yes.Count -gt 0) -or ($evidence.Count -gt 0) -or ($steps.Count -gt 0) -or ($sources.Count -gt 0)
+    if (-not $hasContent) { return $null }
+
+    return @{
+        Intent                = $intent
+        WhyItMatters          = $why
+        WhoShouldAnswer       = $who
+        YesCriteria           = @($yes)
+        EvidenceToRetain      = @($evidence)
+        VerificationSteps     = @($steps)
+        NoRemediation         = $noRem
+        NotApplicableGuidance = $naText
+        PublicSources         = @($sources)
+        ReviewDate            = $review
+        SearchText            = $search
+    }
+}
+
+function Get-A365GateGuidance {
+    <#
+        Resolve the canonical Guidance for a gate or result. Prefers the object's
+        own Guidance, then its AttestationDefinition.Guidance, then falls back to
+        the matching Result's AttestationDefinition.Guidance. Any missing hop is
+        tolerated so old reports never throw.
+    #>
+    [CmdletBinding()]
+    param([object]$Gate, [object]$Result)
+
+    $g = Get-A365Member $Gate 'Guidance'
+    if ($null -eq $g) {
+        $def = Get-A365Member $Gate 'AttestationDefinition'
+        if ($null -ne $def) { $g = Get-A365Member $def 'Guidance' }
+    }
+    if ($null -eq $g -and $null -ne $Result) {
+        $rdef = Get-A365Member $Result 'AttestationDefinition'
+        if ($null -ne $rdef) { $g = Get-A365Member $rdef 'Guidance' }
+        if ($null -eq $g) { $g = Get-A365Member $Result 'Guidance' }
+    }
+    return (Get-A365GuidanceModel $g)
+}
+
+function Format-A365GuidanceSections {
+    <#
+        Emit the progressive answer-guidance sections as a list of raw HTML lines
+        (already encoded). This is the single source of truth cloned into the
+        guidance dialog by JS, printed inline, and shown when JS is unavailable.
+        Sections render only when their canonical content is present; the N/A rule
+        always renders so the reader learns whether "Not applicable" is permitted.
+    #>
+    [CmdletBinding()]
+    param(
+        [object]$Guidance,
+        [bool]$AllowNa,
+        [string]$Observed = '',
+        [bool]$ObservedRedacted = $false,
+        [string]$EvidenceNeeded = '',
+        [object]$DocsUrl = $null
+    )
+
+    $out = [System.Collections.Generic.List[string]]::new()
+
+    # Requirement 4: current collected observation, clearly secondary and never a substitute for criteria.
+    if ($ObservedRedacted) {
+        [void]$out.Add('<div class="g-observed" data-guidance-observed><p class="g-observed-label">What the scan observed</p><p class="g-observed-value muted">[redacted in sanitized report]</p><p class="g-observed-note">Context only &mdash; it does not replace the acceptance criteria below.</p></div>')
+    } elseif (-not [string]::IsNullOrWhiteSpace($Observed)) {
+        [void]$out.Add('<div class="g-observed" data-guidance-observed><p class="g-observed-label">What the scan observed</p><p class="g-observed-value">' + (ConvertTo-A365Html $Observed) + '</p><p class="g-observed-note">Context only &mdash; it does not replace the acceptance criteria below.</p></div>')
+    }
+
+    if ($null -eq $Guidance) {
+        $frag = ''
+        if (-not [string]::IsNullOrWhiteSpace($EvidenceNeeded)) {
+            $frag += '<p>' + (ConvertTo-A365Html $EvidenceNeeded) + '</p>'
+        }
+        $noteDoc = Get-A365Link $DocsUrl 'Documentation' 'source-link'
+        if ($noteDoc) { $frag += '<p class="small">' + $noteDoc + '</p>' }
+        [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">Manual evidence guidance</h4><p class="muted">Structured answer guidance is not available in this report. Confirm the evidence needed above and consult the linked documentation before answering.</p>' + $frag + '</section>')
+        # Requirement 3 (item 8): the N/A rule is always communicated.
+        if ($AllowNa) {
+            [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">When Not applicable is valid</h4><p>Mark this gate <strong>Not applicable</strong> only when it genuinely does not apply to this tenant, and record a justification.</p></section>')
+        } else {
+            [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">When Not applicable is valid</h4><p><strong>Explicit &ldquo;Not applicable&rdquo; is not allowed for this gate.</strong> It must be confirmed Yes or answered No.</p></section>')
+        }
+        return $out.ToArray()
+    }
+
+    # 1. What you are confirming
+    if (-not [string]::IsNullOrWhiteSpace($Guidance.Intent)) {
+        [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">What you are confirming</h4><p>' + (ConvertTo-A365Html $Guidance.Intent) + '</p></section>')
+    }
+    # 2. Why this matters
+    if (-not [string]::IsNullOrWhiteSpace($Guidance.WhyItMatters)) {
+        [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">Why this matters</h4><p>' + (ConvertTo-A365Html $Guidance.WhyItMatters) + '</p></section>')
+    }
+    # 3. Who should confirm it
+    if (-not [string]::IsNullOrWhiteSpace($Guidance.WhoShouldAnswer)) {
+        [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">Who should confirm it</h4><p>' + (ConvertTo-A365Html $Guidance.WhoShouldAnswer) + '</p></section>')
+    }
+    # 4. Answer Yes when (acceptance criteria checklist)
+    if (@($Guidance.YesCriteria).Count -gt 0) {
+        [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">Answer Yes when</h4><ul class="g-check g-check-yes">')
+        foreach ($c in $Guidance.YesCriteria) {
+            [void]$out.Add('<li data-guidance-yes-item>' + (ConvertTo-A365Html ([string]$c)) + '</li>')
+        }
+        [void]$out.Add('</ul></section>')
+    }
+    # 5. Evidence to retain checklist
+    if (@($Guidance.EvidenceToRetain).Count -gt 0) {
+        [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">Evidence to retain</h4><ul class="g-check g-check-evidence">')
+        foreach ($e in $Guidance.EvidenceToRetain) {
+            [void]$out.Add('<li data-guidance-evidence-item>' + (ConvertTo-A365Html ([string]$e)) + '</li>')
+        }
+        [void]$out.Add('</ul></section>')
+    }
+    # 6. How to verify (ordered steps with portal/process locations)
+    if (@($Guidance.VerificationSteps).Count -gt 0) {
+        [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">How to verify</h4><ol class="g-steps">')
+        $stepNum = 0
+        foreach ($st in $Guidance.VerificationSteps) {
+            $stepNum++
+            $stTitle = [string]$st.Title
+            if ([string]::IsNullOrWhiteSpace($stTitle)) { $stTitle = 'Step ' + $stepNum }
+            $stLoc = [string]$st.Location
+            $stInstr = [string]$st.Instruction
+            $locHtml = if (-not [string]::IsNullOrWhiteSpace($stLoc)) { '<span class="g-step-loc">' + (ConvertTo-A365Html $stLoc) + '</span>' } else { '' }
+            $instrHtml = if (-not [string]::IsNullOrWhiteSpace($stInstr)) { '<p class="g-step-instr">' + (ConvertTo-A365Html $stInstr) + '</p>' } else { '' }
+            [void]$out.Add('<li><div class="g-step-head"><span class="g-step-title">' + (ConvertTo-A365Html $stTitle) + '</span>' + $locHtml + '</div>' + $instrHtml + '</li>')
+        }
+        [void]$out.Add('</ol></section>')
+    }
+    # 7. If the answer is No
+    if (-not [string]::IsNullOrWhiteSpace($Guidance.NoRemediation)) {
+        [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">If the answer is No</h4><p>' + (ConvertTo-A365Html $Guidance.NoRemediation) + '</p></section>')
+    }
+    # 8. When Not applicable is valid (only when permitted; otherwise explicit N/A is disallowed)
+    if ($AllowNa) {
+        $naBody = if (-not [string]::IsNullOrWhiteSpace($Guidance.NotApplicableGuidance)) {
+            '<p>' + (ConvertTo-A365Html $Guidance.NotApplicableGuidance) + '</p>'
+        } else {
+            '<p>Mark this gate <strong>Not applicable</strong> only when it genuinely does not apply to this tenant, and record a justification.</p>'
+        }
+        [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">When Not applicable is valid</h4>' + $naBody + '</section>')
+    } else {
+        [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">When Not applicable is valid</h4><p><strong>Explicit &ldquo;Not applicable&rdquo; is not allowed for this gate.</strong> It must be confirmed Yes or answered No.</p></section>')
+    }
+    # 9. Public sources
+    if (@($Guidance.PublicSources).Count -gt 0) {
+        [void]$out.Add('<section class="g-sec"><h4 class="g-sec-title">Public sources</h4><ul class="g-sources">')
+        foreach ($src in $Guidance.PublicSources) {
+            $srcLink = Get-A365Link $src.Url $src.Title 'source-link'
+            if ($srcLink) { [void]$out.Add('<li>' + $srcLink + '</li>') }
+        }
+        [void]$out.Add('</ul></section>')
+    }
+    # 10. Reviewed date
+    $reviewText = Format-A365ReviewDate $Guidance.ReviewDate
+    if (-not [string]::IsNullOrWhiteSpace($reviewText)) {
+        [void]$out.Add('<p class="g-review">Guidance reviewed ' + (ConvertTo-A365Html $reviewText) + '.</p>')
+    }
+
+    return $out.ToArray()
+}
+
+function Get-A365GateModel {
+    <#
+        Normalize ManuallyAttestableGates, deriving from ManualAttestations if
+        absent. Also resolves the owning role, no-answer status, current status,
+        the current collected observation, and the canonical structured Guidance
+        (1.3+) with graceful fallback to the matching Result so older reports
+        still render without the guidance surface.
+    #>
+    [CmdletBinding()]
+    param([object]$Report, [object[]]$Attestations, [object[]]$Results)
+
+    $resultById = @{}
+    foreach ($rr in @($Results)) {
+        $rk = [string](Get-A365Member $rr 'Id' '')
+        if ($rk -and -not $resultById.ContainsKey($rk)) { $resultById[$rk] = $rr }
+    }
 
     $gates = @(Get-A365Member $Report 'ManuallyAttestableGates' @())
     if ($gates.Count -gt 0) {
         return @($gates | ForEach-Object {
+            $gid = [string](Get-A365Member $_ 'Id' '')
+            $match = $null
+            if ($gid -and $resultById.ContainsKey($gid)) { $match = $resultById[$gid] }
+            $obs = ''
+            $sens = $false
+            $matchStatus = ''
+            $matchRole = ''
+            if ($null -ne $match) {
+                $obs = [string](Get-A365Member $match 'Observed' '')
+                $sens = Get-A365Bool (Get-A365Member $match 'IsSensitive')
+                $matchStatus = [string](Get-A365Member $match 'Status' '')
+                $matchRole = [string](Get-A365Member $match 'RequiredRole' '')
+            }
             @{
-                Id                 = [string](Get-A365Member $_ 'Id' '')
+                Id                 = $gid
                 Title              = [string](Get-A365Member $_ 'Title' (Get-A365Member $_ 'Id' ''))
                 Required           = (Get-A365Bool (Get-A365Member $_ 'Required'))
                 AllowNotApplicable = (Get-A365Bool (Get-A365Member $_ 'AllowNotApplicable'))
                 EvidenceNeeded     = [string](Get-A365Member $_ 'EvidenceNeeded' '')
                 DocsUrl            = (Get-A365Member $_ 'DocsUrl')
+                NoStatus           = [string](Get-A365Member $_ 'NoStatus' '')
+                Status             = [string](Get-A365Member $_ 'Status' $matchStatus)
+                RequiredRole       = [string](Get-A365Member $_ 'RequiredRole' $matchRole)
+                Observed           = $obs
+                IsSensitive        = $sens
+                Guidance           = (Get-A365GateGuidance $_ $match)
             }
         })
     }
 
     return @($Attestations | ForEach-Object {
+        $gid = [string](Get-A365Member $_ 'Id' '')
+        $match = $null
+        if ($gid -and $resultById.ContainsKey($gid)) { $match = $resultById[$gid] }
+        $obs = ''
+        $sens = $false
+        $matchStatus = ''
+        $matchRole = ''
+        if ($null -ne $match) {
+            $obs = [string](Get-A365Member $match 'Observed' '')
+            $sens = Get-A365Bool (Get-A365Member $match 'IsSensitive')
+            $matchStatus = [string](Get-A365Member $match 'Status' '')
+            $matchRole = [string](Get-A365Member $match 'RequiredRole' '')
+        }
         @{
-            Id                 = [string](Get-A365Member $_ 'Id' '')
+            Id                 = $gid
             Title              = [string](Get-A365Member $_ 'Question' (Get-A365Member $_ 'Id' ''))
             Required           = (Get-A365Bool (Get-A365Member $_ 'Required'))
             AllowNotApplicable = $false
             EvidenceNeeded     = [string](Get-A365Member $_ 'EvidenceReference' '')
             DocsUrl            = $null
+            NoStatus           = [string](Get-A365Member $_ 'NoStatus' '')
+            Status             = [string](Get-A365Member $_ 'Status' $matchStatus)
+            RequiredRole       = [string](Get-A365Member $_ 'RequiredRole' $matchRole)
+            Observed           = $obs
+            IsSensitive        = $sens
+            Guidance           = (Get-A365GateGuidance $_ $match)
         }
     })
 }
@@ -1086,6 +1370,94 @@ table.data tbody tr:hover { background: var(--bg-sunken); }
 .detail-blade-body .blade-detail > .kv:first-child { margin-top: 0; }
 body.blade-open { overflow: hidden; }
 
+/* --- Answer guidance dialog + appendix (Answers Builder 1.3 guidance) --- */
+.review-guidance-btn {
+  font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer; margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 14px;
+  border-radius: var(--radius); border: 1px solid var(--surface-border-strong);
+  background: var(--bg-sunken); color: var(--link);
+}
+.review-guidance-btn:hover { border-color: var(--brand); }
+.review-guidance-btn:focus-visible { outline: var(--focus); outline-offset: 2px; }
+.review-guidance-btn .rg-glyph { font-size: .95rem; line-height: 1; }
+
+.guidance-backdrop {
+  position: fixed; inset: 0; z-index: 110; background: rgba(0,0,0,.5);
+  opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility .2s ease;
+}
+.guidance-backdrop.open { opacity: 1; visibility: visible; }
+.guidance-dialog {
+  position: fixed; top: 0; right: 0; z-index: 120; height: 100%;
+  width: min(560px, 100%); max-width: 100%; background: var(--bg-elevated);
+  border-left: 4px solid var(--brand); box-shadow: var(--shadow-md);
+  display: flex; flex-direction: column; transform: translateX(100%);
+  transition: transform .22s ease, visibility .22s ease; visibility: hidden;
+}
+.guidance-dialog.open { transform: translateX(0); visibility: visible; }
+.guidance-dialog-head {
+  display: flex; gap: 12px; align-items: flex-start; justify-content: space-between;
+  padding: 16px 18px; border-bottom: 1px solid var(--surface-border); flex: none;
+}
+.guidance-dialog-eyebrow { margin: 0 0 3px; font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); }
+.guidance-dialog-title { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; margin: 0; outline: none; line-height: 1.2; }
+.guidance-dialog-meta { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: .82rem; color: var(--text-muted); }
+.guidance-dialog-meta .guidance-meta-role { color: var(--text-secondary); }
+.guidance-close {
+  font: inherit; cursor: pointer; flex: none; width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid var(--surface-border-strong); background: var(--bg-sunken); color: var(--text);
+  display: grid; place-items: center; font-size: 1.15rem;
+}
+.guidance-close:hover { border-color: var(--brand); }
+.guidance-dialog-body { padding: 16px 18px; overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1 1 auto; }
+.guidance-dialog-foot {
+  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 12px 18px; border-top: 1px solid var(--surface-border); background: var(--bg-elevated);
+}
+.guidance-back-btn { min-height: 40px; }
+.guidance-copy-btn { min-height: 40px; }
+.guidance-copy-feedback { font-size: .82rem; color: var(--text-muted); min-width: 0; }
+body.guidance-open { overflow: hidden; }
+
+/* Guidance sections (shared markup: appendix, cloned dialog body, print) */
+.g-observed {
+  margin: 0 0 16px; padding: 10px 12px; border: 1px dashed var(--surface-border-strong);
+  border-radius: var(--radius); background: var(--bg-sunken);
+}
+.g-observed-label { margin: 0 0 4px; font-size: .72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); }
+.g-observed-value { margin: 0; font-family: var(--font-mono); font-size: .85rem; color: var(--text); word-break: break-word; }
+.g-observed-value.muted { color: var(--text-muted); }
+.g-observed-note { margin: 6px 0 0; font-size: .78rem; color: var(--text-muted); font-style: italic; }
+.g-sec { margin: 0 0 16px; }
+.g-sec-title { font-family: var(--font-display); font-size: .95rem; font-weight: 600; margin: 0 0 6px; color: var(--text); }
+.g-sec > p { margin: 0; color: var(--text-secondary); }
+.g-check { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.g-check li { position: relative; padding-left: 24px; color: var(--text-secondary); }
+.g-check li::before { content: ""; position: absolute; left: 0; top: .18em; width: 15px; height: 15px; border-radius: 4px; border: 1px solid var(--surface-border-strong); background: var(--bg-elevated); }
+.g-check-yes li::before { border-color: color-mix(in srgb, var(--pass) 55%, transparent); }
+.g-check-evidence li::before { border-radius: 3px; }
+.g-steps { margin: 0; padding-left: 20px; display: grid; gap: 12px; }
+.g-steps li { color: var(--text-secondary); }
+.g-step-head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.g-step-title { font-weight: 600; color: var(--text); }
+.g-step-loc { font-family: var(--font-mono); font-size: .74rem; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--surface-border-strong); background: var(--bg-sunken); color: var(--text-muted); }
+.g-step-instr { margin: 4px 0 0; }
+.g-sources { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.g-review { margin: 4px 0 0; font-size: .8rem; color: var(--text-muted); }
+
+/* Guidance appendix (always present for print + no-JS) */
+.guidance-appendix { margin: 22px 0 0; border-top: 1px solid var(--surface-border); padding-top: 18px; display: grid; gap: 12px; }
+.guidance-appendix-title { font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; margin: 0; }
+.guidance-appendix-note { margin: 0; }
+.guidance-doc { border: 1px solid var(--surface-border); border-radius: var(--radius); background: var(--bg-elevated); border-left: 3px solid var(--brand); }
+.guidance-doc-summary { cursor: pointer; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; list-style: none; }
+.guidance-doc-summary::-webkit-details-marker { display: none; }
+.guidance-doc-summary:focus-visible { outline: var(--focus); outline-offset: -2px; }
+.guidance-eyebrow { font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); }
+.guidance-doc-title { font-weight: 600; color: var(--text); }
+.guidance-doc-inner { padding: 0 14px 14px; }
+.guidance-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 12px; font-size: .82rem; color: var(--text-muted); }
+.guidance-meta-role { color: var(--text-secondary); }
+
 @media (max-width: 640px) {
   .hero { grid-template-columns: 1fr; text-align: left; }
   .result > summary { grid-template-columns: auto 1fr; }
@@ -1101,6 +1473,13 @@ body.blade-open { overflow: hidden; }
     transform: translateY(100%);
   }
   .detail-blade.open { transform: translateY(0); }
+  .guidance-dialog {
+    width: 100%; height: 100%; top: 0; bottom: 0; right: 0; border-left: 0;
+    border-top: 4px solid var(--brand); border-radius: 0;
+    transform: translateY(100%);
+  }
+  .guidance-dialog.open { transform: translateY(0); }
+  .review-guidance-btn { margin-left: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1321,6 +1700,10 @@ body.blade-open { overflow: hidden; }
   .path-phase::before { display: none !important; }
   .path-item, .answer-gate, .command-center, .path-phase { break-inside: avoid; }
   .rerun-code { border-color: #999 !important; }
+  .guidance-backdrop, .guidance-dialog, .review-guidance-btn { display: none !important; }
+  .guidance-appendix { display: block !important; }
+  .guidance-doc { break-inside: avoid; border-color: #999 !important; }
+  .guidance-doc-inner { display: block !important; }
 }
 '@
     return $css
@@ -1339,6 +1722,9 @@ function Get-A365Script {
 
   // Shared handle so Path-to-Ready rows can reuse the findings blade.
   var findingsApi = null;
+  // Guidance dialog state, kept distinct from the finding blade so the two
+  // modals never conflict (findings keyboard shortcuts defer while it is open).
+  var guidanceState = { open: false };
 
   var STORAGE_KEY = "a365-theme";
   var toggle = document.getElementById("themeToggle");
@@ -1710,6 +2096,7 @@ function Get-A365Script {
     };
 
     document.addEventListener("keydown", function (e) {
+      if (guidanceState.open) { return; }
       if (bladeOpen) {
         if (e.key === "Escape" || e.keyCode === 27) { e.preventDefault(); closeBlade(); return; }
         if (e.key === "Tab" || e.keyCode === 9) {
@@ -1927,6 +2314,192 @@ function Get-A365Script {
     }
   }
 
+  // ---- Answer guidance dialog: a semantically distinct accessible modal cloned
+  //      from the always-present guidance appendix (never the finding blade). ----
+  var guidanceDialog = document.getElementById("guidanceDialog");
+  var guidanceBackdrop = document.getElementById("guidanceBackdrop");
+  if (guidanceDialog && guidanceBackdrop) {
+    guidanceDialog.hidden = false;
+    guidanceBackdrop.hidden = false;
+    var gClose = document.getElementById("guidanceClose");
+    var gBack = document.getElementById("guidanceBack");
+    var gCopy = document.getElementById("guidanceCopy");
+    var gCopyFeedback = document.getElementById("guidanceCopyFeedback");
+    var gTitleEl = document.getElementById("guidanceTitle");
+    var gMetaEl = document.getElementById("guidanceMeta");
+    var gBodyEl = document.getElementById("guidanceBody");
+    var gTrigger = null;   // the Review guidance button that opened the dialog
+    var gGate = null;      // the owning .answer-gate (for focus return to first radio)
+    var gInertTargets = [];
+    var gSupportsInert = ("inert" in HTMLElement.prototype);
+
+    function gFocusables() {
+      var list = Array.prototype.slice.call(guidanceDialog.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]'
+      ));
+      return list.filter(function (el) {
+        if (el.hasAttribute("disabled")) { return false; }
+        if (el.getAttribute("tabindex") === "-1") { return false; }
+        if (el.hidden) { return false; }
+        return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement;
+      });
+    }
+
+    function gApplyInert(on) {
+      var kids = document.body.children;
+      if (on) {
+        gInertTargets = [];
+        for (var i = 0; i < kids.length; i++) {
+          var el = kids[i];
+          if (el === guidanceDialog || el === guidanceBackdrop || el.tagName === "SCRIPT") { continue; }
+          gInertTargets.push(el);
+          if (gSupportsInert) { el.inert = true; }
+          el.setAttribute("aria-hidden", "true");
+        }
+      } else {
+        for (var j = 0; j < gInertTargets.length; j++) {
+          if (gSupportsInert) { gInertTargets[j].inert = false; }
+          gInertTargets[j].removeAttribute("aria-hidden");
+        }
+        gInertTargets = [];
+      }
+    }
+
+    function gFocusClose() {
+      // Same deferred-focus rationale as the finding blade: visibility change must
+      // settle before focus can move into the dialog.
+      var done = false;
+      function run() {
+        if (done) { return; }
+        done = true;
+        if (guidanceState.open && gClose && document.activeElement !== gClose) { gClose.focus(); }
+      }
+      if (window.requestAnimationFrame) { requestAnimationFrame(function () { requestAnimationFrame(run); }); }
+      setTimeout(run, 60);
+    }
+
+    function openGuidance(docId, trigger) {
+      var src = document.getElementById(docId);
+      if (!src) { return; }
+      gTrigger = trigger || null;
+      gGate = closestAttr(trigger, "data-answer-gate");
+      // Header: question, status pill, gate id, owning role. No speculative estimate.
+      if (gTitleEl) { gTitleEl.textContent = src.getAttribute("data-guidance-title") || "Answer guidance"; }
+      if (gMetaEl) {
+        gMetaEl.textContent = "";
+        var pillWrap = src.querySelector("[data-guidance-pill]");
+        if (pillWrap) {
+          var pill = pillWrap.querySelector(".pill");
+          if (pill) { gMetaEl.appendChild(pill.cloneNode(true)); }
+        }
+        var gid = src.getAttribute("data-guidance-gateid") || "";
+        if (gid) {
+          var idEl = document.createElement("span");
+          idEl.className = "guidance-meta-id mono";
+          idEl.textContent = gid;
+          gMetaEl.appendChild(idEl);
+        }
+        var role = src.getAttribute("data-guidance-role") || "";
+        if (role) {
+          var roleEl = document.createElement("span");
+          roleEl.className = "guidance-meta-role";
+          roleEl.textContent = "Owner: " + role;
+          gMetaEl.appendChild(roleEl);
+        }
+      }
+      var hasEvidence = false;
+      if (gBodyEl) {
+        gBodyEl.textContent = "";
+        var body = src.querySelector("[data-guidance-body]");
+        if (body) {
+          var clone = body.cloneNode(true);
+          clone.removeAttribute("data-guidance-body");
+          clone.className = "guidance-clone";
+          gBodyEl.appendChild(clone);
+          hasEvidence = !!clone.querySelector("[data-guidance-evidence-item]");
+        }
+        gBodyEl.scrollTop = 0;
+      }
+      if (gCopy) { gCopy.hidden = !hasEvidence; }
+      if (gCopyFeedback) { gCopyFeedback.textContent = ""; }
+      guidanceBackdrop.classList.add("open");
+      guidanceDialog.classList.add("open");
+      guidanceDialog.setAttribute("aria-hidden", "false");
+      document.body.classList.add("guidance-open");
+      gApplyInert(true);
+      guidanceState.open = true;
+      gFocusClose();
+    }
+
+    function closeGuidance() {
+      if (!guidanceState.open) { return; }
+      guidanceDialog.classList.remove("open");
+      guidanceBackdrop.classList.remove("open");
+      guidanceDialog.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("guidance-open");
+      gApplyInert(false);
+      guidanceState.open = false;
+      if (gBodyEl) { gBodyEl.textContent = ""; }
+      if (gMetaEl) { gMetaEl.textContent = ""; }
+      // Restore focus to the exact gate, then move to its first answer radio WITHOUT
+      // selecting it (focus only, never .click(), so no verdict input is mutated).
+      var gate = gGate;
+      var trigger = gTrigger;
+      gGate = null;
+      gTrigger = null;
+      var radio = gate ? gate.querySelector("[data-answer-value]") : null;
+      if (radio && typeof radio.focus === "function") { radio.focus(); }
+      else if (trigger && typeof trigger.focus === "function") { trigger.focus(); }
+    }
+
+    var gOpeners = Array.prototype.slice.call(document.querySelectorAll("[data-guidance-open]"));
+    for (var go = 0; go < gOpeners.length; go++) {
+      gOpeners[go].addEventListener("click", function (e) {
+        var btn = e.currentTarget;
+        openGuidance(btn.getAttribute("data-guidance-open"), btn);
+      });
+    }
+    if (gClose) { gClose.addEventListener("click", closeGuidance); }
+    if (gBack) { gBack.addEventListener("click", closeGuidance); }
+    guidanceBackdrop.addEventListener("click", closeGuidance);
+
+    if (gCopy) {
+      gCopy.addEventListener("click", function () {
+        var items = gBodyEl ? Array.prototype.slice.call(gBodyEl.querySelectorAll("[data-guidance-evidence-item]")) : [];
+        if (!items.length) { if (gCopyFeedback) { gCopyFeedback.textContent = "No evidence checklist to copy."; } return; }
+        var out = [];
+        for (var i = 0; i < items.length; i++) {
+          var t = trimStr(items[i].textContent);
+          if (t) { out.push("- [ ] " + t); }
+        }
+        copyText(out.join("\n"), function (ok) {
+          if (gCopyFeedback) { gCopyFeedback.textContent = ok ? "Evidence checklist copied." : "Copy is unavailable — select the text manually."; }
+        });
+      });
+    }
+
+    // Guidance-scoped keyboard handling: Escape closes, Tab is trapped within.
+    document.addEventListener("keydown", function (e) {
+      if (!guidanceState.open) { return; }
+      if (e.key === "Escape" || e.keyCode === 27) { e.preventDefault(); closeGuidance(); return; }
+      if (e.key === "Tab" || e.keyCode === 9) {
+        var f = gFocusables();
+        if (!f.length) { e.preventDefault(); if (gClose) { gClose.focus(); } return; }
+        var first = f[0], last = f[f.length - 1];
+        if (!guidanceDialog.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
+
+    // Progressive collapse: the appendix is expanded for no-JS and print, but once
+    // the interactive dialog is wired we collapse the inline copies to reduce noise.
+    var gDocs = Array.prototype.slice.call(document.querySelectorAll("[data-guidance-doc]"));
+    for (var gd = 0; gd < gDocs.length; gd++) {
+      if (gDocs[gd].tagName === "DETAILS") { gDocs[gd].open = false; }
+    }
+  }
+
   // ---- Rerun command: copy + remediation checklist download ----
   var rerunCmdEl = document.getElementById("rerunCommand");
   var rerunFeedback = document.getElementById("rerunFeedback");
@@ -1943,6 +2516,14 @@ function Get-A365Script {
   if (downloadRemediation) {
     function buildRemediationMarkdown() {
       var lines = ["# Agent 365 pre-flight remediation checklist", ""];
+      // Map manual-gate id -> its guidance appendix entry so each unresolved action
+      // can carry its acceptance criteria and evidence-to-retain steps.
+      var guidanceById = {};
+      var gdocs = Array.prototype.slice.call(document.querySelectorAll("[data-guidance-doc]"));
+      for (var gi = 0; gi < gdocs.length; gi++) {
+        var gkey = gdocs[gi].getAttribute("data-guidance-gateid") || "";
+        if (gkey && !guidanceById[gkey]) { guidanceById[gkey] = gdocs[gi]; }
+      }
       var pr = document.getElementById("pathToReady");
       if (pr) {
         var items = Array.prototype.slice.call(pr.querySelectorAll("[data-path-item]"));
@@ -1962,6 +2543,22 @@ function Get-A365Script {
           lines.push(line);
           if (remEl) { var rem = trimStr(remEl.textContent); if (rem) { lines.push("  - Remediation: " + rem); } }
           if (ownerLabel) { lines.push("  - Owner: " + ownerLabel); }
+          // Unresolved manual gates carry their acceptance criteria + evidence steps.
+          var itemId = box ? (box.getAttribute("data-item-id") || "") : "";
+          var resolved = !!(box && box.checked);
+          var gdoc = itemId ? guidanceById[itemId] : null;
+          if (gdoc && !resolved) {
+            var yes = Array.prototype.slice.call(gdoc.querySelectorAll("[data-guidance-yes-item]"));
+            if (yes.length) {
+              lines.push("  - Acceptance criteria:");
+              for (var y = 0; y < yes.length; y++) { var yt = trimStr(yes[y].textContent); if (yt) { lines.push("    - " + yt); } }
+            }
+            var ev = Array.prototype.slice.call(gdoc.querySelectorAll("[data-guidance-evidence-item]"));
+            if (ev.length) {
+              lines.push("  - Evidence to retain:");
+              for (var ei = 0; ei < ev.length; ei++) { var et = trimStr(ev[ei].textContent); if (et) { lines.push("    - " + et); } }
+            }
+          }
         }
       }
       lines.push("");
@@ -2103,7 +2700,7 @@ function New-Agent365PreflightHtml {
     $passModel  = Get-A365PassModel $Report $verdict $results
     $pathPhases = @(Get-A365PathModel $Report $results $slugById | Where-Object { $null -ne $_ })
     $rerunModel = Get-A365RerunModel $Report $isSanitized
-    $gateModel  = @(Get-A365GateModel $Report $attest)
+    $gateModel  = @(Get-A365GateModel $Report $attest $results)
     $pathItemTotal = 0
     foreach ($ph in $pathPhases) { $pathItemTotal += @($ph.Items).Count }
 
@@ -2677,7 +3274,23 @@ function New-Agent365PreflightHtml {
                 elseif ($rExpected) { $observedOneLine = 'Expected: ' + $rExpected }
                 else { $observedOneLine = $rMeta.Label }
 
-                $searchParts = @($rTitle, $rId, $areaName, $rPillar, $rExpected, $observedDisplay, $rRemediation, $reqRole, $reqPerm, $rMeta.Label)
+                # Index canonical guidance text so concept searches (sponsor, DLP,
+                # OBO, rollback, incident response, ...) match manually attestable results.
+                $rGuidance = Get-A365GateGuidance $r $r
+                $guidanceSearch = ''
+                if ($null -ne $rGuidance) {
+                    $gParts = @(
+                        [string]$rGuidance.SearchText, [string]$rGuidance.Intent, [string]$rGuidance.WhyItMatters,
+                        [string]$rGuidance.WhoShouldAnswer, [string]$rGuidance.NoRemediation, [string]$rGuidance.NotApplicableGuidance
+                    )
+                    $gParts += @($rGuidance.YesCriteria | ForEach-Object { [string]$_ })
+                    $gParts += @($rGuidance.EvidenceToRetain | ForEach-Object { [string]$_ })
+                    foreach ($st in $rGuidance.VerificationSteps) { $gParts += @([string]$st.Title, [string]$st.Instruction, [string]$st.Location) }
+                    foreach ($ps in $rGuidance.PublicSources) { $gParts += @([string]$ps.Title) }
+                    $guidanceSearch = (@($gParts | Where-Object { $_ }) -join ' ')
+                }
+
+                $searchParts = @($rTitle, $rId, $areaName, $rPillar, $rExpected, $observedDisplay, $rRemediation, $reqRole, $reqPerm, $rMeta.Label, $guidanceSearch)
                 $searchText = ((@($searchParts | Where-Object { $_ }) -join ' ')).ToLowerInvariant()
 
                 Line ('<article class="finding ' + $rMeta.Class + '" data-result-card id="' + (ConvertTo-A365Html $rSlug) + '"' +
@@ -2823,10 +3436,9 @@ function New-Agent365PreflightHtml {
                 Line ('<span class="answer-gate-title">' + (ConvertTo-A365Html $gTitle) + '</span>')
                 if ($gReq) { Line '<span class="answer-gate-req">Required</span>' }
                 Line ('<span class="r-id mono">' + (ConvertTo-A365Html $gId) + '</span>')
+                Line ('<button type="button" class="review-guidance-btn" data-guidance-open="guidance-' + (ConvertTo-A365Html $gSlug) + '" data-guidance-gate="' + (ConvertTo-A365Html $gId) + '"><span class="rg-glyph" aria-hidden="true">&#9432;</span>Review guidance</button>')
                 Line '</div>'
                 if ($gEvidence) { Line ('<p class="answer-gate-evidence">Evidence needed: ' + (ConvertTo-A365Html $gEvidence) + '</p>') }
-                $gDoc = Get-A365Link $gate.DocsUrl 'Documentation'
-                if ($gDoc) { Line ('<p class="answer-gate-evidence">' + $gDoc + '</p>') }
                 Line ('<div class="answer-values" role="radiogroup" aria-label="' + (ConvertTo-A365Html ('Answer for ' + $gTitle)) + '">')
                 Line ('<label><input type="radio" name="ans-' + (ConvertTo-A365Html $gSlug) + '" value="Yes" data-answer-value="Yes"><span>Yes</span></label>')
                 Line ('<label><input type="radio" name="ans-' + (ConvertTo-A365Html $gSlug) + '" value="No" data-answer-value="No"><span>No</span></label>')
@@ -2846,6 +3458,42 @@ function New-Agent365PreflightHtml {
             Line '<button type="button" id="downloadAnswers" class="act-btn is-brand">Download answers JSON</button>'
             Line '</div>'
             Line '<p id="answersFeedback" class="tool-feedback" role="status" aria-live="polite"></p>'
+            Line '</div>'
+
+            # Always-visible guidance appendix: single source of truth for the guidance
+            # dialog (cloned by JS), for print, and for the no-JS experience. Lives OUTSIDE
+            # the js-only answers builder so it renders when scripts are unavailable.
+            Line '<div class="guidance-appendix" data-guidance-appendix aria-label="Manual evidence guidance">'
+            Line '<h3 class="guidance-appendix-title">Manual evidence guidance</h3>'
+            Line '<p class="small muted guidance-appendix-note">Full answer guidance for every attestable gate. On screen you can open each gate&rsquo;s guidance from its <strong>Review guidance</strong> button; this appendix stays complete for print and when scripts are disabled.</p>'
+            foreach ($gate in $gateModel) {
+                $gId = [string]$gate.Id
+                if ([string]::IsNullOrWhiteSpace($gId)) { continue }
+                $gTitle = [string]$gate.Title
+                $gAllowNa = [bool]$gate.AllowNotApplicable
+                $gEvidence = [string]$gate.EvidenceNeeded
+                $gStatus = [string]$gate.Status
+                $gRole = [string]$gate.RequiredRole
+                $gSlug = Get-A365Slug $gId
+                $gObs = [string]$gate.Observed
+                $obsRedacted = ($isSanitized -and [bool]$gate.IsSensitive)
+                if ($obsRedacted) { $gObs = '' }
+                Line ('<details class="guidance-doc" data-guidance-doc id="guidance-' + (ConvertTo-A365Html $gSlug) + '" open data-guidance-gateid="' + (ConvertTo-A365Html $gId) + '" data-guidance-title="' + (ConvertTo-A365Html $gTitle) + '" data-guidance-role="' + (ConvertTo-A365Html $gRole) + '">')
+                Line ('<summary class="guidance-doc-summary"><span class="guidance-eyebrow">Answer guidance</span><span class="guidance-doc-title">' + (ConvertTo-A365Html $gTitle) + '</span></summary>')
+                Line '<div class="guidance-doc-inner">'
+                Line '<div class="guidance-meta" data-guidance-meta>'
+                if ($gStatus) { Line ('<span data-guidance-pill>' + (Get-A365StatusPill $gStatus) + '</span>') }
+                Line ('<span class="guidance-meta-id mono">' + (ConvertTo-A365Html $gId) + '</span>')
+                if ($gRole) { Line ('<span class="guidance-meta-role">Owner: ' + (ConvertTo-A365Html $gRole) + '</span>') }
+                Line '</div>'
+                Line '<div class="guidance-doc-body" data-guidance-body>'
+                foreach ($gLine in (Format-A365GuidanceSections -Guidance $gate.Guidance -AllowNa $gAllowNa -Observed $gObs -ObservedRedacted:$obsRedacted -EvidenceNeeded $gEvidence -DocsUrl $gate.DocsUrl)) {
+                    Line $gLine
+                }
+                Line '</div>'
+                Line '</div>'
+                Line '</details>'
+            }
             Line '</div>'
         }
         Line '</section>'
@@ -3079,6 +3727,25 @@ function New-Agent365PreflightHtml {
     Line '<button type="button" id="detailClose" class="detail-close" aria-label="Close details">&#215;</button>'
     Line '</div>'
     Line '<div id="detailBladeBody" class="detail-blade-body"></div>'
+    Line '</aside>'
+
+    # --- Guidance dialog / full-height bottom sheet (semantically distinct from the finding blade) ---
+    Line '<div id="guidanceBackdrop" class="guidance-backdrop js-only" hidden></div>'
+    Line '<aside id="guidanceDialog" class="guidance-dialog js-only" role="dialog" aria-modal="true" aria-labelledby="guidanceTitle" aria-describedby="guidanceBody" aria-hidden="true" hidden>'
+    Line '<div class="guidance-dialog-head">'
+    Line '<div class="guidance-dialog-heading">'
+    Line '<p class="guidance-dialog-eyebrow">Answer guidance</p>'
+    Line '<h2 id="guidanceTitle" class="guidance-dialog-title" tabindex="-1">Guidance</h2>'
+    Line '<div id="guidanceMeta" class="guidance-dialog-meta"></div>'
+    Line '</div>'
+    Line '<button type="button" id="guidanceClose" class="guidance-close" aria-label="Close guidance">&#215;</button>'
+    Line '</div>'
+    Line '<div id="guidanceBody" class="guidance-dialog-body"></div>'
+    Line '<div class="guidance-dialog-foot">'
+    Line '<button type="button" id="guidanceBack" class="act-btn is-brand guidance-back-btn">Back to answer</button>'
+    Line '<button type="button" id="guidanceCopy" class="act-btn guidance-copy-btn" hidden>Copy evidence checklist</button>'
+    Line '<span id="guidanceCopyFeedback" class="guidance-copy-feedback" role="status" aria-live="polite"></span>'
+    Line '</div>'
     Line '</aside>'
 
     Line '<script>'

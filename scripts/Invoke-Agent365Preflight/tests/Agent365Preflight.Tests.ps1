@@ -6,6 +6,7 @@ $answersPath = Join-Path $resourceRoot 'samples\answers.sample.json'
 $reportSchemaPath = Join-Path $resourceRoot 'schema\agent365-preflight-report.schema.json'
 $answersSchemaPath = Join-Path $resourceRoot 'schema\agent365-preflight-answers.schema.json'
 $allowlistPath = Join-Path $resourceRoot 'config\operation-allowlist.v1.json'
+$guidancePath = Join-Path $resourceRoot 'config\guidance.v1.json'
 
 Import-Module $modulePath -Force
 Import-Module Microsoft.Graph.Authentication -MinimumVersion 2.20.0 -Force
@@ -713,6 +714,99 @@ Describe 'Passing and manual evidence contract' {
         ($items | Where-Object Id -eq 'A365-ENTRA-007').Priority | Should -Be 3
         ($items | Where-Object Id -eq 'A365-ENTRA-005').Priority | Should -Be 4
         ($items | Where-Object Id -eq 'A365-FOUNDATION-003').Priority | Should -Be 5
+    }
+}
+
+Describe 'Manual evidence guidance contract' {
+    BeforeAll {
+        $allGuidedProfiles = @(
+            'ControlPlane', 'CopilotStudio', 'AgentBuilder', 'SharePointAgents', 'Foundry',
+            'CustomProCode', 'ExternalRegistrySync', 'LocalAgents', 'WorkIQ', 'AITeammate'
+        )
+    }
+
+    It 'provides complete structured guidance for every manually attestable ID' {
+        $outcome = Invoke-FixturePreflight -Name 'complete-guidance' -Profile $allGuidedProfiles
+        [object[]]$gates = @($outcome.Report.ManuallyAttestableGates)
+
+        $gates.Count | Should -Be 21
+        @($gates.Id | Sort-Object -Unique).Count | Should -Be 21
+        foreach ($gate in $gates) {
+            $gate.Guidance.Intent | Should -Not -BeNullOrEmpty
+            $gate.Guidance.WhyItMatters | Should -Not -BeNullOrEmpty
+            $gate.Guidance.WhoShouldAnswer | Should -Not -BeNullOrEmpty
+            @($gate.Guidance.YesCriteria).Count | Should -BeGreaterThan 0
+            @($gate.Guidance.EvidenceToRetain).Count | Should -BeGreaterThan 0
+            @($gate.Guidance.VerificationSteps).Count | Should -BeGreaterThan 0
+            $gate.Guidance.NoRemediation | Should -Not -BeNullOrEmpty
+            $gate.Guidance.NotApplicableGuidance | Should -Not -BeNullOrEmpty
+            @($gate.Guidance.PublicSources).Count | Should -BeGreaterThan 0
+            $gate.Guidance.ReviewDate | Should -Match '^\d{4}-\d{2}-\d{2}$'
+            $gate.Guidance.SearchText | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    It 'fails the guidance contract when a required field is missing' {
+        $guidance = Get-Content -LiteralPath $guidancePath -Raw | ConvertFrom-Json -Depth 100
+        $guidance.items.'A365-MANUAL-001'.PSObject.Properties.Remove('intent')
+        $badGuidancePath = Join-Path $TestDrive 'missing-guidance-field.json'
+        [System.IO.File]::WriteAllText(
+            $badGuidancePath,
+            ($guidance | ConvertTo-Json -Depth 100),
+            [System.Text.UTF8Encoding]::new($false)
+        )
+        $outputPath = Join-Path $TestDrive 'missing-guidance-output'
+
+        InModuleScope Agent365Preflight -Parameters @{
+            BadGuidancePath = $badGuidancePath
+            FixturePath = $readyFixturePath
+            OutputPath = $outputPath
+        } {
+            $originalGuidancePath = $script:GuidancePath
+            try {
+                $script:GuidancePath = $BadGuidancePath
+                { Invoke-Agent365Preflight -FixturePath $FixturePath -OutputPath $OutputPath } |
+                    Should -Throw "*A365-MANUAL-001*intent*"
+            }
+            finally {
+                $script:GuidancePath = $originalGuidancePath
+            }
+        }
+    }
+
+    It 'rejects non-public guidance sources' {
+        $rules = Get-Content -LiteralPath (Join-Path $resourceRoot 'config\rules.v1.json') -Raw | ConvertFrom-Json -Depth 100
+        $guidance = Get-Content -LiteralPath $guidancePath -Raw | ConvertFrom-Json -Depth 100
+        $guidance.items.'A365-MANUAL-001'.publicSources[0].url = 'https://internal.example.invalid/owners'
+
+        InModuleScope Agent365Preflight -Parameters @{ Rules = $rules; Guidance = $guidance } {
+            { Test-A365GuidanceContract -Rules $Rules -Guidance $Guidance } |
+                Should -Throw '*invalid or non-public Microsoft Learn source*'
+        }
+    }
+
+    It 'keeps NotApplicable guidance aligned with rule permission' {
+        $outcome = Invoke-FixturePreflight -Name 'guidance-na' -Profile $allGuidedProfiles
+        [object[]]$gates = @($outcome.Report.ManuallyAttestableGates)
+        $sharePoint = $gates | Where-Object Id -eq 'A365-SHAREPOINT-001'
+        [object[]]$notAllowed = @($gates | Where-Object Id -ne 'A365-SHAREPOINT-001')
+
+        $sharePoint.AllowNotApplicable | Should -BeTrue
+        $sharePoint.Guidance.NotApplicableAllowed | Should -BeTrue
+        foreach ($gate in $notAllowed) {
+            $gate.AllowNotApplicable | Should -BeFalse
+            $gate.Guidance.NotApplicableAllowed | Should -BeFalse
+        }
+    }
+
+    It 'sanitizes the current observation without removing generic guidance' {
+        $outcome = Invoke-FixturePreflight -Name 'guidance-sanitized' -Profile @('SharePointAgents')
+        $sanitized = Get-Content -LiteralPath $outcome.Paths.SanitizedJson -Raw | ConvertFrom-Json -Depth 100
+        $gate = $sanitized.ManuallyAttestableGates | Where-Object Id -eq 'A365-SHAREPOINT-001'
+
+        $gate.Observed | Should -Be 'Redacted in sanitized support copy.'
+        $gate.Guidance.Intent | Should -Match 'approved pilot sites'
+        $gate.Guidance.PublicSources[0].Url | Should -Match '^https://learn\.microsoft\.com/'
     }
 }
 
@@ -1733,13 +1827,14 @@ Describe 'Report comparison, redaction, and rendering' {
         $html | Should -Match 'Not explicitly pinned'
         $html | Should -Not -Match '<link[^>]+stylesheet'
         $html | Should -Not -Match '<script[^>]+src='
-        $outcome.Report.SchemaVersion | Should -Be '1.1'
+        $outcome.Report.SchemaVersion | Should -Be '1.2'
+        $outcome.Report.GuidanceVersion | Should -Be '1.0.0'
         $json | Test-Json -SchemaFile $reportSchemaPath | Should -Be $true
     }
 
-    It 'accepts report schema 1.0 and 1.1 baselines' {
-        $current = Invoke-FixturePreflight -Name 'schema-1-1-baseline'
-        $currentComparison = Invoke-FixturePreflight -Name 'schema-1-1-current' -PreviousResultPath $current.Paths.Json
+    It 'accepts report schema 1.0, 1.1, and 1.2 baselines' {
+        $current = Invoke-FixturePreflight -Name 'schema-1-2-baseline'
+        $currentComparison = Invoke-FixturePreflight -Name 'schema-1-2-current' -PreviousResultPath $current.Paths.Json
         $legacy = Get-Content -LiteralPath $current.Paths.Json -Raw | ConvertFrom-Json -Depth 100
         $legacy.SchemaVersion = '1.0'
         $legacyPath = Join-Path $TestDrive 'schema-1-0-baseline.json'
@@ -1749,9 +1844,19 @@ Describe 'Report comparison, redaction, and rendering' {
             [System.Text.UTF8Encoding]::new($false)
         )
         $legacyComparison = Invoke-FixturePreflight -Name 'schema-1-0-current' -PreviousResultPath $legacyPath
+        $prior = Get-Content -LiteralPath $current.Paths.Json -Raw | ConvertFrom-Json -Depth 100
+        $prior.SchemaVersion = '1.1'
+        $priorPath = Join-Path $TestDrive 'schema-1-1-baseline.json'
+        [System.IO.File]::WriteAllText(
+            $priorPath,
+            ($prior | ConvertTo-Json -Depth 100),
+            [System.Text.UTF8Encoding]::new($false)
+        )
+        $priorComparison = Invoke-FixturePreflight -Name 'schema-1-1-current' -PreviousResultPath $priorPath
 
         $currentComparison.Report.Drift.HasBaseline | Should -BeTrue
         $legacyComparison.Report.Drift.HasBaseline | Should -BeTrue
+        $priorComparison.Report.Drift.HasBaseline | Should -BeTrue
     }
 
     It 'renders the complete accessible interactive findings contract' {
@@ -1863,11 +1968,65 @@ Describe 'Report comparison, redaction, and rendering' {
         ([regex]::Matches($html, 'data-answer-gate="')).Count | Should -Be $outcome.Report.ManuallyAttestableGates.Count
     }
 
+    It 'renders canonical guidance for search, dialog, no-JavaScript, print, and checklist workflows' {
+        $profiles = @(
+            'ControlPlane', 'CopilotStudio', 'AgentBuilder', 'SharePointAgents', 'Foundry',
+            'CustomProCode', 'ExternalRegistrySync', 'LocalAgents', 'WorkIQ', 'AITeammate'
+        )
+        $outcome = Invoke-FixturePreflight -Name 'guided-answers-workspace' -Profile $profiles
+        $html = Get-Content -LiteralPath $outcome.Paths.Html -Raw
+        $gateCount = $outcome.Report.ManuallyAttestableGates.Count
+        $hooks = @(
+            'data-guidance-open',
+            'data-guidance-appendix',
+            'data-guidance-doc',
+            'id="guidanceBackdrop"',
+            'id="guidanceDialog"',
+            'aria-labelledby="guidanceTitle"',
+            'aria-describedby="guidanceBody"',
+            'id="guidanceClose"',
+            'id="guidanceBack"',
+            'id="guidanceCopy"',
+            'id="guidanceCopyFeedback"',
+            'Back to answer',
+            'Copy evidence checklist',
+            'What the scan observed',
+            'What you are confirming',
+            'Why this matters',
+            'Who should confirm it',
+            'Answer Yes when',
+            'Evidence to retain',
+            'How to verify',
+            'If the answer is No',
+            'When Not applicable is valid',
+            'Public sources'
+        )
+
+        foreach ($hook in $hooks) {
+            $html.Contains($hook) | Should -BeTrue
+        }
+
+        ([regex]::Matches($html, 'data-guidance-open="')).Count | Should -Be $gateCount
+        ([regex]::Matches($html, '<details class="guidance-doc" data-guidance-doc')).Count | Should -Be $gateCount
+        $html | Should -Match 'on-behalf-of \(OBO\)'
+        $html | Should -Match 'data-result-search="[^"]*incident response'
+        $html | Should -Match 'var payload = \{ schemaVersion: "1\.1", answers: res\.items \};'
+        $html | Should -Match 'lines\.push\("  - Acceptance criteria:"\)'
+        $html | Should -Match 'lines\.push\("  - Evidence to retain:"\)'
+        $html | Should -Match '@media print[\s\S]*?\.guidance-doc'
+        $html | Should -Match 'function closeGuidance\(\)[\s\S]*?radio\.focus\(\)'
+        $html | Should -Not -Match 'function closeGuidance\(\)[\s\S]{0,1200}?radio\.click\(\)'
+        $html | Should -Not -Match 'localStorage\.setItem\([^,\r\n]*guidance'
+    }
+
     It 'keeps interactive hooks feature-identical in sanitized reports' {
         $outcome = Invoke-FixturePreflight -Name 'sanitized-interactive'
         $full = Get-Content -LiteralPath $outcome.Paths.Html -Raw
         $sanitized = Get-Content -LiteralPath $outcome.Paths.SanitizedHtml -Raw
-        $hooks = @('resultSearch', 'filterStatus', 'advancedFiltersToggle', 'detailBlade', 'data-result-card')
+        $hooks = @(
+            'resultSearch', 'filterStatus', 'advancedFiltersToggle', 'detailBlade',
+            'data-result-card', 'guidanceDialog', 'data-guidance-open', 'data-guidance-doc'
+        )
 
         foreach ($hook in $hooks) {
             $full.Contains($hook) | Should -Be $true

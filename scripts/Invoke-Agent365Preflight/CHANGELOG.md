@@ -2,6 +2,13 @@
 
 All notable changes to this resource are documented in this file.
 
+## 1.3.0 - 2026-09-02
+
+- Added complete structured review guidance for every manually attestable static and profile gate.
+- Added an accessible Answers Builder guidance blade with in-report criteria, evidence, verification, remediation, and public sources.
+- Added guidance to search, print, no-JavaScript output, and remediation checklist downloads.
+- Added load-time guidance validation and sanitized current-observation handling.
+
 ## 1.2.1 - 2026-09-02
 
 - Corrected the ActionRequired and exit-code documentation to match the enforced pass gates.

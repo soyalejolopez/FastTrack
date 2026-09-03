@@ -6,8 +6,9 @@ Runs a read-only Microsoft Agent 365 technical pre-flight.
 
 .DESCRIPTION
 Collects customer-controlled tenant evidence using approved read-only operations, evaluates a
-versioned public rule set, and writes self-contained HTML and JSON reports. The tool does not
-configure the tenant and does not provide a security or compliance certification.
+versioned public rule set, and writes self-contained HTML and JSON reports with guided manual
+evidence review. The tool does not configure the tenant and does not provide a security or
+compliance certification.
 
 .PARAMETER Profile
 Selects optional workload profiles. ControlPlane is always included.
@@ -24,7 +25,8 @@ Directory for full HTML and JSON output and optional sanitized copies.
 
 .PARAMETER AnswersPath
 Path to customer-reviewed evidence for approved manual gates. Yes requires an owner and evidence
-reference. Answers cannot override automated blocker, action, authorization, or error evidence.
+reference. The HTML Answers Builder provides in-report acceptance criteria and evidence guidance.
+Answers cannot override automated blocker, action, authorization, or error evidence.
 
 .PARAMETER PreviousResultPath
 Path to a previous full JSON report for regressions, resolved blockers, and resolved required-action

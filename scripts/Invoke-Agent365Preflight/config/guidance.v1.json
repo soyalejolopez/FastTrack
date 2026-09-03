@@ -1,0 +1,336 @@
+{
+  "schemaVersion": "1.0",
+  "version": "1.0.0",
+  "reviewDate": "2026-09-02",
+  "items": {
+    "A365-ENTRA-005": {
+      "intent": "Confirm that every permission requested by each in-scope agent identity blueprint is necessary for the approved scenario and no broader than the agent needs.",
+      "whyItMatters": "An agent can act through the permissions assigned to its identity. Unreviewed application roles or delegated scopes can expose data or actions beyond the approved boundary.",
+      "whoShouldAnswer": "Agent ID Administrator with the workload owner and the owner of each target resource",
+      "yesCriteria": ["Every requested resource and permission is mapped to an approved agent action.", "Application and delegated permissions use the least privilege available for the scenario.", "Owners recorded the decision for permissions that remain broad or cannot be reduced."],
+      "evidenceToRetain": ["Permission review record keyed to the blueprint or agent identity.", "Reviewer, review date, approved permissions, rejected permissions, and exception decisions.", "Link or change record for any permission removal completed before the rerun."],
+      "verificationSteps": [
+        {"order": 1, "title": "Inventory requested access", "instruction": "Open each in-scope blueprint and compare its requested resource access with the actions approved for the pilot.", "location": "Microsoft Entra admin center and the agent identity blueprint record"},
+        {"order": 2, "title": "Challenge each permission", "instruction": "Confirm the permission is required, uses the least-privileged option, and is scoped through the target workload where supported.", "location": "Blueprint permission review with each resource owner"},
+        {"order": 3, "title": "Record the decision", "instruction": "Retain the approved permission list, reviewer, date, exceptions, and required removals.", "location": "Customer change or architecture decision record"}
+      ],
+      "noRemediation": "Remove or reduce unapproved permissions, complete any required consent or resource scoping, update the review record, and rerun the Agent Identity collector.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed when an in-scope blueprint requests resource access.",
+      "publicSources": [{"title": "Microsoft Entra Agent ID agent identity blueprint", "url": "https://learn.microsoft.com/entra/agent-id/agent-blueprint"}],
+      "reviewDate": "2026-09-02"
+    },
+    "A365-ENTRA-007": {
+      "intent": "Confirm that the authentication pattern used by every in-scope agent is mapped to the Conditional Access controls and target-resource controls that can actually govern it.",
+      "whyItMatters": "Delegated, app-only, agent-user, and API-key access do not have identical enforcement points. Assuming one policy covers every pattern can leave an access path outside the intended control.",
+      "whoShouldAnswer": "Conditional Access Administrator or Security Administrator with each agent workload owner",
+      "yesCriteria": ["Every agent access path is classified as delegated, app-only, agent-user, API-key, or another documented pattern.", "Applicable Conditional Access policies and target-resource controls are mapped to each path.", "API-key or otherwise non-Entra access has a separate documented control, rotation, and monitoring decision.", "Report-only results and exclusions were reviewed before enforcement decisions."],
+      "evidenceToRetain": ["Access-pattern inventory for each agent and target resource.", "Conditional Access policy mapping including state, scope, exclusions, and report-only review.", "Separate control record for API keys or access paths that Conditional Access cannot evaluate."],
+      "verificationSteps": [
+        {"order": 1, "title": "Map authentication patterns", "instruction": "Document how the user, agent identity, workload identity, and target resource authenticate for each scenario.", "location": "Agent architecture and Microsoft Entra sign-in design"},
+        {"order": 2, "title": "Review policy coverage", "instruction": "Compare enabled and report-only policies, assignments, exclusions, authentication strengths, and conditions with each mapped pattern.", "location": "Microsoft Entra admin center > Protection > Conditional Access > Policies"},
+        {"order": 3, "title": "Close uncovered paths", "instruction": "Add the appropriate identity, resource, key-management, or workload control and record the approved exception if a path cannot use Conditional Access.", "location": "Conditional Access change record and workload control record"}
+      ],
+      "noRemediation": "Correct missing policy assignments or exclusions, add controls for access paths outside Conditional Access, validate with report-only evidence where appropriate, and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed because every selected agent scenario has an authentication and target-resource access pattern.",
+      "publicSources": [{"title": "Conditional Access for agent identities", "url": "https://learn.microsoft.com/entra/identity/conditional-access/agent-id"}],
+      "reviewDate": "2026-09-02"
+    },
+    "A365-DEFENDER-003": {
+      "intent": "Confirm that Security for AI Agents is enabled and that the Microsoft 365 connector, Copilot Studio connection, and real-time protection controls required for the selected pilot are configured and reviewed.",
+      "whyItMatters": "Missing data connections reduce investigation visibility, while unreviewed real-time protection rules can leave risky actions unaudited or unblocked.",
+      "whoShouldAnswer": "Security Administrator with the Power Platform administrator when Copilot Studio is selected",
+      "yesCriteria": ["The Security for AI Agents enablement state is approved for the pilot.", "The Microsoft 365 connector shows the required components connected for agent monitoring.", "Copilot Studio connectivity is complete when that platform is selected.", "Default and custom real-time protection rules are reviewed for intended audit or block behavior and scope."],
+      "evidenceToRetain": ["Screenshot or exported change record for the Security for AI setup checklist.", "Connector state and selected monitoring components.", "Copilot Studio connection state when applicable.", "Real-time protection rule inventory with mode, scope, owner, and review date."],
+      "verificationSteps": [
+        {"order": 1, "title": "Review enablement", "instruction": "Confirm the Security for AI Agents setting and setup checklist state.", "location": "Microsoft Defender portal > Settings > Security for AI > Get started"},
+        {"order": 2, "title": "Confirm data connections", "instruction": "Verify the Microsoft 365 connector and, when selected, the Copilot Studio connection show the intended state.", "location": "Microsoft Defender portal > Settings > Security for AI > Get started"},
+        {"order": 3, "title": "Review runtime controls", "instruction": "Review the default and custom real-time protection rules, their audit or block mode, and agent scope.", "location": "Microsoft Defender portal > Settings > Security for AI > Policies & rules > Real-time protection"}
+      ],
+      "noRemediation": "Complete the missing connector or Copilot Studio setup, correct real-time protection rule scope or mode, retain the approved configuration record, and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed for the ControlPlane security review.",
+      "publicSources": [
+        {"title": "Enable security for AI agents using Microsoft Defender", "url": "https://learn.microsoft.com/defender-xdr/security-for-ai/get-started-defender-security-for-ai"},
+        {"title": "Protect AI agents in real time using Microsoft Defender", "url": "https://learn.microsoft.com/defender-xdr/security-for-ai/ai-agent-real-time-protection"}
+      ],
+      "reviewDate": "2026-09-02"
+    },
+    "A365-PURVIEW-002": {
+      "intent": "Confirm that the pilot's agent data paths are covered by the intended DLP, retention, sensitivity label, Audit, and DSPM for AI decisions, and that policy scope and enforcement were reviewed rather than inferred from policy presence.",
+      "whyItMatters": "A policy object can exist without covering the selected users, agents, locations, data, or actions. A defensible decision requires scope and observed enforcement evidence.",
+      "whoShouldAnswer": "Compliance Administrator or Compliance Data Administrator with the data owner and security owner",
+      "yesCriteria": ["Agent data sources and destinations are mapped to the applicable Purview solutions.", "DLP policy locations, users, groups, conditions, exceptions, and actions cover the approved scenario.", "Retention and sensitivity label decisions match the data lifecycle and sharing boundary.", "Audit search and DSPM for AI evidence, where licensed and applicable, were reviewed without treating an empty window as disabled.", "Test, simulation, alert, or incident evidence supports the enforcement decision where the product provides it."],
+      "evidenceToRetain": ["Policy names and scoped locations without exporting protected content.", "Data-flow-to-policy mapping and approved exceptions.", "Simulation, test, alert, audit, or DSPM review record.", "Compliance owner, data owner, review date, and enforcement decision."],
+      "verificationSteps": [
+        {"order": 1, "title": "Map the data flow", "instruction": "List the sources, prompts or instructions, generated outputs, actions, and destinations used by the pilot.", "location": "Customer data-flow and solution design record"},
+        {"order": 2, "title": "Review policy scope", "instruction": "Check DLP, retention, sensitivity labels, Audit, and DSPM for AI against the mapped users, agents, locations, and data.", "location": "Microsoft Purview portal > Solutions"},
+        {"order": 3, "title": "Confirm enforcement evidence", "instruction": "Review available simulation, test, alert, activity explorer, audit, or DSPM evidence and record gaps separately.", "location": "Microsoft Purview portal solution reports and Audit"}
+      ],
+      "noRemediation": "Correct policy scope, exclusions, labels, retention, auditing, or monitoring; run the customer-approved validation; retain aggregate evidence; and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed for the ControlPlane compliance review; record unsupported or unlicensed capabilities as explicit gaps instead.",
+      "publicSources": [{"title": "Microsoft Purview support for Agent 365", "url": "https://learn.microsoft.com/purview/ai-agent-365"}],
+      "reviewDate": "2026-09-02"
+    },
+    "A365-SHAREPOINT-001": {
+      "intent": "Confirm that only approved pilot sites and content are accessible to the agent and that site permissions, sharing, membership, and the agent access boundary match the scenario.",
+      "whyItMatters": "Agent responses and actions can reflect the content the agent identity or user can reach. Broad site membership or sharing can widen the data boundary.",
+      "whoShouldAnswer": "SharePoint Administrator or delegated site owner with the agent workload owner",
+      "yesCriteria": ["Every target site is intentionally in pilot scope and readable by the expected identity.", "Site membership, direct permissions, sharing links, and external sharing match the approved boundary.", "Agent access is limited to the intended sites or content and has an accountable owner.", "A periodic access review and removal path are documented."],
+      "evidenceToRetain": ["Approved target-site list using customer references rather than copied content.", "Site permission and sharing review record.", "Agent or identity access assignment and owner.", "Review date and planned access-removal checkpoint."],
+      "verificationSteps": [
+        {"order": 1, "title": "Confirm target sites", "instruction": "Compare the supplied pilot URLs with the approved scenario and remove any site that is not required.", "location": "Pilot scope record and SharePoint admin center > Active sites"},
+        {"order": 2, "title": "Review access and sharing", "instruction": "Review site owners, members, visitors, direct access, sharing links, and external sharing for each target.", "location": "SharePoint admin center and each target site's permissions"},
+        {"order": 3, "title": "Validate the agent boundary", "instruction": "Confirm the agent or agent identity can reach only intended content and document the access removal path.", "location": "SharePoint agent access management and customer access review"}
+      ],
+      "noRemediation": "Remove unintended sites or access, correct sharing and membership, document the approved boundary, reconnect the supported SharePoint session if needed, and rerun.",
+      "notApplicableAllowed": true,
+      "notApplicableGuidance": "Not applicable is allowed only when the selected pilot does not use SharePoint or OneDrive content and no SharePointAgents profile or target site is in scope. Retain that scope decision as the justification.",
+      "publicSources": [
+        {"title": "Agent 365 integration with SharePoint Online and OneDrive", "url": "https://learn.microsoft.com/microsoft-agent-365/admin/sharepoint-integration"},
+        {"title": "Manage access for agents in SharePoint", "url": "https://learn.microsoft.com/sharepoint/manage-access-agents-in-sharepoint"}
+      ],
+      "reviewDate": "2026-09-02"
+    },
+    "A365-MANUAL-001": {
+      "intent": "Confirm that every in-scope agent has a named accountable owner for current operation and a lifecycle sponsor for continued business need.",
+      "whyItMatters": "Without accountable people, access reviews, incident decisions, changes, and retirement can be delayed or missed.",
+      "whoShouldAnswer": "AI governance lead with the business sponsor and workload owner",
+      "yesCriteria": ["Every in-scope agent has an accountable operational owner.", "Every agent has a lifecycle sponsor who can confirm continuing business need.", "Backup ownership and an escalation route are recorded.", "Ownership is tied to periodic review and retirement decisions."],
+      "evidenceToRetain": ["Agent ownership register.", "Owner and sponsor acceptance or approval record.", "Review cadence, backup owner, and escalation contact."],
+      "verificationSteps": [
+        {"order": 1, "title": "Reconcile inventory", "instruction": "Match every agent in the pilot inventory to an owner and sponsor.", "location": "Customer agent inventory and Microsoft 365 admin center agent records"},
+        {"order": 2, "title": "Confirm accountability", "instruction": "Verify each named person accepts the operational and lifecycle duties.", "location": "Customer approval or ownership workflow"},
+        {"order": 3, "title": "Record reviews", "instruction": "Set the next ownership review and escalation path.", "location": "Agent ownership register"}
+      ],
+      "noRemediation": "Assign missing owners or sponsors, record acceptance and backups, and rerun with the ownership record reference.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed for an in-scope pilot agent.",
+      "publicSources": [{"title": "Agent management roles and permissions", "url": "https://learn.microsoft.com/microsoft-365/admin/manage/agent-roles-perms"}],
+      "reviewDate": "2026-09-02"
+    },
+    "A365-MANUAL-002": {
+      "intent": "Confirm that the approved agent boundary states who may use the agent, which tools and data it may access, what actions it may take, and which permissions are prohibited.",
+      "whyItMatters": "An undefined approval boundary makes later permission, connector, sharing, and incident decisions inconsistent.",
+      "whoShouldAnswer": "AI governance owner with the business owner, data owners, security, and platform administrator",
+      "yesCriteria": ["Users and deployment audience are defined.", "Allowed and prohibited tools, connectors, data sources, destinations, and actions are listed.", "Identity, consent, permission, and human-approval limits are documented.", "Exceptions and change approval are owned and time bounded."],
+      "evidenceToRetain": ["Approved solution boundary or architecture decision.", "Tool, connector, data, action, and permission inventory.", "Exception register and approval record."],
+      "verificationSteps": [
+        {"order": 1, "title": "Document the scenario", "instruction": "Describe the intended users, outcome, data, tools, and actions.", "location": "Customer pilot design"},
+        {"order": 2, "title": "Set explicit limits", "instruction": "Mark each tool, data source, destination, permission, and autonomous action allowed or prohibited.", "location": "Agent approval boundary"},
+        {"order": 3, "title": "Approve and control change", "instruction": "Obtain accountable approval and define how boundary changes are reviewed.", "location": "Customer governance process"}
+      ],
+      "noRemediation": "Complete and approve the missing boundary, remove unapproved access or tools, and rerun with the approval reference.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed because every pilot needs an approved operating boundary.",
+      "publicSources": [{"title": "Microsoft Agent 365 overview", "url": "https://learn.microsoft.com/microsoft-agent-365/overview"}],
+      "reviewDate": "2026-09-02"
+    },
+    "A365-MANUAL-003": {
+      "intent": "Confirm that the selected scenario completed the responsible AI, privacy, and legal reviews required by the customer's policies.",
+      "whyItMatters": "Agent behavior, personal data, generated content, automated actions, and affected people can create harms or obligations that technical configuration alone cannot approve.",
+      "whoShouldAnswer": "Responsible AI reviewer with privacy, legal, security, data, and business owners required by customer policy",
+      "yesCriteria": ["Intended use, affected people, foreseeable misuse, and prohibited use are documented.", "Data collection, purpose, access, retention, transparency, and user notice were reviewed.", "Human oversight, testing, monitoring, appeal, and stop conditions are defined.", "Required responsible AI, privacy, and legal reviewers recorded approval or conditions."],
+      "evidenceToRetain": ["Completed impact or scenario assessment.", "Privacy and legal decision record.", "Risk treatments, approval conditions, reviewer names, and review date."],
+      "verificationSteps": [
+        {"order": 1, "title": "Describe impacts", "instruction": "Document intended use, users, affected people, data, actions, potential harms, and misuse.", "location": "Customer responsible AI or impact assessment"},
+        {"order": 2, "title": "Run required reviews", "instruction": "Complete privacy, legal, security, data, and responsible AI checkpoints required by policy.", "location": "Customer review processes"},
+        {"order": 3, "title": "Record conditions", "instruction": "Retain approvals, conditions, mitigations, owners, monitoring, and stop criteria.", "location": "Customer decision record"}
+      ],
+      "noRemediation": "Pause deployment, complete missing reviews and mitigations, obtain accountable decisions, and rerun with the decision reference.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed; the depth of review may vary, but the customer must make and retain an accountable decision.",
+      "publicSources": [{"title": "Responsible AI in the Azure Well-Architected Framework", "url": "https://learn.microsoft.com/azure/well-architected/ai/responsible-ai"}],
+      "reviewDate": "2026-09-02"
+    },
+    "A365-MANUAL-004": {
+      "intent": "Confirm that security operations can identify, triage, contain, investigate, escalate, and close an incident involving an agent.",
+      "whyItMatters": "Agent incidents can span identities, tools, data, endpoints, and workloads. An undefined route delays containment and evidence preservation.",
+      "whoShouldAnswer": "Security operations lead with identity, workload, data, privacy, and agent owners",
+      "yesCriteria": ["Intake sources, severity thresholds, and on-call ownership are defined.", "Containment actions cover the agent, identity, credentials, tools, connectors, data, and deployment.", "Evidence handling preserves privacy and avoids storing prompts or content in this pre-flight.", "Escalation, communications, recovery, and post-incident review are documented."],
+      "evidenceToRetain": ["Agent incident response runbook.", "Tabletop or exercise record.", "On-call, escalation, containment, and evidence-owner assignments."],
+      "verificationSteps": [
+        {"order": 1, "title": "Map signals and owners", "instruction": "Identify alert, report, audit, and service channels plus the first responder for each.", "location": "Security operations incident process"},
+        {"order": 2, "title": "Define containment", "instruction": "Document safe steps to block or disable the agent, identity, credential, tool, connector, or deployment.", "location": "Agent incident runbook"},
+        {"order": 3, "title": "Exercise the path", "instruction": "Run a tabletop or approved test and record gaps, escalation, recovery, and evidence handling.", "location": "Security operations exercise record"}
+      ],
+      "noRemediation": "Create or update the runbook, assign responders, test the containment and escalation path, close exercise gaps, and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed for a deployed or pilot agent.",
+      "publicSources": [{"title": "Microsoft Defender XDR incident response overview", "url": "https://learn.microsoft.com/defender-xdr/incident-response-overview"}],
+      "reviewDate": "2026-09-02"
+    },
+    "A365-MANUAL-005": {
+      "intent": "Confirm that the pilot has measurable success, safety, reliability, adoption, review, and stop criteria before users rely on it.",
+      "whyItMatters": "Without pre-agreed measures, a pilot can continue despite poor outcomes, safety concerns, unreliable actions, or no business value.",
+      "whoShouldAnswer": "Pilot owner with the business sponsor, product owner, security, compliance, and support owners",
+      "yesCriteria": ["Business outcome and user population are defined.", "Success measures include quality, safety, reliability, adoption, and support impact as applicable.", "Data source, baseline, target, owner, and review date are recorded for each measure.", "Stop, pause, rollback, and graduation criteria are explicit."],
+      "evidenceToRetain": ["Pilot scorecard with baseline and targets.", "Review calendar and metric owners.", "Approved stop, rollback, and graduation decision rules."],
+      "verificationSteps": [
+        {"order": 1, "title": "Define measures", "instruction": "Select measures tied to the intended outcome and material risks.", "location": "Pilot charter and scorecard"},
+        {"order": 2, "title": "Set decisions", "instruction": "Record baseline, target, data source, owner, review date, and stop threshold.", "location": "Pilot scorecard"},
+        {"order": 3, "title": "Approve the review cadence", "instruction": "Confirm who decides to continue, change, pause, rollback, or graduate the pilot.", "location": "Pilot governance record"}
+      ],
+      "noRemediation": "Define measurable criteria and owners, approve stop and graduation rules, and rerun with the scorecard reference.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed for a pilot outcome.",
+      "publicSources": [{"title": "Get started with Microsoft Agent 365", "url": "https://learn.microsoft.com/microsoft-agent-365/get-started"}],
+      "reviewDate": "2026-09-02"
+    },
+    "A365-MANUAL-006": {
+      "intent": "Confirm that operators can safely stop, block, disable, or remove every pilot agent and its access without improvising during an incident or failed change.",
+      "whyItMatters": "A rollback that omits the agent identity, credentials, tools, connectors, deployment, or queued work can leave residual access or activity.",
+      "whoShouldAnswer": "Pilot owner with platform, identity, security, data, and service owners",
+      "yesCriteria": ["A trigger and decision owner for rollback are defined.", "Steps cover the agent deployment, identity, credentials, tools, connectors, permissions, and user access.", "Data preservation and restoration decisions are documented.", "The path was tested or exercised and the result recorded."],
+      "evidenceToRetain": ["Versioned rollback or disablement runbook.", "Test or tabletop record with outcome and gaps.", "Approver, operator, trigger, recovery, and communication assignments."],
+      "verificationSteps": [
+        {"order": 1, "title": "Define rollback scope", "instruction": "List every component and access path that must be stopped or restored.", "location": "Agent deployment and dependency inventory"},
+        {"order": 2, "title": "Write the runbook", "instruction": "Document triggers, approvals, ordered actions, data handling, communications, and recovery.", "location": "Customer operational runbook"},
+        {"order": 3, "title": "Test safely", "instruction": "Run the approved test or tabletop, verify expected containment, and close material gaps.", "location": "Pilot test environment or tabletop record"}
+      ],
+      "noRemediation": "Complete and test the rollback path, correct gaps, record the result, and rerun with the runbook reference.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed for an active pilot.",
+      "publicSources": [{"title": "Manage agents in the Microsoft 365 admin center", "url": "https://learn.microsoft.com/microsoft-365/admin/manage/agent-365-overview"}],
+      "reviewDate": "2026-09-02"
+    },
+    "A365-MANUAL-007": {
+      "intent": "Confirm that the customer can retire an agent, remove access and identities, preserve required records, and prove completion.",
+      "whyItMatters": "Unused agents, credentials, permissions, connectors, and data paths can remain active after business use ends.",
+      "whoShouldAnswer": "Agent lifecycle owner with platform, identity, security, compliance, records, and business owners",
+      "yesCriteria": ["Retirement triggers and an accountable decision owner are defined.", "Steps remove deployment, assignment, sharing, identity, credentials, consent, tools, connectors, and permissions as applicable.", "Retention, legal hold, audit, and evidence requirements are decided before deletion.", "Inventory closure and post-retirement verification are recorded."],
+      "evidenceToRetain": ["Agent retirement standard or runbook.", "Decommission checklist and access-removal evidence.", "Retention decision, closure approval, and verification date."],
+      "verificationSteps": [
+        {"order": 1, "title": "Define triggers", "instruction": "Record end-of-pilot, owner departure, risk, inactivity, replacement, and service-end triggers.", "location": "Agent lifecycle policy"},
+        {"order": 2, "title": "Map removal steps", "instruction": "Cover deployment, identity, credentials, permissions, consent, tools, connectors, sharing, and inventory.", "location": "Retirement runbook"},
+        {"order": 3, "title": "Protect required records", "instruction": "Confirm retention or legal requirements before deletion and define closure verification.", "location": "Customer records and compliance process"}
+      ],
+      "noRemediation": "Create and approve the retirement process, assign owners, include access and evidence handling, and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed because every agent eventually leaves service.",
+      "publicSources": [{"title": "Microsoft Agent 365 overview", "url": "https://learn.microsoft.com/microsoft-agent-365/overview"}],
+      "reviewDate": "2026-09-02"
+    }
+  },
+  "profiles": {
+    "CopilotStudio": {
+      "intent": "Confirm the Copilot Studio agent's instructions, knowledge, tools, channels, identity, users, and environment match the approved pilot boundary.",
+      "whyItMatters": "Knowledge, actions, connectors, channels, and authentication can expand what the agent sees, does, and exposes.",
+      "whoShouldAnswer": "Copilot Studio owner with the Power Platform administrator, data owners, security, and AI governance",
+      "yesCriteria": ["Instructions and topics match the approved use case.", "Knowledge sources, tools, actions, connectors, and authentication are approved and least privileged.", "Published channels, users, environment, DLP controls, and sharing match pilot scope.", "Testing, monitoring, fallback, and owner response are documented."],
+      "evidenceToRetain": ["Agent configuration review keyed to the published version.", "Approved knowledge, action, connector, channel, identity, and audience inventory.", "Test results and approval record."],
+      "verificationSteps": [{"order": 1, "title": "Review the agent", "instruction": "Inspect instructions, topics, knowledge, tools, actions, authentication, and generative settings.", "location": "Microsoft Copilot Studio > selected agent"}, {"order": 2, "title": "Review deployment", "instruction": "Confirm environment, channels, users, sharing, DLP, and connection ownership.", "location": "Copilot Studio and Power Platform admin center"}, {"order": 3, "title": "Retain the decision", "instruction": "Record the published version, tests, owners, exceptions, and approval.", "location": "Customer release record"}],
+      "noRemediation": "Remove or constrain unapproved knowledge, actions, connectors, channels, permissions, or users; retest; publish the approved version; and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed when CopilotStudio is selected.",
+      "publicSources": [{"title": "Microsoft Copilot Studio documentation", "url": "https://learn.microsoft.com/microsoft-copilot-studio/"}],
+      "reviewDate": "2026-09-02"
+    },
+    "AgentBuilder": {
+      "intent": "Confirm the Microsoft 365 Copilot Agent Builder agent's instructions, knowledge sources, capabilities, sharing audience, and owner match the approved scenario.",
+      "whyItMatters": "Instructions, selected knowledge, capabilities, and sharing determine the agent's answer boundary and who can use it.",
+      "whoShouldAnswer": "Agent Builder owner with the knowledge owners, Microsoft 365 administrator, security, and AI governance",
+      "yesCriteria": ["Instructions and starter prompts represent the approved use case.", "Knowledge sources are intended, permission-aware, current, and owned.", "Capabilities and actions are approved for the audience.", "Sharing, testing, ownership, review, and retirement are documented."],
+      "evidenceToRetain": ["Agent configuration and knowledge-source inventory.", "Sharing audience and owner approval.", "Test cases covering expected answers, refusal, and out-of-scope behavior."],
+      "verificationSteps": [{"order": 1, "title": "Review configuration", "instruction": "Inspect name, description, instructions, starter prompts, knowledge, and capabilities.", "location": "Microsoft 365 Copilot Agent Builder > Configure"}, {"order": 2, "title": "Validate permissions and sharing", "instruction": "Confirm sources honor the intended user permissions and the agent is shared only with the approved audience.", "location": "Agent Builder sharing and source permissions"}, {"order": 3, "title": "Test and approve", "instruction": "Run approved positive, negative, and out-of-scope tests and retain the result.", "location": "Customer test and approval record"}],
+      "noRemediation": "Correct instructions, knowledge, capabilities, ownership, or sharing; retest; and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed when AgentBuilder is selected.",
+      "publicSources": [{"title": "Build agents with Agent Builder", "url": "https://learn.microsoft.com/microsoft-365/copilot/extensibility/agent-builder"}],
+      "reviewDate": "2026-09-02"
+    },
+    "SharePointAgents": {
+      "intent": "Confirm each SharePoint agent uses only approved sites and files and is shared only with users whose access matches the pilot boundary.",
+      "whyItMatters": "The agent grounds answers in SharePoint content available through the selected sources and user access boundary.",
+      "whoShouldAnswer": "SharePoint site owner with the SharePoint Administrator, content owners, security, and AI governance",
+      "yesCriteria": ["Selected sites and files are necessary and approved.", "Permissions, sharing, and external access match the scenario.", "Agent instructions, audience, owner, and review cadence are documented.", "Content quality, sensitivity, lifecycle, and removal were reviewed."],
+      "evidenceToRetain": ["Approved source and audience list.", "Site permissions and sharing review.", "Agent configuration, owner, test, and review record."],
+      "verificationSteps": [{"order": 1, "title": "Review sources", "instruction": "Confirm every site and file selected for the agent is required and owned.", "location": "SharePoint agent configuration and target sites"}, {"order": 2, "title": "Review access", "instruction": "Check membership, direct permissions, links, external sharing, and agent access.", "location": "SharePoint admin center and site permissions"}, {"order": 3, "title": "Test with representative users", "instruction": "Confirm expected access and refusal for users inside and outside the approved boundary.", "location": "Customer-approved pilot test"}],
+      "noRemediation": "Remove unintended sources or access, correct sharing and instructions, retest with representative users, and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed when SharePointAgents is selected.",
+      "publicSources": [{"title": "Manage access for agents in SharePoint", "url": "https://learn.microsoft.com/sharepoint/manage-access-agents-in-sharepoint"}],
+      "reviewDate": "2026-09-02"
+    },
+    "Foundry": {
+      "intent": "Confirm the Microsoft Foundry agent's model, instructions, tools, data, identity, network, deployment, and monitoring match the approved workload design.",
+      "whyItMatters": "A Foundry agent can combine models, tools, identities, and data services across a deployment boundary.",
+      "whoShouldAnswer": "Foundry project owner with application, identity, data, network, security, and AI governance owners",
+      "yesCriteria": ["Model and deployment choices are approved for the scenario.", "Instructions, tools, data connections, identity, and permissions are least privileged.", "Network, secrets, content safety, logging, and environment separation meet customer policy.", "Evaluation, monitoring, rollback, and release ownership are documented."],
+      "evidenceToRetain": ["Versioned agent and deployment configuration.", "Identity, permission, data, tool, model, and network review.", "Evaluation, safety test, monitoring, and release approval record."],
+      "verificationSteps": [{"order": 1, "title": "Review project assets", "instruction": "Inspect the agent, model deployment, instructions, tools, knowledge, connections, and identity.", "location": "Microsoft Foundry portal > project > Agents"}, {"order": 2, "title": "Review platform controls", "instruction": "Confirm network, secrets, permissions, content safety, logging, and environment boundaries.", "location": "Foundry project and linked Azure resources"}, {"order": 3, "title": "Evaluate and approve", "instruction": "Run customer-approved quality, safety, security, and rollback tests against the release candidate.", "location": "Evaluation and release pipeline"}],
+      "noRemediation": "Correct unapproved model, tool, data, identity, network, secret, safety, or deployment settings; reevaluate; and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed when Foundry is selected.",
+      "publicSources": [{"title": "Microsoft Foundry agents overview", "url": "https://learn.microsoft.com/azure/ai-foundry/agents/overview"}],
+      "reviewDate": "2026-09-02"
+    },
+    "CustomProCode": {
+      "intent": "Confirm the custom-engine agent's code, hosting, identity, permissions, APIs, tools, data, secrets, deployment, and observability meet the approved design.",
+      "whyItMatters": "Custom code makes the customer responsible for controls that a managed builder may otherwise provide.",
+      "whoShouldAnswer": "Application owner and engineering lead with identity, data, security, operations, and AI governance owners",
+      "yesCriteria": ["Code and dependencies passed the customer's review and release controls.", "Authentication, on-behalf-of flows, app-only access, permissions, APIs, tools, and data are approved and least privileged.", "Secrets, network, hosting, logging, privacy, and supply-chain controls meet policy.", "Testing, monitoring, incident response, rollback, and retirement are release-ready."],
+      "evidenceToRetain": ["Approved architecture and threat model.", "Source, dependency, identity, API, permission, tool, data, secret, and hosting review.", "Build, test, deployment, monitoring, and approval records."],
+      "verificationSteps": [{"order": 1, "title": "Review architecture and identity", "instruction": "Map components, authentication, on-behalf-of (OBO), app-only access, permissions, APIs, tools, data, and trust boundaries.", "location": "Architecture and threat model"}, {"order": 2, "title": "Review delivery controls", "instruction": "Confirm source review, dependencies, secrets, network, hosting, logging, and deployment protections.", "location": "Repository, CI/CD, app registration, and hosting platform"}, {"order": 3, "title": "Validate operations", "instruction": "Run approved functional, security, privacy, failure, rollback, and monitoring tests.", "location": "Customer test and release pipeline"}],
+      "noRemediation": "Close architecture, code, dependency, identity, permission, secret, network, test, or operating gaps; redeploy the approved build; and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed when CustomProCode is selected.",
+      "publicSources": [{"title": "Custom engine agents for Microsoft 365", "url": "https://learn.microsoft.com/microsoft-365/copilot/extensibility/overview-custom-engine-agent"}],
+      "reviewDate": "2026-09-02"
+    },
+    "ExternalRegistrySync": {
+      "intent": "Confirm that every external registry source, synchronization boundary, owner, identity, and lifecycle action is approved and produces an explainable Agent 365 catalog record.",
+      "whyItMatters": "A registry sync can add or update many agent records; an incorrect source, scope, or lifecycle mapping can create incomplete or misleading inventory.",
+      "whoShouldAnswer": "Agent registry administrator with the source-platform owner, identity owner, security, and AI governance",
+      "yesCriteria": ["The source registry and synchronization scope are approved.", "Read identity, permissions, endpoints, credentials, and ownership are documented and least privileged.", "Field mapping, deduplication, failure handling, update cadence, and removal behavior are tested.", "Synced records can be reconciled to the source without treating the catalog as complete inventory."],
+      "evidenceToRetain": ["Approved source and sync-scope record.", "Identity, permission, endpoint, mapping, cadence, and lifecycle configuration.", "Test reconciliation including create, update, duplicate, failure, and removal cases."],
+      "verificationSteps": [{"order": 1, "title": "Approve the source", "instruction": "Confirm the registry, owner, endpoint, read identity, permission, and agent population.", "location": "Source registry and Agent 365 connection design"}, {"order": 2, "title": "Review mapping and lifecycle", "instruction": "Validate field mapping, deduplication, cadence, error handling, updates, and retirement behavior.", "location": "Registry sync configuration"}, {"order": 3, "title": "Reconcile results", "instruction": "Compare a customer-approved sample of source agents with catalog records and resolve differences.", "location": "Source registry and Microsoft 365 agent registry"}],
+      "noRemediation": "Correct source scope, identity, mapping, deduplication, errors, or lifecycle behavior; reconcile the catalog; and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed when ExternalRegistrySync is selected.",
+      "publicSources": [{"title": "Connect existing agents to Microsoft Agent 365", "url": "https://learn.microsoft.com/microsoft-agent-365/connect-existing-agents"}],
+      "reviewDate": "2026-09-02"
+    },
+    "LocalAgents": {
+      "intent": "Confirm that local agents on endpoints are intentionally in scope and that discovery, endpoint prerequisites, runtime protection, containment, and privacy decisions are approved.",
+      "whyItMatters": "Local agents run on devices and may use local tools, files, credentials, or processes outside cloud-agent controls.",
+      "whoShouldAnswer": "Endpoint security owner with device, application, privacy, security operations, and AI governance owners",
+      "yesCriteria": ["Supported endpoints and local agent populations are defined.", "Defender for Endpoint prerequisites and discovery or runtime protection choices are approved.", "Local files, tools, processes, credentials, and user context are within the approved boundary.", "Monitoring, containment, privacy, rollback, and removal paths were tested."],
+      "evidenceToRetain": ["Approved endpoint and agent scope.", "Endpoint prerequisite and protection configuration review.", "Runtime, containment, privacy, test, and owner records."],
+      "verificationSteps": [{"order": 1, "title": "Define endpoint scope", "instruction": "Identify supported devices, local agents, owners, users, and excluded populations.", "location": "Endpoint inventory and local agent discovery"}, {"order": 2, "title": "Review endpoint controls", "instruction": "Confirm Defender for Endpoint state, runtime protection, local access, privacy, and monitoring decisions.", "location": "Microsoft Defender portal and endpoint security policy"}, {"order": 3, "title": "Test containment", "instruction": "Exercise the approved process to stop the agent, isolate activity, preserve required evidence, and remove access.", "location": "Customer endpoint test or tabletop"}],
+      "noRemediation": "Correct endpoint scope, prerequisites, runtime protection, local access, privacy, or containment gaps; retest; and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed when LocalAgents is selected.",
+      "publicSources": [{"title": "Microsoft Defender security for AI", "url": "https://learn.microsoft.com/defender-xdr/security-for-ai/defender-security-for-ai"}],
+      "reviewDate": "2026-09-02"
+    },
+    "WorkIQ": {
+      "intent": "Confirm that Work IQ data and tool access, user or agent identity, on-behalf-of behavior, permissions, actions, and human approval match the selected scenario.",
+      "whyItMatters": "Work IQ can ground an agent in work data and tools; unclear identity or action boundaries can expose information or permit actions beyond user intent.",
+      "whoShouldAnswer": "Workload and tool owners with identity, data, security, privacy, and AI governance owners",
+      "yesCriteria": ["Each Work IQ data source and tool is required and owned.", "Delegated, agent identity, and on-behalf-of (OBO) behavior is documented and least privileged.", "Read and action boundaries, confirmation points, and prohibited operations are explicit.", "Audit, monitoring, failure, rollback, and user transparency are approved."],
+      "evidenceToRetain": ["Work IQ data-and-tool inventory.", "Identity, OBO, permission, action, approval, and prohibited-operation mapping.", "Test, monitoring, owner, and approval record."],
+      "verificationSteps": [{"order": 1, "title": "Map data and tools", "instruction": "List each Work IQ data source, tool, action, owner, and business purpose.", "location": "Agent 365 tool configuration and solution design"}, {"order": 2, "title": "Map identity and action", "instruction": "Confirm user, agent, delegated, and OBO context plus permission and confirmation boundaries.", "location": "Identity and tool authorization design"}, {"order": 3, "title": "Test the boundary", "instruction": "Validate expected reads and actions, denied access, confirmation, audit, failure, and rollback.", "location": "Customer-approved pilot test"}],
+      "noRemediation": "Remove or constrain unapproved data, tools, permissions, OBO flows, or actions; add confirmation or monitoring; retest; and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed when WorkIQ is selected.",
+      "publicSources": [{"title": "Microsoft Agent 365 overview", "url": "https://learn.microsoft.com/microsoft-agent-365/overview"}],
+      "reviewDate": "2026-09-02"
+    },
+    "AITeammate": {
+      "intent": "Confirm the AI teammate scenario has explicit work, data, tool, autonomy, human oversight, identity, performance, and escalation boundaries.",
+      "whyItMatters": "A teammate-style agent can participate in ongoing work; unclear delegation or oversight can create incorrect actions, hidden accountability, or excessive access.",
+      "whoShouldAnswer": "Business process owner with the agent owner, affected team lead, identity, data, security, privacy, and AI governance",
+      "yesCriteria": ["Assigned work, users, affected people, tools, data, and prohibited tasks are documented.", "Autonomy, human review, approval, escalation, and stop conditions are explicit.", "Identity, permissions, communications, transparency, and records match customer policy.", "Quality, safety, reliability, workload impact, rollback, and retirement measures are approved."],
+      "evidenceToRetain": ["Approved teammate role and work-boundary definition.", "Data, tool, identity, autonomy, approval, and escalation mapping.", "Scenario tests, scorecard, owner acceptance, and review date."],
+      "verificationSteps": [{"order": 1, "title": "Define the teammate role", "instruction": "List assigned work, users, tools, data, decisions, prohibited tasks, and affected people.", "location": "Customer process and role design"}, {"order": 2, "title": "Set oversight", "instruction": "Define human review, approval, escalation, transparency, monitoring, and stop conditions.", "location": "Agent governance and operating procedure"}, {"order": 3, "title": "Test real workflows", "instruction": "Run approved quality, safety, access, failure, workload, rollback, and handoff scenarios.", "location": "Customer pilot test and scorecard"}],
+      "noRemediation": "Narrow the role, data, tools, permissions, or autonomy; add human oversight and escalation; retest; and rerun.",
+      "notApplicableAllowed": false,
+      "notApplicableGuidance": "Not applicable is not allowed when AITeammate is selected.",
+      "publicSources": [{"title": "Microsoft Agent 365 overview", "url": "https://learn.microsoft.com/microsoft-agent-365/overview"}],
+      "reviewDate": "2026-09-02"
+    }
+  }
+}

@@ -5,7 +5,7 @@ category: "PowerShell"
 summary: "Run a read-only Agent 365 technical pre-flight and generate self-contained HTML and JSON reports."
 author:
   - "Microsoft FastTrack"
-version: 1.2.1
+version: 1.3.0
 published: 2026-09-01
 updated: 2026-09-02
 tags:
@@ -132,6 +132,16 @@ rule's configured `ActionRequired` or `Blocker` status. `NotApplicable` is accep
 that explicitly allow it and requires a justification. Evidence never overrides an automated
 Blocker, ActionRequired, NotAuthorized, or Error result; the tenant or collection issue must be
 resolved and recollected.
+
+Every Answers Builder item includes **Review guidance**. Open it before answering to see what the
+decision means, why it matters, who should confirm it, the specific `Yes` criteria, evidence to
+retain, verification steps, `No` remediation, and the rule for `NotApplicable`. The guidance is
+stored in the versioned public `config/guidance.v1.json` contract and is also included in print and
+no-JavaScript output. Microsoft Learn links support the in-report steps rather than replacing them.
+
+Guidance helps the accountable customer reviewer make and document a defensible decision. It does
+not approve the control, infer an answer, replace customer policy, or change the current verdict.
+Only a valid answers file supplied on a rerun can apply manual evidence.
 
 Answers schema `1.1` adds rule and profile gates, timestamps, and N/A justification while accepting
 legacy `1.0` files. The sample includes every static gate and every supported stable profile ID.
@@ -486,6 +496,8 @@ progressive disclosure for detailed findings:
 - Use the Readiness Command Center and **Open Path to Ready** to see exactly what prevents passing.
 - Use the local-only checklist to plan work without changing the official verdict.
 - Build and download a validated answers JSON file in memory; no evidence is sent over a network.
+- Open **Review guidance** beside any answer to use the acceptance criteria, evidence checklist, and
+  verification steps without leaving the report.
 - Copy the safe rerun command or download the remediation checklist for offline planning.
 - Search across status, title, ID, area, pillar, expected and observed evidence, remediation, roles,
   and permissions. Press `/` to focus search and `Escape` to clear it.
@@ -535,9 +547,9 @@ shows:
   advisory, or explicitly permitted as not applicable.
 - **Other changes:** the status changed without meeting either condition above.
 
-The current report schema is `1.1`. Baseline comparison accepts report schema `1.0` or `1.1` so
-earlier results can be carried forward. It detects status drift; it does not prove that configuration
-changes caused the drift.
+The current report schema is `1.2`. Baseline comparison accepts report schema `1.0`, `1.1`, or `1.2`
+so earlier results can be carried forward. It detects status drift; it does not prove that
+configuration changes caused the drift.
 
 ## Troubleshooting
 

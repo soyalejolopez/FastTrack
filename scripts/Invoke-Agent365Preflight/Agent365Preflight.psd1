@@ -1,6 +1,6 @@
 @{
     RootModule = 'Agent365Preflight.psm1'
-    ModuleVersion = '1.2.1'
+    ModuleVersion = '1.3.0'
     GUID = '87c4af68-5403-4cf6-8aca-0d649c9e5ca5'
     Author = 'Microsoft FastTrack'
     CompanyName = 'Microsoft'
@@ -23,7 +23,7 @@
             Tags = @('Agent365', 'Microsoft365', 'Readiness', 'Preflight')
             ProjectUri = 'https://github.com/microsoft/FastTrack'
             LicenseUri = 'https://github.com/microsoft/FastTrack/blob/master/LICENSE-CODE'
-            ReleaseNotes = 'Corrects customer-facing pass-gate and exit-code documentation.'
+            ReleaseNotes = 'Adds structured in-report guidance for every manually attestable gate.'
         }
     }
 }

@@ -9,6 +9,8 @@
     "GeneratedAtUtc",
     "RuleSetVersion",
     "RuleReviewDate",
+    "GuidanceVersion",
+    "GuidanceReviewDate",
     "Stage",
     "Profiles",
     "Collectors",
@@ -30,7 +32,7 @@
   ],
   "properties": {
     "SchemaVersion": {
-      "const": "1.1"
+      "const": "1.2"
     },
     "ToolVersion": {
       "type": "string",
@@ -44,6 +46,14 @@
       "type": "string"
     },
     "RuleReviewDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "GuidanceVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "GuidanceReviewDate": {
       "type": "string",
       "format": "date"
     },
@@ -238,7 +248,10 @@
       "type": "array"
     },
     "ManuallyAttestableGates": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/manuallyAttestableGate"
+      }
     },
     "Rerun": {
       "type": "object",
@@ -374,6 +387,107 @@
         }
       }
     },
+    "guidance": {
+      "type": "object",
+      "required": [
+        "Intent",
+        "WhyItMatters",
+        "WhoShouldAnswer",
+        "YesCriteria",
+        "EvidenceToRetain",
+        "VerificationSteps",
+        "NoRemediation",
+        "NotApplicableAllowed",
+        "NotApplicableGuidance",
+        "PublicSources",
+        "ReviewDate",
+        "SearchText"
+      ],
+      "properties": {
+        "Intent": { "type": "string", "minLength": 1 },
+        "WhyItMatters": { "type": "string", "minLength": 1 },
+        "WhoShouldAnswer": { "type": "string", "minLength": 1 },
+        "YesCriteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "EvidenceToRetain": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "VerificationSteps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["Order", "Title", "Instruction", "Location"],
+            "properties": {
+              "Order": { "type": "integer", "minimum": 1 },
+              "Title": { "type": "string", "minLength": 1 },
+              "Instruction": { "type": "string", "minLength": 1 },
+              "Location": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "NoRemediation": { "type": "string", "minLength": 1 },
+        "NotApplicableAllowed": { "type": "boolean" },
+        "NotApplicableGuidance": { "type": "string", "minLength": 1 },
+        "PublicSources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["Title", "Url"],
+            "properties": {
+              "Title": { "type": "string", "minLength": 1 },
+              "Url": {
+                "type": "string",
+                "pattern": "^https://learn\\.microsoft\\.com/"
+              }
+            }
+          }
+        },
+        "ReviewDate": { "type": "string", "format": "date" },
+        "SearchText": { "type": "string", "minLength": 1 }
+      }
+    },
+    "manuallyAttestableGate": {
+      "type": "object",
+      "required": [
+        "Id",
+        "Title",
+        "Status",
+        "Required",
+        "AllowNotApplicable",
+        "NoStatus",
+        "EvidenceNeeded",
+        "DocsUrl",
+        "Profiles",
+        "RequiredRole",
+        "Observed",
+        "IsSensitive",
+        "Guidance"
+      ],
+      "properties": {
+        "Id": { "type": "string", "pattern": "^A365-(?:[A-Z]+-[0-9]{3}|PROFILE-[A-Z0-9]+)$" },
+        "Title": { "type": "string" },
+        "Status": {
+          "enum": ["Passed", "Blocker", "ActionRequired", "Advisory", "ManualValidation", "NotApplicable", "NotAuthorized", "Error"]
+        },
+        "Required": { "type": "boolean" },
+        "AllowNotApplicable": { "type": "boolean" },
+        "NoStatus": { "enum": ["Blocker", "ActionRequired"] },
+        "EvidenceNeeded": { "type": "string" },
+        "DocsUrl": { "type": "string", "pattern": "^https://learn\\.microsoft\\.com/" },
+        "Profiles": { "type": "array", "items": { "type": "string" } },
+        "RequiredRole": { "type": "string" },
+        "Observed": {},
+        "IsSensitive": { "type": "boolean" },
+        "Guidance": { "$ref": "#/$defs/guidance" }
+      }
+    },
     "result": {
       "type": "object",
       "required": [
@@ -457,7 +571,22 @@
           "type": "boolean"
         },
         "AttestationDefinition": {
-          "type": ["object", "null"]
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["Required", "AllowNotApplicable", "NoStatus", "EvidenceNeeded", "RequiredRole", "Guidance", "Source"],
+              "properties": {
+                "Required": { "type": "boolean" },
+                "AllowNotApplicable": { "type": "boolean" },
+                "NoStatus": { "enum": ["Blocker", "ActionRequired"] },
+                "EvidenceNeeded": { "type": "string" },
+                "RequiredRole": { "type": "string" },
+                "Guidance": { "$ref": "#/$defs/guidance" },
+                "Source": { "type": "string" }
+              }
+            }
+          ]
         },
         "Attestation": {
           "type": ["object", "null"]
