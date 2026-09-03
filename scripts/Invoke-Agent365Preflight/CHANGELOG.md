@@ -2,6 +2,11 @@
 
 All notable changes to this resource are documented in this file.
 
+## 1.2.1 - 2026-09-02
+
+- Corrected the ActionRequired and exit-code documentation to match the enforced pass gates.
+- Added a regression check that prevents customer-facing pass-gate language from drifting.
+
 ## 1.2.0 - 2026-09-02
 
 - Made every ActionRequired result a pass gate for Pilot and Production.

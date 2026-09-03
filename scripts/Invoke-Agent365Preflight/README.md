@@ -5,7 +5,7 @@ category: "PowerShell"
 summary: "Run a read-only Agent 365 technical pre-flight and generate self-contained HTML and JSON reports."
 author:
   - "Microsoft FastTrack"
-version: 1.2.0
+version: 1.2.1
 published: 2026-09-01
 updated: 2026-09-02
 tags:
@@ -454,7 +454,7 @@ Passing Pilot remains `Ready for pilot`; passing Production remains
 | --- | --- |
 | `Passed` | Collected evidence met the rule as written. |
 | `Blocker` | The selected stage must not proceed until the condition is resolved. |
-| `ActionRequired` | Follow-up is required, but the item does not automatically block the overall verdict. |
+| `ActionRequired` | The finding must be resolved before passing. Until then, the overall verdict is `Incomplete`. |
 | `Advisory` | Review the observation and decide whether it affects the pilot. |
 | `ManualValidation` | A person must validate a condition that the supported read interfaces cannot prove. |
 | `NotApplicable` | The collector, profile, cloud, or scenario does not apply to this run. It is not a pass. |
@@ -473,9 +473,9 @@ Passing Pilot remains `Ready for pilot`; passing Production remains
 
 | Exit code | Meaning |
 | --- | --- |
-| `0` | No blockers and collection is complete enough to issue a pilot or technical verdict. |
+| `0` | All pass gates are clear: zero Blocker, ActionRequired, NotAuthorized, Error, and unresolved required manual gates. |
 | `1` | One or more blockers were found. |
-| `2` | Authorization, required manual answers, or collection gaps make the result incomplete. |
+| `2` | One or more ActionRequired, NotAuthorized, Error, unresolved required manual gates, or other collection gaps prevent passing. |
 | `3` | Invalid execution, input, or unrecoverable startup failure. |
 
 ## Interactive report experience

@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:ToolVersion = '1.2.0'
+$script:ToolVersion = '1.2.1'
 $script:ModuleRoot = $PSScriptRoot
 $script:RulesPath = Join-Path $PSScriptRoot 'config\rules.v1.json'
 $script:SkuCatalogPath = Join-Path $PSScriptRoot 'config\sku-catalog.v1.json'

@@ -370,6 +370,21 @@ Describe 'Passing and manual evidence contract' {
             Should -BeTrue
     }
 
+    It 'keeps customer-facing ActionRequired and exit-code language aligned with pass gates' {
+        $readme = Get-Content -LiteralPath (Join-Path $resourceRoot 'README.md') -Raw
+        $customerText = @(
+            $readme
+            (Get-Content -LiteralPath (Join-Path $resourceRoot 'Invoke-Agent365Preflight.ps1') -Raw)
+            (Get-Content -LiteralPath (Join-Path $resourceRoot 'Private\ReportRenderer.ps1') -Raw)
+            (Get-Content -LiteralPath (Join-Path $resourceRoot 'config\rules.v1.json') -Raw)
+        ) -join [Environment]::NewLine
+
+        $readme | Should -Match '\| `ActionRequired` \| The finding must be resolved before passing\. Until then, the overall verdict is `Incomplete`\.'
+        $readme | Should -Match '\| `0` \| All pass gates are clear: zero Blocker, ActionRequired, NotAuthorized, Error, and unresolved required manual gates\.'
+        $readme | Should -Match '\| `2` \| One or more ActionRequired, NotAuthorized, Error, unresolved required manual gates, or other collection gaps prevent passing\.'
+        $customerText | Should -Not -Match 'does not automatically block|before or during (the )?pilot|no blockers (is|are) enough|No blockers and collection is complete enough'
+    }
+
     It 'rejects whitespace-only required evidence in schema validation' {
         $answers = Get-Content -LiteralPath $answersPath -Raw | ConvertFrom-Json -Depth 100
         ($answers.answers | Where-Object id -eq 'A365-ENTRA-005').owner = '   '
