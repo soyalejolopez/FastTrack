@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:ToolVersion = '1.1.5'
+$script:ToolVersion = '1.2.0'
 $script:ModuleRoot = $PSScriptRoot
 $script:RulesPath = Join-Path $PSScriptRoot 'config\rules.v1.json'
 $script:SkuCatalogPath = Join-Path $PSScriptRoot 'config\sku-catalog.v1.json'
@@ -1736,14 +1736,8 @@ function New-A365ProfileResult {
         [string]$RuleReviewDate
     )
 
-    $stableProfileName = [System.Text.RegularExpressions.Regex]::Replace(
-        $Profile.ToUpperInvariant(),
-        '[^A-Z0-9]',
-        ''
-    )
-
     return [pscustomobject][ordered]@{
-        Id = "A365-PROFILE-$stableProfileName"
+        Id = Get-A365ProfileResultId -Profile $Profile
         Title = "$Profile workload boundary"
         Pillar = 'Govern'
         Area = 'Selected profiles'
@@ -1761,6 +1755,165 @@ function New-A365ProfileResult {
         RuleReviewDate = $RuleReviewDate
         Details = $null
         IsSensitive = $false
+    }
+}
+
+function Get-A365ProfileResultId {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Profile
+    )
+
+    $stableProfileName = [System.Text.RegularExpressions.Regex]::Replace(
+        $Profile.ToUpperInvariant(),
+        '[^A-Z0-9]',
+        ''
+    )
+    return "A365-PROFILE-$stableProfileName"
+}
+
+function Get-A365AttestationDefinitions {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Rules,
+
+        [Parameter(Mandatory)]
+        [string[]]$Profiles,
+
+        [Parameter()]
+        [switch]$IncludeAllProfiles
+    )
+
+    $definitions = [System.Collections.Generic.List[object]]::new()
+    foreach ($manual in @($Rules.manualAttestations)) {
+        $definitions.Add([pscustomobject][ordered]@{
+            Id = $manual.id
+            Title = $manual.question
+            Required = [bool]$manual.required
+            AllowNotApplicable = [bool](Get-A365Property -InputObject $manual -Name 'allowNotApplicable' -Default $false)
+            NoStatus = [string](Get-A365Property -InputObject $manual -Name 'noStatus' -Default 'Blocker')
+            EvidenceNeeded = [string](Get-A365Property -InputObject $manual -Name 'evidenceNeeded' -Default $manual.remediation)
+            DocsUrl = $manual.docsUrl
+            Profiles = @($manual.profiles)
+            Source = 'ManualControl'
+        })
+    }
+
+    foreach ($rule in @($Rules.checks)) {
+        $attestation = Get-A365Property -InputObject $rule -Name 'manualAttestation' -Default $null
+        if ($null -eq $attestation -or -not [bool](Get-A365Property -InputObject $attestation -Name 'allowed' -Default $false)) {
+            continue
+        }
+        $definitions.Add([pscustomobject][ordered]@{
+            Id = $rule.id
+            Title = $rule.title
+            Required = [bool](Get-A365Property -InputObject $attestation -Name 'required' -Default $true)
+            AllowNotApplicable = [bool](Get-A365Property -InputObject $attestation -Name 'allowNotApplicable' -Default $false)
+            NoStatus = [string](Get-A365Property -InputObject $attestation -Name 'noStatus' -Default 'ActionRequired')
+            EvidenceNeeded = [string](Get-A365Property -InputObject $attestation -Name 'evidenceNeeded' -Default $rule.remediation)
+            DocsUrl = $rule.docsUrl
+            Profiles = @($rule.profiles)
+            Source = 'ApprovedRule'
+        })
+    }
+
+    $profileNames = if ($IncludeAllProfiles) {
+        @($Rules.profileGuidance.PSObject.Properties.Name)
+    }
+    else {
+        @($Profiles | Where-Object { $_ -ne 'ControlPlane' })
+    }
+    foreach ($profile in $profileNames) {
+        $docsProperty = $Rules.profileGuidance.PSObject.Properties[$profile]
+        $definitions.Add([pscustomobject][ordered]@{
+            Id = Get-A365ProfileResultId -Profile $profile
+            Title = "$profile workload boundary"
+            Required = $true
+            AllowNotApplicable = $false
+            NoStatus = 'ActionRequired'
+            EvidenceNeeded = "Record the accountable workload owner and reference the approved $profile identity, data, tool, connector, and deployment boundary."
+            DocsUrl = if ($docsProperty) { [string]$docsProperty.Value } else { 'https://learn.microsoft.com/microsoft-agent-365/' }
+            Profiles = @($profile)
+            Source = 'SelectedProfile'
+        })
+    }
+
+    return $definitions.ToArray()
+}
+
+function Test-A365AnswersInput {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Answers,
+
+        [Parameter(Mandatory)]
+        [object[]]$Definitions,
+
+        [Parameter(Mandatory)]
+        [object]$Rules
+    )
+
+    $schemaVersion = [string](Get-A365Property -InputObject $Answers -Name 'schemaVersion' -Default '')
+    if ($schemaVersion -notin @('1.0', '1.1')) {
+        throw 'Answers file schemaVersion must be 1.0 or 1.1.'
+    }
+    if ($null -eq $Answers.PSObject.Properties['answers']) {
+        throw 'Answers file must contain an answers array.'
+    }
+
+    [object[]]$answerItems = @(Get-A365Property -InputObject $Answers -Name 'answers' -Default @())
+    $duplicateAnswer = $answerItems |
+        Group-Object id |
+        Where-Object Count -gt 1 |
+        Select-Object -First 1
+    if ($duplicateAnswer) {
+        throw "Answers file contains a duplicate id: $($duplicateAnswer.Name)"
+    }
+
+    $definitionById = @{}
+    foreach ($definition in $Definitions) {
+        $definitionById[[string]$definition.Id] = $definition
+    }
+    $automatedRuleIds = @($Rules.checks.id | Where-Object { -not $definitionById.ContainsKey([string]$_) })
+
+    foreach ($answer in $answerItems) {
+        $answerId = [string](Get-A365Property -InputObject $answer -Name 'id' -Default '')
+        if (-not $definitionById.ContainsKey($answerId)) {
+            if ($answerId -in $automatedRuleIds) {
+                throw "Answers file cannot attest automated-only rule: $answerId"
+            }
+            throw "Answers file contains an unknown attestation id: $answerId"
+        }
+
+        $definition = $definitionById[$answerId]
+        $answerValue = [string](Get-A365Property -InputObject $answer -Name 'answer' -Default '')
+        if ($answerValue -notin @('Yes', 'No', 'NotApplicable')) {
+            throw "Answers file contains an invalid answer for $answerId."
+        }
+        if ($answerValue -eq 'Yes') {
+            if ([string]::IsNullOrWhiteSpace([string](Get-A365Property -InputObject $answer -Name 'owner' -Default ''))) {
+                throw "Yes evidence for $answerId requires an accountable owner or role."
+            }
+            if ([string]::IsNullOrWhiteSpace([string](Get-A365Property -InputObject $answer -Name 'evidenceReference' -Default ''))) {
+                throw "Yes evidence for $answerId requires an evidence reference."
+            }
+        }
+        if ($answerValue -eq 'NotApplicable') {
+            if (-not [bool]$definition.AllowNotApplicable) {
+                throw "NotApplicable is not permitted for $answerId."
+            }
+            if ([string]::IsNullOrWhiteSpace([string](Get-A365Property -InputObject $answer -Name 'justification' -Default ''))) {
+                throw "NotApplicable evidence for $answerId requires a justification."
+            }
+        }
+
+        $answeredAtUtc = [string](Get-A365Property -InputObject $answer -Name 'answeredAtUtc' -Default '')
+        if ($answeredAtUtc) {
+            $parsedDate = [DateTimeOffset]::MinValue
+            if (-not [DateTimeOffset]::TryParse($answeredAtUtc, [ref]$parsedDate)) {
+                throw "answeredAtUtc for $answerId must be a valid timestamp."
+            }
+        }
     }
 }
 
@@ -2135,13 +2288,8 @@ function Get-A365Evaluation {
         else {
             $requiredAttestation = [bool]$attestation.required
             $applicability = if ($requiredAttestation) { 'Required manual attestation' } else { 'Optional manual attestation' }
-            $status = switch ($answerValue) {
-                'Yes' { 'Passed' }
-                'No' { if ($requiredAttestation) { 'Blocker' } else { 'ActionRequired' } }
-                'NotApplicable' { 'NotApplicable' }
-                default { 'ManualValidation' }
-            }
-            $observed = if ($answered) { "Answer: $answerValue" } else { 'Required answer was not supplied.' }
+            $status = 'ManualValidation'
+            $observed = 'Customer-controlled validation and evidence are required.'
         }
 
         $manualAttestations.Add([pscustomobject][ordered]@{
@@ -2183,6 +2331,76 @@ function Get-A365Evaluation {
         })
     }
 
+    [object[]]$definitions = @(Get-A365AttestationDefinitions -Rules $Rules -Profiles $Profiles)
+    $definitionById = @{}
+    foreach ($definition in $definitions) {
+        $definitionById[[string]$definition.Id] = $definition
+    }
+    $answerById = @{}
+    foreach ($answerItem in $answerList) {
+        $answerById[[string]$answerItem.id] = $answerItem
+    }
+
+    foreach ($result in $results.ToArray()) {
+        $definition = $definitionById[[string]$result.Id]
+        $manualAttestable = $null -ne $definition
+        $result | Add-Member -NotePropertyName ManualAttestable -NotePropertyValue $manualAttestable -Force
+        $result | Add-Member -NotePropertyName AttestationRequired -NotePropertyValue $(if ($manualAttestable) { [bool]$definition.Required } else { $false }) -Force
+
+        if (-not $manualAttestable) {
+            $result | Add-Member -NotePropertyName AttestationDefinition -NotePropertyValue $null -Force
+            $result | Add-Member -NotePropertyName Attestation -NotePropertyValue $null -Force
+            continue
+        }
+
+        $answer = $answerById[[string]$result.Id]
+        $answerValue = [string](Get-A365Property -InputObject $answer -Name 'answer' -Default '')
+        $baseStatus = [string]$result.Status
+        $applied = $false
+        if ($baseStatus -eq 'ManualValidation' -and $answerValue) {
+            switch ($answerValue) {
+                'Yes' {
+                    $result.Status = 'Passed'
+                    $applied = $true
+                }
+                'No' {
+                    $result.Status = [string]$definition.NoStatus
+                    $applied = $true
+                }
+                'NotApplicable' {
+                    $result.Status = 'NotApplicable'
+                    $applied = $true
+                }
+            }
+        }
+
+        $result | Add-Member -NotePropertyName AttestationDefinition -NotePropertyValue ([pscustomobject][ordered]@{
+            Required = [bool]$definition.Required
+            AllowNotApplicable = [bool]$definition.AllowNotApplicable
+            NoStatus = [string]$definition.NoStatus
+            EvidenceNeeded = [string]$definition.EvidenceNeeded
+            Source = [string]$definition.Source
+        }) -Force
+        $result | Add-Member -NotePropertyName Attestation -NotePropertyValue ([pscustomobject][ordered]@{
+            Submitted = $null -ne $answer
+            Answer = if ($answerValue) { $answerValue } else { $null }
+            Owner = Get-A365Property -InputObject $answer -Name 'owner' -Default $null
+            EvidenceReference = Get-A365Property -InputObject $answer -Name 'evidenceReference' -Default $null
+            Notes = Get-A365Property -InputObject $answer -Name 'notes' -Default $null
+            AnsweredAtUtc = Get-A365Property -InputObject $answer -Name 'answeredAtUtc' -Default $null
+            Justification = Get-A365Property -InputObject $answer -Name 'justification' -Default $null
+            Applied = $applied
+            PreservedObserved = $result.Observed
+        }) -Force
+    }
+
+    foreach ($manualState in $manualAttestations) {
+        $manualResult = @($results | Where-Object Id -eq $manualState.Id) | Select-Object -First 1
+        if ($manualResult) {
+            $manualState.Status = $manualResult.Status
+        }
+    }
+
     return [pscustomobject]@{
         Results = $results.ToArray()
         ManualAttestations = $manualAttestations.ToArray()
@@ -2215,40 +2433,80 @@ function Get-A365Coverage {
     return [pscustomobject]$coverage
 }
 
-function Get-A365Verdict {
+function Get-A365PassCriteria {
     param(
         [Parameter(Mandatory)]
         [AllowEmptyCollection()]
-        [object[]]$Results,
+        [object[]]$Results
+    )
 
+    $blockerCount = @($Results | Where-Object Status -eq 'Blocker').Count
+    $actionRequiredCount = @($Results | Where-Object Status -eq 'ActionRequired').Count
+    $notAuthorizedCount = @($Results | Where-Object Status -eq 'NotAuthorized').Count
+    $errorCount = @($Results | Where-Object Status -eq 'Error').Count
+    $requiredManualUnresolvedCount = @(
+        $Results |
+            Where-Object {
+                $_.Status -eq 'ManualValidation' -and
+                [bool](Get-A365Property -InputObject $_ -Name 'ManualAttestable' -Default $false) -and
+                [bool](Get-A365Property -InputObject $_ -Name 'AttestationRequired' -Default $false)
+            }
+    ).Count
+    $isSatisfied = (
+        $blockerCount -eq 0 -and
+        $actionRequiredCount -eq 0 -and
+        $notAuthorizedCount -eq 0 -and
+        $errorCount -eq 0 -and
+        $requiredManualUnresolvedCount -eq 0
+    )
+
+    $summary = if ($isSatisfied) {
+        'All required pass gates are satisfied. Advisories remain for customer review.'
+    }
+    else {
+        "$blockerCount blocker(s), $actionRequiredCount required action(s), $notAuthorizedCount authorization gap(s), $errorCount collection error(s), and $requiredManualUnresolvedCount unresolved required manual gate(s) prevent passing."
+    }
+
+    return [pscustomobject][ordered]@{
+        BlockerCount = $blockerCount
+        ActionRequiredCount = $actionRequiredCount
+        NotAuthorizedCount = $notAuthorizedCount
+        ErrorCount = $errorCount
+        RequiredManualUnresolvedCount = $requiredManualUnresolvedCount
+        IsSatisfied = $isSatisfied
+        Summary = $summary
+    }
+}
+
+function Get-A365Verdict {
+    param(
         [Parameter(Mandatory)]
-        [AllowEmptyCollection()]
-        [object[]]$ManualAttestations,
+        [object]$PassCriteria,
 
         [Parameter(Mandatory)]
         [ValidateSet('Pilot', 'Production')]
         [string]$Stage
     )
 
-    $blockerCount = @($Results | Where-Object Status -eq 'Blocker').Count
-    $actionCount = @($Results | Where-Object Status -eq 'ActionRequired').Count
-    $authorizationGapCount = @($Results | Where-Object Status -eq 'NotAuthorized').Count
-    $errorCount = @($Results | Where-Object Status -eq 'Error').Count
-    $unansweredRequired = @($ManualAttestations | Where-Object { $_.Required -and -not $_.Answered -and $_.Status -ne 'NotApplicable' }).Count
+    $blockerCount = [int]$PassCriteria.BlockerCount
+    $actionCount = [int]$PassCriteria.ActionRequiredCount
+    $authorizationGapCount = [int]$PassCriteria.NotAuthorizedCount
+    $errorCount = [int]$PassCriteria.ErrorCount
+    $unansweredRequired = [int]$PassCriteria.RequiredManualUnresolvedCount
 
     if ($blockerCount -gt 0) {
         $label = 'Blocked'
         $summary = "$blockerCount blocking condition(s) must be resolved before the selected stage."
         $exitCode = 1
     }
-    elseif ($authorizationGapCount -gt 0 -or $errorCount -gt 0 -or $unansweredRequired -gt 0) {
+    elseif ($actionCount -gt 0 -or $authorizationGapCount -gt 0 -or $errorCount -gt 0 -or $unansweredRequired -gt 0) {
         $label = 'Incomplete'
-        $summary = "Evidence is incomplete: $authorizationGapCount authorization gap(s), $errorCount collection error(s), and $unansweredRequired unanswered required attestation(s)."
+        $summary = "Evidence is incomplete: $actionCount required action(s), $authorizationGapCount authorization gap(s), $errorCount collection error(s), and $unansweredRequired unresolved required manual gate(s)."
         $exitCode = 2
     }
     elseif ($Stage -eq 'Pilot') {
         $label = 'Ready for pilot'
-        $summary = "No technical blockers were found. Address action items and complete remaining manual validation before or during the controlled pilot."
+        $summary = 'All required pass gates are satisfied. Review nonblocking advisories before and during the controlled pilot.'
         $exitCode = 0
     }
     else {
@@ -2265,6 +2523,143 @@ function Get-A365Verdict {
         AuthorizationGapCount = $authorizationGapCount
         ExitCode = $exitCode
     }
+}
+
+function Get-A365PathToReady {
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Results,
+
+        [Parameter(Mandatory)]
+        [object]$PassCriteria
+    )
+
+    $items = [System.Collections.Generic.List[object]]::new()
+    $phaseCatalog = @(
+        [pscustomobject]@{ Id = 'blockers'; Title = 'Resolve blockers'; Description = 'Correct conditions that prevent the selected stage.'; Priority = 1 }
+        [pscustomobject]@{ Id = 'collection'; Title = 'Restore evidence collection'; Description = 'Fix permissions, roles, and technical collection errors.'; Priority = 2 }
+        [pscustomobject]@{ Id = 'actions'; Title = 'Complete required actions'; Description = 'Apply every required remediation before passing.'; Priority = 3 }
+        [pscustomobject]@{ Id = 'manual'; Title = 'Capture required evidence'; Description = 'Record accountable customer evidence for approved manual gates.'; Priority = 4 }
+        [pscustomobject]@{ Id = 'advisories'; Title = 'Review advisories'; Description = 'Acknowledge nonblocking observations and decide whether they affect the pilot.'; Priority = 5 }
+    )
+
+    foreach ($result in $Results) {
+        $status = [string]$result.Status
+        $manualUnresolved = (
+            $status -eq 'ManualValidation' -and
+            [bool](Get-A365Property -InputObject $result -Name 'ManualAttestable' -Default $false) -and
+            [bool](Get-A365Property -InputObject $result -Name 'AttestationRequired' -Default $false)
+        )
+        if ($status -notin @('Blocker', 'NotAuthorized', 'Error', 'ActionRequired', 'Advisory') -and -not $manualUnresolved) {
+            continue
+        }
+
+        if ($status -eq 'Blocker') {
+            $phase = 'blockers'; $priority = 1; $changeType = 'TenantChange'
+        }
+        elseif ($status -in @('NotAuthorized', 'Error')) {
+            $phase = 'collection'; $priority = 2
+            $changeType = if ($status -eq 'NotAuthorized') { 'ConsentOrRole' } else { 'TechnicalRetry' }
+        }
+        elseif ($status -eq 'ActionRequired') {
+            $phase = 'actions'; $priority = 3; $changeType = 'TenantChange'
+        }
+        elseif ($manualUnresolved) {
+            $phase = 'manual'; $priority = 4; $changeType = 'ManualEvidence'
+        }
+        else {
+            $phase = 'advisories'; $priority = 5; $changeType = 'AdvisoryReview'
+        }
+
+        $attestationDefinition = Get-A365Property -InputObject $result -Name 'AttestationDefinition' -Default $null
+        $isManualAttestable = [bool](Get-A365Property -InputObject $result -Name 'ManualAttestable' -Default $false)
+        $evidenceNeeded = [string](Get-A365Property -InputObject $attestationDefinition -Name 'EvidenceNeeded' -Default '')
+        if (-not $evidenceNeeded) {
+            $evidenceNeeded = switch ($changeType) {
+                'ConsentOrRole' { 'Recollect the check after the required permission, consent, and role are available.' }
+                'TechnicalRetry' { 'Resolve the collection error and rerun the same collector.' }
+                'TenantChange' { 'Apply the documented remediation and rerun to collect new evidence.' }
+                'AdvisoryReview' { 'Record the customer decision if this advisory affects the pilot.' }
+                default { 'Capture the required evidence and rerun.' }
+            }
+        }
+
+        $items.Add([pscustomobject][ordered]@{
+            Id = $result.Id
+            Title = $result.Title
+            Status = $status
+            Priority = $priority
+            Phase = $phase
+            Pillar = $result.Pillar
+            Area = $result.Area
+            Profiles = @($result.Profiles)
+            OwnerRole = $result.RequiredRole
+            RequiredPermission = $result.RequiredPermission
+            Remediation = $result.Remediation
+            EvidenceNeeded = $evidenceNeeded
+            DocsUrl = $result.DocsUrl
+            ChangeType = $changeType
+            RequiresTenantChange = $changeType -eq 'TenantChange'
+            RequiresConsentOrRole = $changeType -eq 'ConsentOrRole'
+            RequiresManualEvidence = $changeType -eq 'ManualEvidence' -or $isManualAttestable
+            RequiresRerun = $changeType -ne 'AdvisoryReview'
+            ManualAttestable = $isManualAttestable
+        })
+    }
+
+    $orderedItems = @($items.ToArray() | Sort-Object Priority, Id)
+    $phases = @(
+        foreach ($phase in $phaseCatalog) {
+            $phaseItems = @($orderedItems | Where-Object Phase -eq $phase.Id)
+            [pscustomobject][ordered]@{
+                Id = $phase.Id
+                Title = $phase.Title
+                Description = $phase.Description
+                Count = $phaseItems.Count
+            }
+        }
+    )
+
+    return [pscustomobject][ordered]@{
+        IsReady = [bool]$PassCriteria.IsSatisfied
+        GateCounts = $PassCriteria
+        Phases = $phases
+        Items = $orderedItems
+    }
+}
+
+function Get-A365ManuallyAttestableGates {
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Results
+    )
+
+    return @(
+        $Results |
+            Where-Object {
+                [bool](Get-A365Property -InputObject $_ -Name 'ManualAttestable' -Default $false) -and
+                (
+                    $_.Status -ne 'NotApplicable' -or
+                    [bool](Get-A365Property -InputObject (Get-A365Property -InputObject $_ -Name 'Attestation' -Default $null) -Name 'Applied' -Default $false)
+                )
+            } |
+            ForEach-Object {
+                $definition = $_.AttestationDefinition
+                [pscustomobject][ordered]@{
+                    Id = $_.Id
+                    Title = $_.Title
+                    Status = $_.Status
+                    Required = [bool]$definition.Required
+                    AllowNotApplicable = [bool]$definition.AllowNotApplicable
+                    NoStatus = [string]$definition.NoStatus
+                    EvidenceNeeded = [string]$definition.EvidenceNeeded
+                    DocsUrl = $_.DocsUrl
+                    Profiles = @($_.Profiles)
+                }
+            }
+    )
 }
 
 function Get-A365Actions {
@@ -2286,7 +2681,11 @@ function Get-A365Actions {
         $Results |
             Where-Object {
                 $_.Status -in @('Blocker', 'NotAuthorized', 'Error', 'ActionRequired') -or
-                ($_.Status -eq 'ManualValidation' -and $_.Id -like 'A365-MANUAL-*')
+                (
+                    $_.Status -eq 'ManualValidation' -and
+                    [bool](Get-A365Property -InputObject $_ -Name 'ManualAttestable' -Default $false) -and
+                    [bool](Get-A365Property -InputObject $_ -Name 'AttestationRequired' -Default $false)
+                )
             } |
             Sort-Object @{ Expression = { $priority[$_.Status] } }, Id |
             ForEach-Object {
@@ -2300,6 +2699,116 @@ function Get-A365Actions {
                 }
             }
     )
+}
+
+function ConvertTo-A365PowerShellLiteral {
+    param(
+        [AllowNull()]
+        [string]$Value
+    )
+
+    return "'$(([string]$Value).Replace("'", "''"))'"
+}
+
+function New-A365RerunMetadata {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Stage,
+
+        [Parameter(Mandatory)]
+        [string[]]$Profiles,
+
+        [Parameter(Mandatory)]
+        [string[]]$Collectors,
+
+        [Parameter(Mandatory)]
+        [int]$AuditWindowDays,
+
+        [Parameter(Mandatory)]
+        [int]$AuditQueryTimeoutSeconds,
+
+        [AllowNull()]
+        [string]$TenantId,
+
+        [Parameter(Mandatory)]
+        [string]$CurrentJsonPath,
+
+        [Parameter(Mandatory)]
+        [string]$OutputPath,
+
+        [Parameter()]
+        [bool]$IncludeSanitizedCopy,
+
+        [Parameter()]
+        [bool]$UseDeviceCode
+    )
+
+    $profileValue = $Profiles -join ','
+    $collectorValue = $Collectors -join ','
+    $answerPlaceholder = '.\answers.customer.json'
+
+    $fullArguments = [System.Collections.Generic.List[string]]::new()
+    if ($TenantId) {
+        $fullArguments.Add("-TenantId $(ConvertTo-A365PowerShellLiteral $TenantId)")
+    }
+    if ($UseDeviceCode) {
+        $fullArguments.Add('-UseDeviceCode')
+    }
+    $fullArguments.Add("-Stage $Stage")
+    $fullArguments.Add("-Profile $profileValue")
+    $fullArguments.Add("-Collector $collectorValue")
+    $fullArguments.Add("-AuditWindowDays $AuditWindowDays")
+    $fullArguments.Add("-AuditQueryTimeoutSeconds $AuditQueryTimeoutSeconds")
+    $fullArguments.Add("-AnswersPath $(ConvertTo-A365PowerShellLiteral $answerPlaceholder)")
+    $fullArguments.Add("-PreviousResultPath $(ConvertTo-A365PowerShellLiteral $CurrentJsonPath)")
+    if ($IncludeSanitizedCopy) {
+        $fullArguments.Add('-IncludeSanitizedCopy')
+    }
+    $fullArguments.Add("-OutputPath $(ConvertTo-A365PowerShellLiteral $OutputPath)")
+
+    $sanitizedArguments = [System.Collections.Generic.List[string]]::new()
+    $sanitizedArguments.Add("-TenantId '<tenant-guid-or-domain>'")
+    if ($UseDeviceCode) {
+        $sanitizedArguments.Add('-UseDeviceCode')
+    }
+    $sanitizedArguments.Add("-Stage $Stage")
+    $sanitizedArguments.Add("-Profile $profileValue")
+    $sanitizedArguments.Add("-Collector $collectorValue")
+    $sanitizedArguments.Add("-AuditWindowDays $AuditWindowDays")
+    $sanitizedArguments.Add("-AuditQueryTimeoutSeconds $AuditQueryTimeoutSeconds")
+    $sanitizedArguments.Add("-AnswersPath '<answers-file.json>'")
+    $sanitizedArguments.Add("-PreviousResultPath '<previous-report.json>'")
+    if ($IncludeSanitizedCopy) {
+        $sanitizedArguments.Add('-IncludeSanitizedCopy')
+    }
+    $sanitizedArguments.Add("-OutputPath '<output-folder>'")
+
+    $formatCommand = {
+        param([System.Collections.Generic.List[string]]$Arguments)
+        $lines = [System.Collections.Generic.List[string]]::new()
+        $lines.Add('.\Invoke-Agent365Preflight.ps1 `')
+        for ($index = 0; $index -lt $Arguments.Count; $index++) {
+            $suffix = if ($index -lt ($Arguments.Count - 1)) { ' `' } else { '' }
+            $lines.Add("  $($Arguments[$index])$suffix")
+        }
+        return $lines -join [Environment]::NewLine
+    }
+
+    return [pscustomobject][ordered]@{
+        Command = & $formatCommand $fullArguments
+        SanitizedCommand = & $formatCommand $sanitizedArguments
+        TenantTarget = $TenantId
+        AnswersPath = $answerPlaceholder
+        PreviousResultPath = $CurrentJsonPath
+        OutputPath = $OutputPath
+        IncludeSanitizedCopy = $IncludeSanitizedCopy
+        Stage = $Stage
+        Profiles = @($Profiles)
+        Collectors = @($Collectors)
+        AuditWindowDays = $AuditWindowDays
+        AuditQueryTimeoutSeconds = $AuditQueryTimeoutSeconds
+        UseDeviceCode = $UseDeviceCode
+    }
 }
 
 function Compare-Agent365PreflightResult {
@@ -2318,6 +2827,7 @@ function Compare-Agent365PreflightResult {
             BaselineGeneratedAtUtc = $null
             Regressions = @()
             ResolvedBlockers = @()
+            ResolvedRequiredActions = @()
             Changed = @()
         }
     }
@@ -2339,6 +2849,7 @@ function Compare-Agent365PreflightResult {
 
     $regressions = [System.Collections.Generic.List[object]]::new()
     $resolved = [System.Collections.Generic.List[object]]::new()
+    $resolvedRequiredActions = [System.Collections.Generic.List[object]]::new()
     $changed = [System.Collections.Generic.List[object]]::new()
 
     foreach ($item in @(Get-A365Property -InputObject $Current -Name 'Results' -Default @())) {
@@ -2362,6 +2873,10 @@ function Compare-Agent365PreflightResult {
         if ($old.Status -eq 'Blocker' -and $item.Status -ne 'Blocker') {
             $resolved.Add($entry)
         }
+        if ($old.Status -in @('ActionRequired', 'ManualValidation') -and
+            $item.Status -in @('Passed', 'Advisory', 'NotApplicable')) {
+            $resolvedRequiredActions.Add($entry)
+        }
         elseif ($severity[[string]$item.Status] -gt $severity[[string]$old.Status]) {
             $regressions.Add($entry)
         }
@@ -2372,6 +2887,7 @@ function Compare-Agent365PreflightResult {
         BaselineGeneratedAtUtc = Get-A365Property -InputObject $Previous -Name 'GeneratedAtUtc' -Default $null
         Regressions = $regressions.ToArray()
         ResolvedBlockers = $resolved.ToArray()
+        ResolvedRequiredActions = $resolvedRequiredActions.ToArray()
         Changed = $changed.ToArray()
     }
 }
@@ -2421,6 +2937,19 @@ function New-Agent365SanitizedReport {
         else {
             $result.Observed = ConvertTo-A365RedactedText $result.Observed
         }
+        $resultAttestation = Get-A365Property -InputObject $result -Name 'Attestation' -Default $null
+        if ($null -ne $resultAttestation) {
+            $resultAttestation.Owner = if ($resultAttestation.Owner) { 'Redacted' } else { $null }
+            $resultAttestation.EvidenceReference = if ($resultAttestation.EvidenceReference) { 'Redacted' } else { $null }
+            $resultAttestation.Notes = if ($resultAttestation.Notes) { 'Redacted' } else { $null }
+            $resultAttestation.Justification = if ($resultAttestation.Justification) { 'Redacted' } else { $null }
+            $resultAttestation.PreservedObserved = if ([bool](Get-A365Property -InputObject $result -Name 'IsSensitive' -Default $false)) {
+                'Redacted in sanitized support copy.'
+            }
+            else {
+                ConvertTo-A365RedactedText $resultAttestation.PreservedObserved
+            }
+        }
     }
 
     foreach ($issue in @($sanitized.CollectionIssues)) {
@@ -2433,6 +2962,14 @@ function New-Agent365SanitizedReport {
     foreach ($attestation in @($sanitized.ManualAttestations)) {
         $attestation.Owner = if ($attestation.Owner) { 'Redacted' } else { $null }
         $attestation.EvidenceReference = if ($attestation.EvidenceReference) { 'Redacted' } else { $null }
+    }
+
+    if ($sanitized.PSObject.Properties['Rerun'] -and $null -ne $sanitized.Rerun) {
+        $sanitized.Rerun.Command = $sanitized.Rerun.SanitizedCommand
+        $sanitized.Rerun.TenantTarget = '<tenant-guid-or-domain>'
+        $sanitized.Rerun.AnswersPath = '<answers-file.json>'
+        $sanitized.Rerun.PreviousResultPath = '<previous-report.json>'
+        $sanitized.Rerun.OutputPath = '<output-folder>'
     }
 
     if ($sanitized.Runtime.PSObject.Properties['OutputFiles']) {
@@ -2550,35 +3087,18 @@ function Invoke-Agent365Preflight {
     $answers = if ($AnswersPath) { Read-A365Json -Path $AnswersPath -Description 'Answers file' } else { $null }
     $previous = if ($PreviousResultPath) { Read-A365Json -Path $PreviousResultPath -Description 'Previous result' } else { $null }
 
+    [object[]]$attestationDefinitions = @(
+        Get-A365AttestationDefinitions -Rules $rules -Profiles $profiles -IncludeAllProfiles
+    )
     if ($answers) {
-        if ((Get-A365Property -InputObject $answers -Name 'schemaVersion' -Default '') -ne '1.0') {
-            throw 'Answers file schemaVersion must be 1.0.'
-        }
-        if ($null -eq $answers.PSObject.Properties['answers']) {
-            throw 'Answers file must contain an answers array.'
-        }
-        $answerItems = @(Get-A365Property -InputObject $answers -Name 'answers' -Default @())
-        $duplicateAnswer = $answerItems |
-            Group-Object id |
-            Where-Object Count -gt 1 |
-            Select-Object -First 1
-        if ($duplicateAnswer) {
-            throw "Answers file contains a duplicate id: $($duplicateAnswer.Name)"
-        }
-        $knownAnswerIds = @($rules.manualAttestations.id)
-        foreach ($answer in $answerItems) {
-            $answerId = [string](Get-A365Property -InputObject $answer -Name 'id' -Default '')
-            if ($answerId -notin $knownAnswerIds) {
-                throw "Answers file contains an unknown attestation id: $answerId"
-            }
-            if ([string](Get-A365Property -InputObject $answer -Name 'answer' -Default '') -notin @('Yes', 'No', 'NotApplicable')) {
-                throw "Answers file contains an invalid answer for $answerId."
-            }
-        }
+        Test-A365AnswersInput `
+            -Answers $answers `
+            -Definitions $attestationDefinitions `
+            -Rules $rules
     }
 
-    if ($previous -and (Get-A365Property -InputObject $previous -Name 'SchemaVersion' -Default '') -ne '1.0') {
-        throw 'Previous result SchemaVersion must be 1.0.'
+    if ($previous -and (Get-A365Property -InputObject $previous -Name 'SchemaVersion' -Default '') -notin @('1.0', '1.1')) {
+        throw 'Previous result SchemaVersion must be 1.0 or 1.1.'
     }
     if ($previous -and $null -eq $previous.PSObject.Properties['Results']) {
         throw 'Previous result must contain a Results array.'
@@ -2612,8 +3132,11 @@ function Invoke-Agent365Preflight {
     $evaluation = Get-A365Evaluation -Evidence $evidence -Rules $rules -SkuCatalog $skuCatalog -Profiles $profiles -Collectors $collectors -Answers $answers
     $results = @($evaluation.Results)
     $manualAttestations = @($evaluation.ManualAttestations)
+    $passCriteria = Get-A365PassCriteria -Results $results
     $coverage = Get-A365Coverage -Results $results
-    $verdictWithExit = Get-A365Verdict -Results $results -ManualAttestations $manualAttestations -Stage $Stage
+    $verdictWithExit = Get-A365Verdict -PassCriteria $passCriteria -Stage $Stage
+    $pathToReady = Get-A365PathToReady -Results $results -PassCriteria $passCriteria
+    $manuallyAttestableGates = @(Get-A365ManuallyAttestableGates -Results $results)
     $authenticationEvidence = Get-A365Property -InputObject $evidence -Name 'authentication' -Default ([pscustomobject]@{})
     $grantedScopes = @(Get-A365Property -InputObject $authenticationEvidence -Name 'grantedScopes' -Default @())
     $missingScopes = @($scopes | Where-Object { $_ -notin $grantedScopes })
@@ -2638,7 +3161,7 @@ function Invoke-Agent365Preflight {
         matchedVerifiedDomain = $null
     })
     $report = [pscustomobject][ordered]@{
-        SchemaVersion = '1.0'
+        SchemaVersion = '1.1'
         ToolVersion = $script:ToolVersion
         GeneratedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
         RuleSetVersion = $rules.version
@@ -2655,7 +3178,11 @@ function Invoke-Agent365Preflight {
             BlockerCount = $verdictWithExit.BlockerCount
             ActionRequiredCount = $verdictWithExit.ActionRequiredCount
             AuthorizationGapCount = $verdictWithExit.AuthorizationGapCount
+            ErrorCount = $passCriteria.ErrorCount
+            RequiredManualUnresolvedCount = $passCriteria.RequiredManualUnresolvedCount
         }
+        PassCriteria = $passCriteria
+        PathToReady = $pathToReady
         Tenant = [pscustomobject][ordered]@{
             DisplayName = Get-A365Property -InputObject $tenantEvidence -Name 'displayName' -Default $null
             TenantId = Get-A365Property -InputObject $tenantEvidence -Name 'tenantId' -Default $null
@@ -2691,11 +3218,14 @@ function Invoke-Agent365Preflight {
         Results = $results
         Actions = @(Get-A365Actions -Results $results)
         ManualAttestations = $manualAttestations
+        ManuallyAttestableGates = $manuallyAttestableGates
+        Rerun = $null
         Drift = [pscustomobject]@{
             HasBaseline = $false
             BaselineGeneratedAtUtc = $null
             Regressions = @()
             ResolvedBlockers = @()
+            ResolvedRequiredActions = @()
             Changed = @()
         }
         Sources = @(
@@ -2732,6 +3262,17 @@ function Invoke-Agent365Preflight {
     if ($IncludeSanitizedCopy) {
         $outputFiles += @($sanitizedHtmlPath, $sanitizedJsonPath)
     }
+    $report.Rerun = New-A365RerunMetadata `
+        -Stage $Stage `
+        -Profiles $profiles `
+        -Collectors $collectors `
+        -AuditWindowDays $AuditWindowDays `
+        -AuditQueryTimeoutSeconds $AuditQueryTimeoutSeconds `
+        -TenantId $TenantId `
+        -CurrentJsonPath $jsonPath `
+        -OutputPath $resolvedOutputPath `
+        -IncludeSanitizedCopy ([bool]$IncludeSanitizedCopy) `
+        -UseDeviceCode ([bool]$UseDeviceCode)
     $report.Runtime.OutputFiles = $outputFiles
     $report.Runtime.DurationSeconds = [Math]::Round(((Get-Date) - $started).TotalSeconds, 2)
 

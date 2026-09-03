@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
-  "version": "1.0.0",
-  "reviewDate": "2026-09-01",
+  "version": "1.1.0",
+  "reviewDate": "2026-09-02",
   "checks": [
     {
       "id": "A365-LOCAL-001",
@@ -181,6 +181,13 @@
       "requiredPermission": "AgentIdentityBlueprint.Read.All",
       "requiredRole": "Agent ID Administrator and workload owner",
       "remediation": "Review requested application roles and delegated scopes. The pre-flight reports counts only and does not approve permissions.",
+      "manualAttestation": {
+        "allowed": true,
+        "required": true,
+        "allowNotApplicable": false,
+        "noStatus": "ActionRequired",
+        "evidenceNeeded": "Record the accountable reviewer and the approved least-privilege permission review."
+      },
       "docsUrl": "https://learn.microsoft.com/entra/agent-id/agent-blueprint"
     },
     {
@@ -205,6 +212,13 @@
       "requiredPermission": "Policy.Read.All",
       "requiredRole": "Security Reader, Conditional Access Administrator, or Global Reader",
       "remediation": "Review enabled and report-only policies for delegated, app-only, and agent-user flows. API-key access bypasses Conditional Access.",
+      "manualAttestation": {
+        "allowed": true,
+        "required": true,
+        "allowNotApplicable": false,
+        "noStatus": "ActionRequired",
+        "evidenceNeeded": "Record the accountable reviewer and the Conditional Access mapping for delegated, app-only, agent-user, and API-key access patterns."
+      },
       "docsUrl": "https://learn.microsoft.com/entra/identity/conditional-access/agent-id"
     },
     {
@@ -241,6 +255,13 @@
       "requiredPermission": "Portal access",
       "requiredRole": "Security Administrator or delegated security owner",
       "remediation": "Validate the Security for AI Agents toggle, connector state, and real-time protection rules in the Defender portal.",
+      "manualAttestation": {
+        "allowed": true,
+        "required": true,
+        "allowNotApplicable": false,
+        "noStatus": "ActionRequired",
+        "evidenceNeeded": "Record the security owner and the reviewed Security for AI Agents toggle, connectors, and real-time protection configuration."
+      },
       "docsUrl": "https://learn.microsoft.com/defender-xdr/security-for-ai/transition-agent-security-to-agent-365"
     },
     {
@@ -265,6 +286,13 @@
       "requiredPermission": "Workload-specific read permissions",
       "requiredRole": "Compliance Reader or delegated Purview role",
       "remediation": "Connect the supported first-party compliance PowerShell session before running if metadata evidence is required, then validate policy scope and enforcement manually.",
+      "manualAttestation": {
+        "allowed": true,
+        "required": true,
+        "allowNotApplicable": false,
+        "noStatus": "ActionRequired",
+        "evidenceNeeded": "Record the compliance owner and the reviewed DLP, retention, label, and enforcement scope for the pilot."
+      },
       "docsUrl": "https://learn.microsoft.com/purview/ai-agent-365"
     },
     {
@@ -277,6 +305,13 @@
       "requiredPermission": "SharePoint site read access",
       "requiredRole": "SharePoint Administrator or delegated site administrator",
       "remediation": "Supply only intended pilot site URLs, install the first-party SharePoint Online module, and establish a read session before running.",
+      "manualAttestation": {
+        "allowed": true,
+        "required": true,
+        "allowNotApplicable": true,
+        "noStatus": "ActionRequired",
+        "evidenceNeeded": "Record the SharePoint owner and the reviewed site access, sharing, and agent boundary. If not applicable, justify why SharePoint is outside the selected scenario."
+      },
       "docsUrl": "https://learn.microsoft.com/microsoft-agent-365/admin/sharepoint-integration"
     }
   ],
@@ -285,6 +320,9 @@
       "id": "A365-MANUAL-001",
       "question": "Are accountable owners and lifecycle sponsors assigned for every in-scope agent?",
       "required": true,
+      "allowNotApplicable": false,
+      "noStatus": "Blocker",
+      "evidenceNeeded": "Name the accountable owner and reference the approved ownership and sponsor record.",
       "pillar": "Govern",
       "area": "Manual attestations",
       "profiles": ["ControlPlane"],
@@ -295,6 +333,9 @@
       "id": "A365-MANUAL-002",
       "question": "Are agent approval boundaries, allowed tools, data sources, and permission limits documented?",
       "required": true,
+      "allowNotApplicable": false,
+      "noStatus": "Blocker",
+      "evidenceNeeded": "Name the accountable owner and reference the approved tools, data, permission, and approval boundary.",
       "pillar": "Govern",
       "area": "Manual attestations",
       "profiles": ["ControlPlane"],
@@ -305,6 +346,9 @@
       "id": "A365-MANUAL-003",
       "question": "Are responsible AI, privacy, and legal reviews complete for the pilot scenario?",
       "required": true,
+      "allowNotApplicable": false,
+      "noStatus": "Blocker",
+      "evidenceNeeded": "Name the accountable reviewer and reference the responsible AI, privacy, and legal decision.",
       "pillar": "Secure",
       "area": "Manual attestations",
       "profiles": ["ControlPlane"],
@@ -315,6 +359,9 @@
       "id": "A365-MANUAL-004",
       "question": "Is the security operations incident triage and escalation path documented?",
       "required": true,
+      "allowNotApplicable": false,
+      "noStatus": "Blocker",
+      "evidenceNeeded": "Name the security owner and reference the incident triage and escalation runbook.",
       "pillar": "Secure",
       "area": "Manual attestations",
       "profiles": ["ControlPlane"],
@@ -325,6 +372,9 @@
       "id": "A365-MANUAL-005",
       "question": "Are measurable pilot success criteria and review dates documented?",
       "required": true,
+      "allowNotApplicable": false,
+      "noStatus": "Blocker",
+      "evidenceNeeded": "Name the pilot owner and reference measurable success, review, and stop criteria.",
       "pillar": "Observe",
       "area": "Manual attestations",
       "profiles": ["ControlPlane"],
@@ -335,6 +385,9 @@
       "id": "A365-MANUAL-006",
       "question": "Is a tested rollback or disablement path documented for every pilot agent?",
       "required": true,
+      "allowNotApplicable": false,
+      "noStatus": "Blocker",
+      "evidenceNeeded": "Name the pilot owner and reference the tested rollback or disablement procedure.",
       "pillar": "Govern",
       "area": "Manual attestations",
       "profiles": ["ControlPlane"],
@@ -345,6 +398,9 @@
       "id": "A365-MANUAL-007",
       "question": "Is an agent retirement process documented, including access removal and evidence retention?",
       "required": true,
+      "allowNotApplicable": false,
+      "noStatus": "Blocker",
+      "evidenceNeeded": "Name the lifecycle owner and reference the approved retirement and evidence-retention process.",
       "pillar": "Govern",
       "area": "Manual attestations",
       "profiles": ["ControlPlane"],

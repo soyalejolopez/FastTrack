@@ -1,6 +1,6 @@
 {
   "$schema": "../schema/agent365-preflight-answers.schema.json",
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "answers": [
     {
       "id": "A365-MANUAL-001",
@@ -50,6 +50,104 @@
       "owner": "AI governance lead",
       "evidenceReference": "Agent retirement standard",
       "notes": "Example only. Replace with the customer-confirmed retirement process."
+    },
+    {
+      "id": "A365-ENTRA-005",
+      "answer": "Yes",
+      "owner": "Agent ID reviewer",
+      "evidenceReference": "Blueprint permission review record",
+      "notes": "Example only. Replace with the approved least-privilege permission review."
+    },
+    {
+      "id": "A365-ENTRA-007",
+      "answer": "Yes",
+      "owner": "Conditional Access owner",
+      "evidenceReference": "Agent authentication pattern mapping",
+      "notes": "Example only. Replace with the approved delegated, app-only, agent-user, and API-key mapping."
+    },
+    {
+      "id": "A365-DEFENDER-003",
+      "answer": "Yes",
+      "owner": "Security operations owner",
+      "evidenceReference": "Security for AI Agents configuration review",
+      "notes": "Example only. Replace with the reviewed toggle, connector, and real-time protection evidence."
+    },
+    {
+      "id": "A365-PURVIEW-002",
+      "answer": "Yes",
+      "owner": "Compliance owner",
+      "evidenceReference": "Agent data policy scope review",
+      "notes": "Example only. Replace with the reviewed DLP, retention, label, and enforcement evidence."
+    },
+    {
+      "id": "A365-SHAREPOINT-001",
+      "answer": "Yes",
+      "owner": "SharePoint owner",
+      "evidenceReference": "Pilot site boundary review",
+      "notes": "Example only. Replace with the reviewed access, sharing, and agent boundary evidence."
+    },
+    {
+      "id": "A365-PROFILE-COPILOTSTUDIO",
+      "answer": "Yes",
+      "owner": "Copilot Studio owner",
+      "evidenceReference": "Copilot Studio pilot boundary review",
+      "notes": "Example only. Include this ID only when CopilotStudio is selected."
+    },
+    {
+      "id": "A365-PROFILE-AGENTBUILDER",
+      "answer": "Yes",
+      "owner": "Agent Builder owner",
+      "evidenceReference": "Agent Builder pilot boundary review",
+      "notes": "Example only. Include this ID only when AgentBuilder is selected."
+    },
+    {
+      "id": "A365-PROFILE-SHAREPOINTAGENTS",
+      "answer": "Yes",
+      "owner": "SharePoint Agents owner",
+      "evidenceReference": "SharePoint Agents pilot boundary review",
+      "notes": "Example only. Include this ID only when SharePointAgents is selected."
+    },
+    {
+      "id": "A365-PROFILE-FOUNDRY",
+      "answer": "Yes",
+      "owner": "Foundry owner",
+      "evidenceReference": "Foundry pilot boundary review",
+      "notes": "Example only. Include this ID only when Foundry is selected."
+    },
+    {
+      "id": "A365-PROFILE-CUSTOMPROCODE",
+      "answer": "Yes",
+      "owner": "Pro-code agent owner",
+      "evidenceReference": "Custom pro-code pilot boundary review",
+      "notes": "Example only. Include this ID only when CustomProCode is selected."
+    },
+    {
+      "id": "A365-PROFILE-EXTERNALREGISTRYSYNC",
+      "answer": "Yes",
+      "owner": "Registry sync owner",
+      "evidenceReference": "External registry sync boundary review",
+      "notes": "Example only. Include this ID only when ExternalRegistrySync is selected."
+    },
+    {
+      "id": "A365-PROFILE-LOCALAGENTS",
+      "answer": "Yes",
+      "owner": "Endpoint security owner",
+      "evidenceReference": "Local agents boundary review",
+      "notes": "Example only. Include this ID only when LocalAgents is selected."
+    },
+    {
+      "id": "A365-PROFILE-WORKIQ",
+      "answer": "Yes",
+      "owner": "Work IQ owner",
+      "evidenceReference": "Work IQ pilot boundary review",
+      "notes": "Example only. Include this ID only when WorkIQ is selected."
+    },
+    {
+      "id": "A365-PROFILE-AITEAMMATE",
+      "answer": "Yes",
+      "owner": "AI teammate owner",
+      "evidenceReference": "AI teammate pilot boundary review",
+      "notes": "Example only. Include this ID only when AITeammate is selected."
     }
   ]
 }

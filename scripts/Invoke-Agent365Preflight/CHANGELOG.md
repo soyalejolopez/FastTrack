@@ -2,6 +2,15 @@
 
 All notable changes to this resource are documented in this file.
 
+## 1.2.0 - 2026-09-02
+
+- Made every ActionRequired result a pass gate for Pilot and Production.
+- Added controlled manual evidence for approved rules and selected profiles.
+- Added Path to Ready, safe rerun metadata, and resolved required-action drift.
+- Added an offline remediation checklist, answers builder, and remediation workspace report.
+- Bumped the report schema to 1.1 while retaining schema 1.0 baseline comparison.
+- Redacted preserved observations for sensitive attestable results in support copies.
+
 ## 1.1.5 - 2026-09-02
 
 - Added safe reuse of compatible process-scoped delegated Graph contexts.

@@ -10,7 +10,7 @@
       "type": "string"
     },
     "schemaVersion": {
-      "const": "1.0"
+      "enum": ["1.0", "1.1"]
     },
     "answers": {
       "type": "array",
@@ -21,7 +21,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^A365-MANUAL-[0-9]{3}$"
+            "pattern": "^A365-(?:MANUAL-[0-9]{3}|[A-Z]+-[0-9]{3}|PROFILE-[A-Z0-9]+)$"
           },
           "answer": {
             "enum": ["Yes", "No", "NotApplicable"]
@@ -34,8 +34,57 @@
           },
           "notes": {
             "type": "string"
+          },
+          "answeredAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "justification": {
+            "type": "string"
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "answer": {
+                  "const": "Yes"
+                }
+              }
+            },
+            "then": {
+              "required": ["owner", "evidenceReference"],
+              "properties": {
+                "owner": {
+                  "minLength": 1,
+                  "pattern": ".*\\S.*"
+                },
+                "evidenceReference": {
+                  "minLength": 1,
+                  "pattern": ".*\\S.*"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "answer": {
+                  "const": "NotApplicable"
+                }
+              }
+            },
+            "then": {
+              "required": ["justification"],
+              "properties": {
+                "justification": {
+                  "minLength": 1,
+                  "pattern": ".*\\S.*"
+                }
+              }
+            }
+          }
+        ]
       }
     }
   }

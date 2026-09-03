@@ -23,11 +23,12 @@ Selects Pilot or Production verdict wording.
 Directory for full HTML and JSON output and optional sanitized copies.
 
 .PARAMETER AnswersPath
-Path to customer-reviewed manual attestation answers. Do not use the synthetic sample as real
-customer evidence.
+Path to customer-reviewed evidence for approved manual gates. Yes requires an owner and evidence
+reference. Answers cannot override automated blocker, action, authorization, or error evidence.
 
 .PARAMETER PreviousResultPath
-Path to a previous full JSON report for status drift comparison.
+Path to a previous full JSON report for regressions, resolved blockers, and resolved required-action
+comparison.
 
 .PARAMETER FixturePath
 Path to synthetic offline evidence. Fixture mode does not authenticate or call a tenant.
@@ -96,6 +97,7 @@ Runs a recommended pilot collection after the answers file has been reviewed by 
 
 .EXAMPLE
 .\Invoke-Agent365Preflight.ps1 `
+    -AnswersPath .\answers.customer.json `
     -PreviousResultPath C:\Temp\Previous\Agent365Preflight.json `
     -OutputPath C:\Temp\Current
 

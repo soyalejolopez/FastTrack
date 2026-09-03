@@ -261,6 +261,308 @@ function Format-A365Details {
     return (ConvertTo-A365Html ([string]$Value))
 }
 
+function Get-A365Int {
+    [CmdletBinding()]
+    param([object]$Value, [int]$Default = 0)
+
+    if ($null -eq $Value) { return $Default }
+    if ($Value -is [int]) { return $Value }
+    $n = 0
+    if ([int]::TryParse([string]$Value, [ref]$n)) { return $n }
+    return $Default
+}
+
+function Get-A365SeverityRank {
+    <# Lower rank == higher priority in the Path to Ready. #>
+    [CmdletBinding()]
+    param([string]$Status)
+
+    switch ($Status) {
+        'Blocker'          { return 1 }
+        'NotAuthorized'    { return 2 }
+        'Error'            { return 2 }
+        'ActionRequired'   { return 3 }
+        'ManualValidation' { return 4 }
+        'Advisory'         { return 5 }
+        default            { return 6 }
+    }
+}
+
+function Get-A365ReportKey {
+    <# Deterministic, non-sensitive key for scoping local browser progress. #>
+    [CmdletBinding()]
+    param([string]$Seed)
+
+    if ([string]::IsNullOrWhiteSpace($Seed)) { return 'default' }
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Seed)
+        $sha = [System.Security.Cryptography.SHA1]::Create()
+        try { $hash = $sha.ComputeHash($bytes) } finally { $sha.Dispose() }
+        return (-join ($hash[0..7] | ForEach-Object { $_.ToString('x2') }))
+    } catch {
+        return 'default'
+    }
+}
+
+function New-A365PathItem {
+    <# Normalize an explicit PathToReady item or a raw result into a path row. #>
+    [CmdletBinding()]
+    param(
+        [object]$Source,
+        [hashtable]$SlugById,
+        [bool]$Explicit
+    )
+
+    $id = [string](Get-A365Member $Source 'Id' '')
+    $status = [string](Get-A365Member $Source 'Status' '')
+    $title = [string](Get-A365Member $Source 'Title' $id)
+    if ([string]::IsNullOrWhiteSpace($title)) { $title = 'Untitled action' }
+
+    if ($Explicit) {
+        $owner = [string](Get-A365Member $Source 'OwnerRole' '')
+        $evidence = [string](Get-A365Member $Source 'EvidenceNeeded' '')
+        $changeType = [string](Get-A365Member $Source 'ChangeType' '')
+    } else {
+        $owner = [string](Get-A365Member $Source 'RequiredRole' '')
+        $evidence = ''
+        if ($status -eq 'ManualValidation') { $evidence = [string](Get-A365Member $Source 'Expected' '') }
+        $changeType = ''
+    }
+
+    $cardId = $null
+    $hasCard = $false
+    if ($id -and $SlugById -and $SlugById.ContainsKey($id)) {
+        $cardId = $SlugById[$id]
+        $hasCard = $true
+    }
+
+    return @{
+        Id                 = $id
+        Title              = $title
+        Status             = $status
+        Rank               = (Get-A365SeverityRank $status)
+        PriorityNum        = (Get-A365Int (Get-A365Member $Source 'Priority' 2147483647) 2147483647)
+        Owner              = $owner
+        RequiredPermission = [string](Get-A365Member $Source 'RequiredPermission' '')
+        Remediation        = [string](Get-A365Member $Source 'Remediation' '')
+        EvidenceNeeded     = $evidence
+        DocsUrl            = (Get-A365Member $Source 'DocsUrl')
+        Phase              = [string](Get-A365Member $Source 'Phase' '')
+        ChangeType         = $changeType
+        CardId             = $cardId
+        HasCard            = $hasCard
+    }
+}
+
+function Get-A365PhaseMeta {
+    [CmdletBinding()]
+    param([int]$Rank)
+
+    switch ($Rank) {
+        1 { return @{ Id = 'unblock';   Title = 'Resolve blockers';          Description = 'Must be fixed before a pilot can proceed.' } }
+        2 { return @{ Id = 'authorize'; Title = 'Restore authorization';     Description = 'Grant the missing consent or role, then re-run to collect the evidence.' } }
+        3 { return @{ Id = 'action';    Title = 'Complete required actions';  Description = 'Required before the technical pass criteria are met.' } }
+        4 { return @{ Id = 'manual';    Title = 'Confirm manual validations'; Description = 'Needs a person to confirm and attest.' } }
+        default { return @{ Id = 'advisory'; Title = 'Review advisories'; Description = 'Recommended, but not required to pass.' } }
+    }
+}
+
+function Build-A365SeverityPhases {
+    [CmdletBinding()]
+    param([object[]]$Items)
+
+    $phases = [System.Collections.Generic.List[object]]::new()
+    foreach ($rank in 1, 2, 3, 4, 5) {
+        $bucket = @($Items | Where-Object { $_.Rank -eq $rank })
+        if ($bucket.Count -eq 0) { continue }
+        $meta = Get-A365PhaseMeta $rank
+        $sorted = @($bucket | Sort-Object -Property @{ Expression = { $_.PriorityNum } }, @{ Expression = { [string]$_.Title } })
+        [void]$phases.Add(@{ Id = $meta.Id; Title = $meta.Title; Description = $meta.Description; Items = $sorted })
+    }
+    return @($phases.ToArray())
+}
+
+function Get-A365PathModel {
+    <#
+        Build an ordered list of Path-to-Ready phases. Prefers the backend
+        PathToReady contract when present; otherwise derives phases from the
+        actionable results so backward reports still render a path.
+    #>
+    [CmdletBinding()]
+    param(
+        [object]$Report,
+        [object[]]$Results,
+        [hashtable]$SlugById
+    )
+
+    $explicit = Get-A365Member $Report 'PathToReady'
+    if ($null -ne $explicit) {
+        $items = @(Get-A365Member $explicit 'Items' @())
+        if ($items.Count -gt 0) {
+            $norm = @()
+            foreach ($it in $items) { $norm += (New-A365PathItem -Source $it -SlugById $SlugById -Explicit $true) }
+
+            $phaseDefs = @(Get-A365Member $explicit 'Phases' @())
+            if ($phaseDefs.Count -gt 0) {
+                $phases = [System.Collections.Generic.List[object]]::new()
+                $known = @()
+                foreach ($pd in $phaseDefs) {
+                    $phaseId = [string](Get-A365Member $pd 'Id' '')
+                    $known += $phaseId
+                    $pitems = @($norm | Where-Object { $_.Phase -eq $phaseId } |
+                        Sort-Object -Property @{ Expression = { $_.Rank } }, @{ Expression = { $_.PriorityNum } })
+                    if ($pitems.Count -eq 0) { continue }
+                    [void]$phases.Add(@{
+                        Id          = $phaseId
+                        Title       = [string](Get-A365Member $pd 'Title' $phaseId)
+                        Description = [string](Get-A365Member $pd 'Description' '')
+                        Items       = $pitems
+                    })
+                }
+                $orphans = @($norm | Where-Object { $known -notcontains $_.Phase } |
+                    Sort-Object -Property @{ Expression = { $_.Rank } }, @{ Expression = { $_.PriorityNum } })
+                if ($orphans.Count -gt 0) {
+                    [void]$phases.Add(@{ Id = 'additional'; Title = 'Additional actions'; Description = ''; Items = $orphans })
+                }
+                return @($phases.ToArray())
+            }
+
+            return (Build-A365SeverityPhases -Items $norm)
+        }
+    }
+
+    $statuses = @('Blocker', 'NotAuthorized', 'Error', 'ActionRequired', 'ManualValidation', 'Advisory')
+    $actionable = @($Results | Where-Object { $statuses -contains [string](Get-A365Member $_ 'Status' '') })
+    $norm = @()
+    foreach ($r in $actionable) { $norm += (New-A365PathItem -Source $r -SlugById $SlugById -Explicit $false) }
+    return (Build-A365SeverityPhases -Items $norm)
+}
+
+function Get-A365PassModel {
+    <# Normalize PassCriteria, deriving from results when the backend field is absent. #>
+    [CmdletBinding()]
+    param(
+        [object]$Report,
+        [object]$Verdict,
+        [object[]]$Results
+    )
+
+    $pc = Get-A365Member $Report 'PassCriteria'
+    if ($null -ne $pc) {
+        $b = Get-A365Int (Get-A365Member $pc 'BlockerCount' 0)
+        $a = Get-A365Int (Get-A365Member $pc 'ActionRequiredCount' 0)
+        $na = Get-A365Int (Get-A365Member $pc 'NotAuthorizedCount' 0)
+        $er = Get-A365Int (Get-A365Member $pc 'ErrorCount' 0)
+        $mm = Get-A365Int (Get-A365Member $pc 'RequiredManualUnresolvedCount' 0)
+        $isSatMember = Get-A365Member $pc 'IsSatisfied'
+        if ($null -ne $isSatMember) { $sat = (Get-A365Bool $isSatMember) } else { $sat = (($b + $a + $na + $er + $mm) -eq 0) }
+        return @{
+            BlockerCount                  = $b
+            ActionRequiredCount           = $a
+            NotAuthorizedCount            = $na
+            ErrorCount                    = $er
+            RequiredManualUnresolvedCount = $mm
+            IsSatisfied                   = $sat
+            Summary                       = [string](Get-A365Member $pc 'Summary' '')
+            Source                        = 'report'
+        }
+    }
+
+    $b = 0; $a = 0; $na = 0; $er = 0; $mm = 0
+    foreach ($r in $Results) {
+        switch ([string](Get-A365Member $r 'Status' '')) {
+            'Blocker'        { $b++ }
+            'ActionRequired' { $a++ }
+            'NotAuthorized'  { $na++ }
+            'Error'          { $er++ }
+            'ManualValidation' {
+                $applied = Get-A365Bool (Get-A365Member (Get-A365Member $r 'Attestation') 'Applied')
+                if (-not $applied) { $mm++ }
+            }
+        }
+    }
+    if (@($Results).Count -eq 0 -and $null -ne $Verdict) {
+        $b = Get-A365Int (Get-A365Member $Verdict 'BlockerCount' 0)
+        $a = Get-A365Int (Get-A365Member $Verdict 'ActionRequiredCount' 0)
+    }
+    return @{
+        BlockerCount                  = $b
+        ActionRequiredCount           = $a
+        NotAuthorizedCount            = $na
+        ErrorCount                    = $er
+        RequiredManualUnresolvedCount = $mm
+        IsSatisfied                   = (($b + $a + $na + $er + $mm) -eq 0)
+        Summary                       = ''
+        Source                        = 'derived'
+    }
+}
+
+function Get-A365RerunModel {
+    <#
+        Normalize the Rerun contract. In sanitized mode only the sanitized
+        command is surfaced and tenant/path fields are withheld, so no
+        environment identifiers can leak from a full report rendered sanitized.
+    #>
+    [CmdletBinding()]
+    param([object]$Report, [bool]$IsSanitized)
+
+    $rr = Get-A365Member $Report 'Rerun'
+    if ($null -eq $rr) { return @{ HasCommand = $false; ShowMeta = $false } }
+
+    if ($IsSanitized) {
+        $cmd = [string](Get-A365Member $rr 'SanitizedCommand' '')
+        return @{
+            HasCommand = -not [string]::IsNullOrWhiteSpace($cmd)
+            Command    = $cmd
+            ShowMeta   = $false
+            Stage      = [string](Get-A365Member $rr 'Stage' '')
+        }
+    }
+
+    $cmd = [string](Get-A365Member $rr 'Command' '')
+    return @{
+        HasCommand   = -not [string]::IsNullOrWhiteSpace($cmd)
+        Command      = $cmd
+        ShowMeta     = $true
+        TenantTarget = [string](Get-A365Member $rr 'TenantTarget' '')
+        OutputPath   = [string](Get-A365Member $rr 'OutputPath' '')
+        AnswersPath  = [string](Get-A365Member $rr 'AnswersPath' '')
+        Stage        = [string](Get-A365Member $rr 'Stage' '')
+        UseDeviceCode = (Get-A365Bool (Get-A365Member $rr 'UseDeviceCode'))
+    }
+}
+
+function Get-A365GateModel {
+    <# Normalize ManuallyAttestableGates, deriving from ManualAttestations if absent. #>
+    [CmdletBinding()]
+    param([object]$Report, [object[]]$Attestations)
+
+    $gates = @(Get-A365Member $Report 'ManuallyAttestableGates' @())
+    if ($gates.Count -gt 0) {
+        return @($gates | ForEach-Object {
+            @{
+                Id                 = [string](Get-A365Member $_ 'Id' '')
+                Title              = [string](Get-A365Member $_ 'Title' (Get-A365Member $_ 'Id' ''))
+                Required           = (Get-A365Bool (Get-A365Member $_ 'Required'))
+                AllowNotApplicable = (Get-A365Bool (Get-A365Member $_ 'AllowNotApplicable'))
+                EvidenceNeeded     = [string](Get-A365Member $_ 'EvidenceNeeded' '')
+                DocsUrl            = (Get-A365Member $_ 'DocsUrl')
+            }
+        })
+    }
+
+    return @($Attestations | ForEach-Object {
+        @{
+            Id                 = [string](Get-A365Member $_ 'Id' '')
+            Title              = [string](Get-A365Member $_ 'Question' (Get-A365Member $_ 'Id' ''))
+            Required           = (Get-A365Bool (Get-A365Member $_ 'Required'))
+            AllowNotApplicable = $false
+            EvidenceNeeded     = [string](Get-A365Member $_ 'EvidenceReference' '')
+            DocsUrl            = $null
+        }
+    })
+}
+
 #endregion Private helpers
 #region Static assets
 
@@ -432,7 +734,7 @@ a:hover { text-decoration: underline; }
 .theme-toggle {
   font: inherit; font-size: .85rem; cursor: pointer;
   background: var(--bg-sunken); color: var(--text); border: 1px solid var(--surface-border-strong);
-  border-radius: 999px; padding: 7px 14px; display: inline-flex; gap: 8px; align-items: center;
+  border-radius: 999px; padding: 7px 14px; min-height: 40px; display: inline-flex; gap: 8px; align-items: center;
 }
 .theme-toggle:hover { border-color: var(--brand); }
 
@@ -644,15 +946,15 @@ table.data tbody tr:hover { background: var(--bg-sunken); }
 .search-field input[type="search"] {
   width: 100%; font: inherit; font-size: .95rem; color: var(--text);
   background: var(--bg-elevated); border: 1px solid var(--surface-border-strong);
-  border-radius: 999px; padding: 10px 42px 10px 40px; min-height: 44px;
+  border-radius: 999px; padding: 10px 48px 10px 40px; min-height: 44px;
 }
 .search-field input[type="search"]::-webkit-search-cancel-button { display: none; }
 .search-field input[type="search"]:focus-visible { border-color: var(--brand); }
 .search-field input[type="search"]::placeholder { color: var(--text-muted); }
 .search-clear {
-  position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
   border: 0; background: transparent; color: var(--text-muted); cursor: pointer;
-  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 1rem;
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 1rem; line-height: 1;
 }
 .search-clear:hover { background: var(--bg-sunken); color: var(--text); }
 .search-hint { font-size: .78rem; color: var(--text-muted); white-space: nowrap; }
@@ -807,6 +1109,193 @@ body.blade-open { overflow: hidden; }
 
 .no-js .js-only { display: none !important; }
 
+/* --- Shared action buttons --- */
+.cta-primary {
+  font: inherit; font-size: .92rem; font-weight: 600; cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 20px;
+  border-radius: var(--radius); border: 1px solid var(--brand); background: var(--brand); color: #ffffff;
+}
+.cta-primary:hover { background: var(--brand-strong); border-color: var(--brand-strong); }
+:root[data-theme="dark"] .cta-primary, :root:not([data-theme="light"]) .cta-primary { color: #05121c; }
+.act-btn {
+  font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 14px;
+  border-radius: var(--radius); border: 1px solid var(--surface-border-strong); background: var(--bg-elevated); color: var(--text);
+}
+.act-btn:hover { border-color: var(--brand); }
+.act-btn.is-brand { color: var(--link); }
+
+/* --- Readiness command center --- */
+.command-center {
+  background: var(--bg-elevated); border: 1px solid var(--surface-border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm); padding: 20px 22px; margin: 0 0 22px;
+  display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 20px 26px; align-items: start;
+}
+.command-center::before { content: ""; display: block; height: 4px; grid-column: 1 / -1; margin: -20px -22px 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: var(--neutral); }
+.command-center.v-ready::before, .command-center.v-complete::before { background: var(--pass); }
+.command-center.v-blocked::before { background: var(--block); }
+.command-center.v-incomplete::before { background: var(--action); }
+.cc-badge {
+  align-self: start; display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px;
+  border-radius: 999px; font-family: var(--font-display); font-weight: 600; font-size: 1.02rem;
+  border: 1px solid var(--surface-border-strong); background: var(--bg-sunken); color: var(--text); white-space: nowrap;
+}
+.cc-badge .cc-glyph { font-size: 1.05rem; line-height: 1; }
+.command-center.v-ready .cc-badge, .command-center.v-complete .cc-badge { background: var(--pass-bg); border-color: color-mix(in srgb, var(--pass) 45%, transparent); color: var(--pass); }
+.command-center.v-blocked .cc-badge { background: var(--block-bg); border-color: color-mix(in srgb, var(--block) 45%, transparent); color: var(--block); }
+.command-center.v-incomplete .cc-badge { background: var(--action-bg); border-color: color-mix(in srgb, var(--action) 45%, transparent); color: var(--action); }
+.cc-body { display: grid; gap: 14px; min-width: 0; }
+.cc-heading { font-family: var(--font-display); font-size: clamp(1.35rem, 1.1rem + 1.1vw, 1.9rem); font-weight: 600; margin: 0; line-height: 1.15; letter-spacing: -.01em; }
+.cc-summary { margin: 0; color: var(--text-secondary); font-size: .98rem; max-width: 62ch; }
+.cc-prevents { display: grid; gap: 8px; }
+.cc-prevents-label { font-size: .74rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.pass-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pass-chip {
+  display: inline-flex; align-items: center; gap: 8px; font-size: .84rem; font-weight: 600;
+  padding: 6px 12px; border-radius: var(--radius); border: 1px solid var(--surface-border-strong);
+  background: var(--bg-sunken); color: var(--text);
+}
+.pass-chip .pc-count { font-family: var(--font-mono); font-weight: 700; }
+.pass-chip.s-block { border-color: color-mix(in srgb, var(--block) 45%, transparent); color: var(--block); background: var(--block-bg); }
+.pass-chip.s-action { border-color: color-mix(in srgb, var(--action) 50%, transparent); color: var(--action); background: var(--action-bg); }
+.pass-chip.s-noauth, .pass-chip.s-error { border-color: color-mix(in srgb, var(--block) 40%, transparent); color: var(--block); background: var(--block-bg); }
+.pass-chip.s-manual { border-color: var(--surface-border-strong); color: var(--text-secondary); }
+.pass-chip.is-ok { border-color: color-mix(in srgb, var(--pass) 45%, transparent); color: var(--pass); background: var(--pass-bg); }
+.cc-coverage { display: grid; gap: 6px; max-width: 460px; }
+.cc-coverage-top { display: flex; justify-content: space-between; gap: 12px; font-size: .82rem; color: var(--text-secondary); }
+.cc-coverage-top b { color: var(--text); }
+.cc-meter { height: 8px; border-radius: 999px; background: var(--bg-sunken); border: 1px solid var(--surface-border); overflow: hidden; }
+.cc-meter > span { display: block; height: 100%; background: var(--brand); border-radius: 999px; }
+.cc-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 2px; }
+.cc-note { font-size: .8rem; color: var(--text-muted); margin: 0; }
+
+/* --- Workspace jump nav --- */
+.workspace-nav {
+  position: sticky; top: 0; z-index: 40; margin: 0 0 22px;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent); backdrop-filter: none;
+  border: 1px solid var(--surface-border); border-radius: var(--radius); box-shadow: var(--shadow-sm);
+}
+.workspace-nav ul { list-style: none; margin: 0; padding: 4px 6px; display: flex; gap: 2px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.workspace-nav li { flex: none; }
+.wsn-link {
+  display: inline-flex; align-items: center; min-height: 40px; padding: 8px 14px; border-radius: var(--radius);
+  font-size: .86rem; font-weight: 600; color: var(--text-secondary); text-decoration: none; white-space: nowrap;
+}
+.wsn-link:hover { background: var(--bg-sunken); color: var(--text); }
+.wsn-link[aria-current="true"] { color: var(--brand); background: var(--bg-sunken); box-shadow: inset 0 -2px 0 0 var(--brand); }
+
+/* --- Path to Ready stepper --- */
+.path-phases { display: grid; gap: 4px; }
+.path-phase { position: relative; padding: 0 0 6px 34px; }
+.path-phase::before {
+  content: ""; position: absolute; left: 12px; top: 30px; bottom: 0; width: 2px; background: var(--surface-border);
+}
+.path-phase:last-child::before { display: none; }
+.path-phase-num {
+  position: absolute; left: 0; top: 2px; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; font-size: .82rem; font-weight: 700; font-family: var(--font-mono);
+  background: var(--bg-sunken); border: 1px solid var(--surface-border-strong); color: var(--text-secondary);
+}
+.path-phase.p-unblock .path-phase-num, .path-phase.p-authorize .path-phase-num { background: var(--block-bg); border-color: color-mix(in srgb, var(--block) 45%, transparent); color: var(--block); }
+.path-phase.p-action .path-phase-num { background: var(--action-bg); border-color: color-mix(in srgb, var(--action) 50%, transparent); color: var(--action); }
+.path-phase-title { font-family: var(--font-display); font-size: 1.08rem; font-weight: 600; margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.path-phase-count { font-size: .74rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-muted); }
+.path-phase-desc { margin: 3px 0 10px; font-size: .86rem; color: var(--text-secondary); }
+.path-item {
+  display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 10px 14px; align-items: start;
+  border: 1px solid var(--surface-border); border-radius: var(--radius); background: var(--bg-elevated);
+  padding: 12px 14px; margin: 0 0 8px;
+}
+.path-item .pi-marker { width: 8px; align-self: stretch; min-height: 34px; border-radius: 4px; background: var(--neutral); }
+.path-item.s-block .pi-marker, .path-item.s-noauth .pi-marker, .path-item.s-error .pi-marker { background: var(--block); }
+.path-item.s-action .pi-marker { background: var(--action); }
+.path-item.s-manual .pi-marker { background: var(--manual); }
+.path-item.s-advisory .pi-marker { background: var(--advisory); }
+.pi-main { min-width: 0; }
+.pi-title { font-weight: 600; }
+.pi-title .pi-id { font-family: var(--font-mono); font-size: .76rem; color: var(--text-muted); font-weight: 400; margin-left: 6px; }
+.pi-remediation { font-size: .86rem; color: var(--text-secondary); margin: 3px 0 0; }
+.pi-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: .78rem; color: var(--text-muted); }
+.pi-meta b { color: var(--text-secondary); font-weight: 600; }
+.pi-side { display: grid; gap: 8px; justify-items: end; align-content: start; }
+.pi-check { display: inline-flex; align-items: center; gap: 7px; font-size: .8rem; color: var(--text-secondary); cursor: pointer; min-height: 40px; }
+.pi-check input { width: 18px; height: 18px; accent-color: var(--brand); flex: none; }
+.pi-open {
+  font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+  background: var(--bg-sunken); color: var(--link); border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius); padding: 7px 12px; min-height: 40px;
+}
+.pi-open:hover { border-color: var(--brand); }
+.pi-top { margin: 0 0 6px; }
+.pi-check span:not(.sr-only) { font-weight: 600; }
+.js .pi-jump { display: none; }
+.no-js .pi-open.js-only { display: none !important; }
+.path-ready-banner {
+  display: flex; gap: 12px; align-items: center; padding: 16px 18px; border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--pass) 40%, transparent); background: var(--pass-bg); color: var(--pass); font-weight: 600;
+}
+.local-progress-notice {
+  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between;
+  margin: 4px 0 16px; padding: 10px 14px; font-size: .82rem; color: var(--text-secondary);
+  border: 1px dashed var(--surface-border-strong); border-radius: var(--radius); background: var(--bg-sunken);
+}
+.local-progress-notice strong { color: var(--text); }
+
+/* --- Answers builder & rerun tooling --- */
+.answers-builder, .rerun-tool { display: grid; gap: 14px; }
+.answer-gate {
+  border: 1px solid var(--surface-border); border-radius: var(--radius); background: var(--bg-elevated); padding: 14px 16px; display: grid; gap: 10px;
+}
+.answer-gate-head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.answer-gate-title { font-weight: 600; }
+.answer-gate-req { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--action); }
+.answer-gate-evidence { font-size: .82rem; color: var(--text-muted); margin: 0; }
+.answer-values { display: flex; flex-wrap: wrap; gap: 8px; }
+.answer-values label {
+  display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 6px 14px; cursor: pointer;
+  border: 1px solid var(--surface-border-strong); border-radius: 999px; font-size: .84rem; font-weight: 600; color: var(--text-secondary); background: var(--bg-elevated);
+}
+.answer-values label:hover { border-color: var(--brand); }
+.answer-values input { accent-color: var(--brand); width: 16px; height: 16px; }
+.answer-values input:checked + span { color: var(--text); }
+.answer-fields { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.answer-fields.full { grid-template-columns: 1fr; }
+.answer-fields label { display: grid; gap: 5px; font-size: .74rem; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--text-muted); }
+.answer-fields input, .answer-fields textarea {
+  font: inherit; font-size: .9rem; color: var(--text); background: var(--bg-elevated);
+  border: 1px solid var(--surface-border-strong); border-radius: var(--radius); padding: 9px 11px; min-height: 42px; width: 100%;
+}
+.answer-fields textarea { min-height: 64px; resize: vertical; }
+.answer-fields input:focus-visible, .answer-fields textarea:focus-visible { border-color: var(--brand); }
+.tool-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.tool-feedback { font-size: .82rem; color: var(--text-secondary); margin: 0; min-height: 1.2em; }
+.tool-feedback.is-error { color: var(--block); }
+.tool-feedback.is-ok { color: var(--pass); }
+.rerun-block { position: relative; display: grid; gap: 8px; }
+.rerun-code {
+  font-family: var(--font-mono); font-size: .86rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+  background: var(--bg-sunken); border: 1px solid var(--surface-border); border-radius: var(--radius); padding: 14px 16px; margin: 0; color: var(--text);
+}
+.rerun-meta { display: grid; gap: 2px; font-size: .82rem; color: var(--text-secondary); }
+.rerun-meta .rm-k { color: var(--text-muted); }
+
+/* --- Blade segmented sections --- */
+.blade-seg { margin: 0 0 6px; }
+.blade-seg + .blade-seg { border-top: 1px solid var(--surface-border); padding-top: 12px; margin-top: 12px; }
+.blade-seg-title {
+  font-family: var(--font-display); font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-muted); margin: 0 0 8px;
+}
+
+@media (max-width: 860px) {
+  .command-center { grid-template-columns: 1fr; gap: 14px; }
+  .cc-badge { justify-self: start; }
+}
+@media (max-width: 640px) {
+  .path-item { grid-template-columns: auto minmax(0,1fr); }
+  .pi-side { grid-column: 2; justify-items: start; grid-auto-flow: column; }
+}
+
 @media print {
   :root { --bg: #fff; --bg-elevated: #fff; --bg-sunken: #fff; --text: #000; --text-secondary: #222; --text-muted: #444; }
   body { font-size: 11pt; color: #000; background: #fff; }
@@ -825,6 +1314,13 @@ body.blade-open { overflow: hidden; }
   a.doc-link::after, a.source-link::after { content: " (" attr(href) ")"; font-size: .85em; color: #333; word-break: break-all; }
   .hero, .card { page-break-inside: avoid; }
   thead { display: table-header-group; }
+  .workspace-nav, .cc-actions, .command-actions, .tool-actions, .pi-open, .pi-check, .local-progress-notice { display: none !important; }
+  .answer-values, .answer-fields { display: none !important; }
+  .command-center { display: block !important; box-shadow: none !important; border-color: #999 !important; }
+  .command-center::before { display: none !important; }
+  .path-phase::before { display: none !important; }
+  .path-item, .answer-gate, .command-center, .path-phase { break-inside: avoid; }
+  .rerun-code { border-color: #999 !important; }
 }
 '@
     return $css
@@ -840,6 +1336,9 @@ function Get-A365Script {
   var root = document.documentElement;
   root.classList.remove("no-js");
   root.classList.add("js");
+
+  // Shared handle so Path-to-Ready rows can reuse the findings blade.
+  var findingsApi = null;
 
   var STORAGE_KEY = "a365-theme";
   var toggle = document.getElementById("themeToggle");
@@ -1202,6 +1701,14 @@ function Get-A365Script {
     if (backdrop) { backdrop.addEventListener("click", closeBlade); }
     if (bladeClose) { bladeClose.addEventListener("click", closeBlade); }
 
+    // Expose blade opening so Path-to-Ready "Open details" rows reuse it safely.
+    findingsApi = {
+      openById: function (id, trigger) {
+        var card = document.getElementById(id);
+        if (card) { openBlade(card, trigger); }
+      }
+    };
+
     document.addEventListener("keydown", function (e) {
       if (bladeOpen) {
         if (e.key === "Escape" || e.keyCode === 27) { e.preventDefault(); closeBlade(); return; }
@@ -1242,6 +1749,255 @@ function Get-A365Script {
     }
 
     apply();
+  }
+
+  // ---- Shared offline helpers (no network, no eval) ----
+  function trimStr(s) { return (s == null ? "" : String(s)).replace(/^\s+|\s+$/g, ""); }
+  function setFeedbackEl(el, msg, kind) {
+    if (!el) { return; }
+    el.textContent = msg;
+    el.className = "tool-feedback" + (kind ? (" is-" + kind) : "");
+  }
+  function offlineDownload(filename, mime, text) {
+    try {
+      var blob = new Blob([text], { type: mime });
+      var maker = window.URL || window.webkitURL;
+      var url = maker.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { try { maker.revokeObjectURL(url); } catch (e) {} }, 4000);
+      return true;
+    } catch (e) { return false; }
+  }
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "absolute";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand && document.execCommand("copy");
+      document.body.removeChild(ta);
+      return !!ok;
+    } catch (e) { return false; }
+  }
+  function copyText(text, cb) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { cb(true); }, function () { cb(fallbackCopy(text)); });
+      return;
+    }
+    cb(fallbackCopy(text));
+  }
+  function closestAttr(el, attr) {
+    while (el && el.nodeType === 1) {
+      if (el.getAttribute && el.hasAttribute(attr)) { return el; }
+      el = el.parentNode;
+    }
+    return null;
+  }
+
+  // ---- Path to Ready: local progress + open details ----
+  var pathRoot = document.getElementById("pathToReady");
+  if (pathRoot) {
+    var reportKey = pathRoot.getAttribute("data-report-key") || "default";
+    var progressPrefix = "a365-progress:" + reportKey + ":";
+    var completes = Array.prototype.slice.call(pathRoot.querySelectorAll("[data-local-complete]"));
+
+    function progressGet(id) {
+      try { return window.localStorage.getItem(progressPrefix + id) === "1"; } catch (e) { return false; }
+    }
+    function progressSet(id, on) {
+      try {
+        if (on) { window.localStorage.setItem(progressPrefix + id, "1"); }
+        else { window.localStorage.removeItem(progressPrefix + id); }
+      } catch (e) {}
+    }
+    function setRowComplete(box) {
+      var row = closestAttr(box, "data-path-item");
+      if (row && row.classList) {
+        if (box.checked) { row.classList.add("is-complete"); } else { row.classList.remove("is-complete"); }
+      }
+    }
+    for (var pci = 0; pci < completes.length; pci++) {
+      var box = completes[pci];
+      if (box.parentNode && box.parentNode.hidden) { box.parentNode.hidden = false; }
+      var cid = box.getAttribute("data-item-id") || "";
+      if (progressGet(cid)) { box.checked = true; }
+      setRowComplete(box);
+      box.addEventListener("change", function (e) {
+        var b = e.currentTarget;
+        progressSet(b.getAttribute("data-item-id") || "", b.checked);
+        setRowComplete(b);
+      });
+    }
+    var resetProgress = document.getElementById("resetLocalProgress");
+    if (resetProgress) {
+      resetProgress.hidden = false;
+      resetProgress.addEventListener("click", function () {
+        try {
+          var keys = [];
+          for (var k = 0; k < window.localStorage.length; k++) {
+            var key = window.localStorage.key(k);
+            if (key && key.indexOf(progressPrefix) === 0) { keys.push(key); }
+          }
+          for (var m = 0; m < keys.length; m++) { window.localStorage.removeItem(keys[m]); }
+        } catch (e) {}
+        for (var n = 0; n < completes.length; n++) { completes[n].checked = false; setRowComplete(completes[n]); }
+      });
+    }
+    var pathOpeners = Array.prototype.slice.call(pathRoot.querySelectorAll("[data-open-finding]"));
+    for (var po = 0; po < pathOpeners.length; po++) {
+      pathOpeners[po].hidden = false;
+      pathOpeners[po].addEventListener("click", function (e) {
+        var id = e.currentTarget.getAttribute("data-open-finding");
+        if (findingsApi && id) { findingsApi.openById(id, e.currentTarget); }
+      });
+    }
+  }
+
+  // ---- Answers builder: in-memory + offline JSON download ----
+  var answersRoot = document.getElementById("answersBuilder");
+  if (answersRoot) {
+    answersRoot.hidden = false;
+    var downloadAnswers = document.getElementById("downloadAnswers");
+    var answersFeedback = document.getElementById("answersFeedback");
+    function gateFieldVal(scope, sel) {
+      var el = scope.querySelector(sel);
+      return el ? trimStr(el.value) : "";
+    }
+    function gateLabel(g) {
+      var t = g.getAttribute("data-answer-gate-title");
+      if (t) { return t; }
+      return g.getAttribute("data-answer-gate") || "Gate";
+    }
+    function collectAnswers() {
+      var gates = Array.prototype.slice.call(answersRoot.querySelectorAll("[data-answer-gate]"));
+      var out = [];
+      var errors = [];
+      for (var i = 0; i < gates.length; i++) {
+        var g = gates[i];
+        var id = g.getAttribute("data-answer-gate") || "";
+        var val = "";
+        var radios = g.querySelectorAll("[data-answer-value]");
+        for (var r = 0; r < radios.length; r++) { if (radios[r].checked) { val = radios[r].value; } }
+        if (!val) { continue; }
+        var owner = gateFieldVal(g, "[data-answer-owner]");
+        var reference = gateFieldVal(g, "[data-answer-reference]");
+        var notes = gateFieldVal(g, "[data-answer-notes]");
+        var justification = gateFieldVal(g, "[data-answer-justification]");
+        if (val === "Yes" && (!owner || !reference)) {
+          errors.push(gateLabel(g) + ": a Yes answer needs an owner and an evidence reference.");
+        }
+        if (val === "NotApplicable" && !justification) {
+          errors.push(gateLabel(g) + ": a Not applicable answer needs a justification.");
+        }
+        out.push({
+          id: id,
+          answer: val,
+          owner: owner,
+          evidenceReference: reference,
+          notes: notes,
+          justification: justification,
+          answeredAtUtc: new Date().toISOString()
+        });
+      }
+      return { items: out, errors: errors };
+    }
+    if (downloadAnswers) {
+      downloadAnswers.addEventListener("click", function () {
+        var res = collectAnswers();
+        if (res.errors.length) {
+          setFeedbackEl(answersFeedback, res.errors[0] + (res.errors.length > 1 ? " (+" + (res.errors.length - 1) + " more)" : ""), "error");
+          return;
+        }
+        if (!res.items.length) {
+          setFeedbackEl(answersFeedback, "Answer at least one gate before downloading.", "error");
+          return;
+        }
+        var payload = { schemaVersion: "1.1", answers: res.items };
+        var ok = offlineDownload("agent365-answers.json", "application/json;charset=utf-8", JSON.stringify(payload, null, 2));
+        setFeedbackEl(answersFeedback, ok ? ("Downloaded " + res.items.length + " answer" + (res.items.length === 1 ? "" : "s") + ". Re-run the checker with this file to apply them.") : "Download is not available in this browser.", ok ? "ok" : "error");
+      });
+    }
+  }
+
+  // ---- Rerun command: copy + remediation checklist download ----
+  var rerunCmdEl = document.getElementById("rerunCommand");
+  var rerunFeedback = document.getElementById("rerunFeedback");
+  var copyRerun = document.getElementById("copyRerunCommand");
+  if (copyRerun && rerunCmdEl) {
+    copyRerun.hidden = false;
+    copyRerun.addEventListener("click", function () {
+      copyText(rerunCmdEl.textContent || "", function (ok) {
+        setFeedbackEl(rerunFeedback, ok ? "Command copied to the clipboard." : "Copy is unavailable — select the command text manually.", ok ? "ok" : "error");
+      });
+    });
+  }
+  var downloadRemediation = document.getElementById("downloadRemediation");
+  if (downloadRemediation) {
+    function buildRemediationMarkdown() {
+      var lines = ["# Agent 365 pre-flight remediation checklist", ""];
+      var pr = document.getElementById("pathToReady");
+      if (pr) {
+        var items = Array.prototype.slice.call(pr.querySelectorAll("[data-path-item]"));
+        if (!items.length) { lines.push("No outstanding actions were listed."); }
+        for (var i = 0; i < items.length; i++) {
+          var it = items[i];
+          var titleEl = it.querySelector("[data-pi-title]");
+          var remEl = it.querySelector("[data-pi-remediation]");
+          var statusLabel = it.getAttribute("data-pi-status") || "";
+          var ownerLabel = it.getAttribute("data-pi-owner") || "";
+          var box = it.querySelector("[data-local-complete]");
+          var mark = (box && box.checked) ? "x" : " ";
+          var title = titleEl ? trimStr(titleEl.textContent) : "Action";
+          var line = "- [" + mark + "] ";
+          if (statusLabel) { line += "(" + statusLabel + ") "; }
+          line += title;
+          lines.push(line);
+          if (remEl) { var rem = trimStr(remEl.textContent); if (rem) { lines.push("  - Remediation: " + rem); } }
+          if (ownerLabel) { lines.push("  - Owner: " + ownerLabel); }
+        }
+      }
+      lines.push("");
+      lines.push("_Local check state is a personal note only. It does not change the verdict; re-run the checker to confirm._");
+      return lines.join("\n");
+    }
+    downloadRemediation.hidden = false;
+    downloadRemediation.addEventListener("click", function () {
+      var ok = offlineDownload("agent365-remediation.md", "text/markdown;charset=utf-8", buildRemediationMarkdown());
+      setFeedbackEl(rerunFeedback, ok ? "Remediation checklist downloaded." : "Download is not available in this browser.", ok ? "ok" : "error");
+    });
+  }
+
+  // ---- Workspace nav: reflect the section in view (guarded, optional) ----
+  var wsNav = document.getElementById("workspaceNav");
+  if (wsNav && window.IntersectionObserver) {
+    var wsLinks = Array.prototype.slice.call(wsNav.querySelectorAll('a[href^="#"]'));
+    var wsMap = {};
+    var wsSections = [];
+    for (var wi = 0; wi < wsLinks.length; wi++) {
+      var wid = wsLinks[wi].getAttribute("href").substring(1);
+      var wsec = document.getElementById(wid);
+      if (wsec) { wsMap[wid] = wsLinks[wi]; wsSections.push(wsec); }
+    }
+    var wsCurrent = null;
+    var wsObs = new IntersectionObserver(function (entries) {
+      for (var e = 0; e < entries.length; e++) {
+        if (entries[e].isIntersecting) {
+          var id = entries[e].target.id;
+          if (wsCurrent && wsMap[wsCurrent]) { wsMap[wsCurrent].removeAttribute("aria-current"); }
+          wsCurrent = id;
+          if (wsMap[id]) { wsMap[id].setAttribute("aria-current", "true"); }
+        }
+      }
+    }, { rootMargin: "-45% 0px -50% 0px", threshold: 0 });
+    for (var ws = 0; ws < wsSections.length; ws++) { wsObs.observe(wsSections[ws]); }
   }
 })();
 '@
@@ -1334,6 +2090,23 @@ function New-Agent365PreflightHtml {
         }
     }
 
+    # --- Derived progressive-action models (graceful when backend fields are absent) ---
+    $slugById = @{}
+    foreach ($rItem in $results) {
+        $ridKey = [string](Get-A365Member $rItem 'Id' '')
+        if ($ridKey -and -not $slugById.ContainsKey($ridKey)) {
+            $slugById[$ridKey] = 'check-' + (Get-A365Slug $ridKey)
+        }
+    }
+    $reportKeySeed = @($toolVersion, $generatedAtUtc, [string](Get-A365Member $tenant 'DisplayName' ''), $ruleSetVersion) -join '|'
+    $reportKey = Get-A365ReportKey $reportKeySeed
+    $passModel  = Get-A365PassModel $Report $verdict $results
+    $pathPhases = @(Get-A365PathModel $Report $results $slugById | Where-Object { $null -ne $_ })
+    $rerunModel = Get-A365RerunModel $Report $isSanitized
+    $gateModel  = @(Get-A365GateModel $Report $attest)
+    $pathItemTotal = 0
+    foreach ($ph in $pathPhases) { $pathItemTotal += @($ph.Items).Count }
+
     $sb = [System.Text.StringBuilder]::new()
     $nl = [Environment]::NewLine
     function local:Line { param($t) [void]$sb.Append($t); [void]$sb.Append($nl) }
@@ -1407,23 +2180,72 @@ function New-Agent365PreflightHtml {
     }
 
     Line '<main id="main" role="main" tabindex="-1">'
-        # --- Verdict hero ---
-    Line ('<section class="section" aria-labelledby="verdict-h"><div class="hero ' + $verdictMeta.Class + '">')
-    Line ('<div class="hero-badge" aria-hidden="true">' + (ConvertTo-A365Html $verdictMeta.Glyph) + '</div>')
-    Line '<div class="hero-body">'
-    Line '<p class="kicker muted" style="margin:0 0 4px;">Pre-flight verdict</p>'
+        # --- Readiness Command Center (first-viewport decision surface) ---
+    $ccPassSummary = [string]$passModel.Summary
+    $ccBlock  = [int]$passModel.BlockerCount
+    $ccAction = [int]$passModel.ActionRequiredCount
+    $ccAuth   = [int]$passModel.NotAuthorizedCount
+    $ccErr    = [int]$passModel.ErrorCount
+    $ccManual = [int]$passModel.RequiredManualUnresolvedCount
+    $ccSatisfied = [bool]$passModel.IsSatisfied
+    $ccCovTotal = Get-A365Int (Get-A365Member $coverage 'Total' 0)
+    $ccCovPass  = Get-A365Int (Get-A365Member $coverage 'Passed' 0)
+    $ccCovColl  = Get-A365Int (Get-A365Member $coverage 'Collected' 0)
+    $ccCovPct   = Get-A365Member $coverage 'Percentage' $null
+
+    Line ('<section id="commandCenter" class="section" aria-labelledby="verdict-h"><div class="command-center ' + $verdictMeta.Class + '">')
+    Line ('<span class="cc-badge"><span class="cc-glyph" aria-hidden="true">' + (ConvertTo-A365Html $verdictMeta.Glyph) + '</span>' + $(if ([string]::IsNullOrWhiteSpace($verdictLabel)) { 'Verdict' } else { (ConvertTo-A365Html $verdictLabel) }) + '</span>')
+    Line '<div class="cc-body">'
+    Line '<p class="kicker muted" style="margin:0;">Pre-flight verdict</p>'
     if ([string]::IsNullOrWhiteSpace($verdictLabel)) {
-        Line '<h1 id="verdict-h" class="verdict-label">Verdict unavailable</h1>'
+        Line '<h1 id="verdict-h" class="cc-heading">Verdict unavailable</h1>'
     } else {
-        Line ('<h1 id="verdict-h" class="verdict-label">' + (ConvertTo-A365Html $verdictLabel) + '</h1>')
+        Line ('<h1 id="verdict-h" class="cc-heading">' + (ConvertTo-A365Html $verdictLabel) + '</h1>')
     }
     if (-not [string]::IsNullOrWhiteSpace($verdictSummary)) {
-        Line ('<p class="hero-summary">' + (ConvertTo-A365Html $verdictSummary) + '</p>')
+        Line ('<p class="cc-summary">' + (ConvertTo-A365Html $verdictSummary) + '</p>')
     }
-    Line '<div class="verdict-counts">'
-    Line ('<span class="count-chip c-block"><b>' + (ConvertTo-A365Html $blockerCount) + '</b> blocker(s)</span>')
-    Line ('<span class="count-chip c-action"><b>' + (ConvertTo-A365Html $actionCount) + '</b> action(s) required</span>')
-    Line ('<span class="count-chip c-auth"><b>' + (ConvertTo-A365Html $authGapCount) + '</b> authorization gap(s)</span>')
+
+    # What prevents a technical pass
+    Line '<div class="cc-prevents">'
+    Line '<p class="cc-prevents-label">What prevents a technical pass</p>'
+    if ($ccSatisfied) {
+        Line '<div class="pass-chips"><span class="pass-chip is-ok"><span aria-hidden="true">&#10003;</span> No blockers, gaps, errors, required actions, or unresolved manual validations</span></div>'
+    } else {
+        Line '<div class="pass-chips">'
+        if ($ccBlock -gt 0)  { Line ('<span class="pass-chip s-block"><span class="pc-count">' + $ccBlock + '</span> blocker' + $(if($ccBlock -eq 1){''}else{'s'}) + '</span>') }
+        if ($ccAuth -gt 0)   { Line ('<span class="pass-chip s-noauth"><span class="pc-count">' + $ccAuth + '</span> authorization gap' + $(if($ccAuth -eq 1){''}else{'s'}) + '</span>') }
+        if ($ccErr -gt 0)    { Line ('<span class="pass-chip s-error"><span class="pc-count">' + $ccErr + '</span> error' + $(if($ccErr -eq 1){''}else{'s'}) + '</span>') }
+        if ($ccAction -gt 0) { Line ('<span class="pass-chip s-action"><span class="pc-count">' + $ccAction + '</span> action' + $(if($ccAction -eq 1){''}else{'s'}) + ' required</span>') }
+        if ($ccManual -gt 0) { Line ('<span class="pass-chip s-manual"><span class="pc-count">' + $ccManual + '</span> manual validation' + $(if($ccManual -eq 1){''}else{'s'}) + '</span>') }
+        Line '</div>'
+        if (-not [string]::IsNullOrWhiteSpace($ccPassSummary)) {
+            Line ('<p class="small muted" style="margin:2px 0 0;">' + (ConvertTo-A365Html $ccPassSummary) + '</p>')
+        }
+    }
+    Line '</div>'
+
+    # Coverage snapshot (clearly separate from verdict)
+    Line '<div class="cc-coverage">'
+    if ($ccCovTotal -gt 0) {
+        $ccCovWidth = [math]::Round((($ccCovColl / $ccCovTotal) * 100), 1)
+        if ($ccCovWidth -lt 0) { $ccCovWidth = 0 } elseif ($ccCovWidth -gt 100) { $ccCovWidth = 100 }
+        $ccCovPctText = if ($null -ne $ccCovPct) { (ConvertTo-A365Html $ccCovPct) + '% collected' } else { (ConvertTo-A365Html $ccCovColl) + ' of ' + (ConvertTo-A365Html $ccCovTotal) + ' collected' }
+        Line ('<div class="cc-coverage-top"><span>Coverage &middot; <b>' + (ConvertTo-A365Html $ccCovPass) + '</b> passed</span><span>' + $ccCovPctText + '</span></div>')
+        Line ('<div class="cc-meter" role="img" aria-label="' + (ConvertTo-A365Html ($ccCovColl.ToString() + ' of ' + $ccCovTotal.ToString() + ' checks collected')) + '"><span style="width:' + $ccCovWidth + '%"></span></div>')
+    } else {
+        Line '<p class="muted small" style="margin:0;">No coverage reported.</p>'
+    }
+    Line '<p class="cc-note">Coverage is not the verdict and not a compliance score.</p>'
+    Line '</div>'
+
+    # Primary CTA
+    Line '<div class="cc-actions">'
+    if ($pathItemTotal -gt 0) {
+        Line ('<a class="cta-primary" id="openPathToReady" href="#pathToReady">Open Path to Ready <span aria-hidden="true">(' + $pathItemTotal + ')</span></a>')
+    } else {
+        Line '<a class="cta-primary" id="openPathToReady" href="#pathToReady">View Path to Ready</a>'
+    }
     Line '</div>'
     Line '</div>'
     Line '</div></section>'
@@ -1438,21 +2260,14 @@ function New-Agent365PreflightHtml {
         Line '</div></section>'
     }
 
-    # --- On this page (nav) ---
-    Line '<nav class="section toc js-only" aria-label="On this page" style="display:block;">'
-    Line '<h2>On this page</h2>'
+    # --- Workspace navigation (sticky jump tabs) ---
+    Line '<nav id="workspaceNav" class="workspace-nav js-only" aria-label="Report sections" style="display:block;">'
     Line '<ul>'
-    Line '<li><a href="#scope">Selected scope</a></li>'
-    Line '<li><a href="#priorities">Blockers &amp; actions</a></li>'
-    Line '<li><a href="#coverage">Collection coverage</a></li>'
-    Line '<li><a href="#pillars">Observe / Govern / Secure</a></li>'
-    Line '<li><a href="#checks">Detailed checks</a></li>'
-    if ($attest.Count -gt 0) { Line '<li><a href="#attestations">Manual attestations</a></li>' }
-    if ($null -ne $drift) { Line '<li><a href="#drift">Drift</a></li>' }
-    Line '<li><a href="#permissions">Permissions used</a></li>'
-    Line '<li><a href="#freshness">Rule &amp; API freshness</a></li>'
-    if ($issues.Count -gt 0) { Line '<li><a href="#issues">Collection issues</a></li>' }
-    Line '<li><a href="#sources">Public sources</a></li>'
+    Line '<li><a class="wsn-link" href="#scope">Overview</a></li>'
+    Line '<li><a class="wsn-link" href="#pathToReady">Path to Ready</a></li>'
+    Line '<li><a class="wsn-link" href="#checks">Findings</a></li>'
+    Line '<li><a class="wsn-link" href="#evidence">Evidence &amp; rerun</a></li>'
+    Line '<li><a class="wsn-link" href="#sources">Sources</a></li>'
     Line '</ul>'
     Line '</nav>'
 
@@ -1531,60 +2346,73 @@ function New-Agent365PreflightHtml {
     Line '</div>'
     Line '</div>'
     Line '</section>'
-        # --- Blockers & ordered actions ---
-    Line '<section id="priorities" class="section" aria-labelledby="priorities-h">'
-    Line '<div class="section-head"><h2 id="priorities-h">Blockers &amp; ordered actions</h2><span class="section-sub">Resolve these before starting a pilot</span></div>'
+        # --- Path to Ready (progressive remediation stepper) ---
+    Line ('<section id="pathToReady" class="section" aria-labelledby="pathToReady-h" data-report-key="' + (ConvertTo-A365Html $reportKey) + '">')
+    Line '<div class="section-head"><h2 id="pathToReady-h">Path to Ready</h2><span class="section-sub">The ordered work that stands between this tenant and a technical pass</span></div>'
 
-    $blockerResults = @($results | Where-Object { [string](Get-A365Member $_ 'Status' '') -eq 'Blocker' })
-    if ($blockerResults.Count -gt 0) {
-        Line '<h3>Blockers</h3>'
-        Line '<div class="table-scroll"><table class="data"><caption>Checks that must pass before a pilot can proceed</caption>'
-        Line '<thead><tr><th scope="col">Check</th><th scope="col">Area</th><th scope="col">Status</th><th scope="col">Remediation</th></tr></thead><tbody>'
-        foreach ($b in $blockerResults) {
-            $bid = [string](Get-A365Member $b 'Id' '')
-            $anchor = if ($bid) { '#check-' + (Get-A365Slug $bid) } else { '#checks' }
-            Line '<tr>'
-            Line ('<td><a href="' + (ConvertTo-A365Html $anchor) + '">' + (ConvertTo-A365Html (Get-A365Member $b 'Title' $bid)) + '</a><div class="r-id mono">' + (ConvertTo-A365Html $bid) + '</div></td>')
-            Line ('<td>' + (ConvertTo-A365Html (Get-A365Member $b 'Area' '')) + '</td>')
-            Line ('<td>' + (Get-A365StatusPill 'Blocker') + '</td>')
-            Line ('<td>' + (ConvertTo-A365Html (Get-A365Member $b 'Remediation' '')) + '</td>')
-            Line '</tr>'
-        }
-        Line '</tbody></table></div>'
+    if ($pathItemTotal -eq 0) {
+        Line '<div class="path-ready-banner" role="note"><span class="prb-mark" aria-hidden="true">&#10003;</span><div><strong>No outstanding actions.</strong> Every collected check that could block a pilot is already passing. Manual validations and advisories, if any, are listed in the findings below.</div></div>'
     } else {
-        Line '<div class="callout empty"><strong>No blockers detected.</strong> No checks are currently blocking a pilot.</div>'
-    }
+        Line '<div id="localProgressNotice" class="local-progress-notice" role="note"><span class="lpn-icon" aria-hidden="true">&#8505;</span><div>Tick items as you complete them to track progress locally in this browser. <strong>Local check marks never change the verdict</strong> &mdash; re-run the checker to confirm a real pass.</div></div>'
 
-    if ($actions.Count -gt 0) {
-        $orderedActions = @($actions | Sort-Object -Property @{ Expression = {
-            $p = Get-A365Member $_ 'Priority' 2147483647
-            $n = 0
-            if ([int]::TryParse([string]$p, [ref]$n)) { $n } else { 2147483647 }
-        } }, @{ Expression = { [string](Get-A365Member $_ 'Priority' '') } })
+        Line '<ol class="path-phases">'
+        $phaseNum = 0
+        foreach ($phase in $pathPhases) {
+            $phaseNum++
+            $phaseItems = @($phase.Items)
+            if ($phaseItems.Count -eq 0) { continue }
+            $phaseClass = 'path-phase p-' + (Get-A365Slug ([string]$phase.Id))
+            Line ('<li class="' + $phaseClass + '">')
+            Line ('<span class="path-phase-num" aria-hidden="true">' + $phaseNum + '</span>')
+            Line ('<h3 class="path-phase-title">' + (ConvertTo-A365Html ([string]$phase.Title)) + ' <span class="path-phase-count">' + $phaseItems.Count + '</span></h3>')
+            if (-not [string]::IsNullOrWhiteSpace([string]$phase.Description)) {
+                Line ('<p class="path-phase-desc">' + (ConvertTo-A365Html ([string]$phase.Description)) + '</p>')
+            }
 
-        Line '<h3 style="margin-top:22px;">Ordered actions</h3>'
-        Line '<ol class="drift-list" style="padding-left:0;list-style:none;">'
-        foreach ($a in $orderedActions) {
-            $aStatus = [string](Get-A365Member $a 'Status' '')
-            $aResultId = [string](Get-A365Member $a 'ResultId' '')
-            $aAnchor = if ($aResultId) { '#check-' + (Get-A365Slug $aResultId) } else { $null }
-            Line '<li class="card" style="display:grid;gap:8px;">'
-            Line '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">'
-            $prio = Get-A365Member $a 'Priority' ''
-            $prioBadge = if ("$prio" -ne '') { '<span class="chip">Priority ' + (ConvertTo-A365Html $prio) + '</span>' } else { '' }
-            Line ('<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><strong>' + (ConvertTo-A365Html (Get-A365Member $a 'Title' '(untitled action)')) + '</strong>' + $prioBadge + '</div>')
-            if ($aStatus) { Line ('<div>' + (Get-A365StatusPill $aStatus) + '</div>') }
-            Line '</div>'
-            $aRem = [string](Get-A365Member $a 'Remediation' '')
-            if ($aRem) { Line ('<div class="small">' + (ConvertTo-A365Html $aRem) + '</div>') }
-            $links = @()
-            if ($aAnchor) { $links += ('<a href="' + (ConvertTo-A365Html $aAnchor) + '">View check ' + (ConvertTo-A365Html $aResultId) + '</a>') }
-            $aDoc = Get-A365Link (Get-A365Member $a 'DocsUrl') 'Documentation'
-            if ($aDoc) { $links += $aDoc }
-            if ($links.Count -gt 0) { Line ('<div class="small">' + ($links -join ' &middot; ') + '</div>') }
+            Line '<ul class="path-items" style="list-style:none;margin:0;padding:0;">'
+            foreach ($it in $phaseItems) {
+                $piId = [string]$it.Id
+                if ([string]::IsNullOrWhiteSpace($piId)) { $piId = 'item-' + (Get-A365Slug ([string]$it.Title)) }
+                $piStatus = [string]$it.Status
+                $piStatusMeta = Get-A365StatusMeta $piStatus
+                $piTitle = [string]$it.Title
+                $piRem = [string]$it.Remediation
+                $piOwner = [string]$it.Owner
+                $piPerm = [string]$it.RequiredPermission
+                $piEvidence = [string]$it.EvidenceNeeded
+                Line ('<li class="path-item ' + $piStatusMeta.Class + '" data-path-item data-pi-status="' + (ConvertTo-A365Html $piStatusMeta.Label) + '" data-pi-owner="' + (ConvertTo-A365Html $piOwner) + '">')
+                Line '<span class="pi-marker" aria-hidden="true"></span>'
+                Line '<div class="pi-main">'
+                Line ('<div class="pi-top"><span class="pi-status">' + (Get-A365StatusPill $piStatus) + '</span></div>')
+                Line ('<div class="pi-title" data-pi-title>' + (ConvertTo-A365Html $piTitle) + $(if ($piId -and $piId -notmatch '^item-') { '<span class="pi-id">' + (ConvertTo-A365Html $piId) + '</span>' } else { '' }) + '</div>')
+                if ($piRem) { Line ('<p class="pi-remediation" data-pi-remediation>' + (ConvertTo-A365Html $piRem) + '</p>') }
+                $piMeta = @()
+                if ($piOwner) { $piMeta += ('<span><b>Owner</b> ' + (ConvertTo-A365Html $piOwner) + '</span>') }
+                if ($piPerm) { $piMeta += ('<span><b>Permission</b> <span class="mono">' + (ConvertTo-A365Html $piPerm) + '</span></span>') }
+                if ($piEvidence) { $piMeta += ('<span><b>Evidence</b> ' + (ConvertTo-A365Html $piEvidence) + '</span>') }
+                if ($piMeta.Count -gt 0) { Line ('<div class="pi-meta">' + ($piMeta -join '') + '</div>') }
+                $piDoc = Get-A365Link $it.DocsUrl 'Documentation'
+                if ($piDoc) { Line ('<div class="pi-meta"><span>' + $piDoc + '</span></div>') }
+                Line '</div>'
+                Line '<div class="pi-side">'
+                Line '<label class="pi-check js-only" hidden>'
+                Line ('<input type="checkbox" data-local-complete data-item-id="' + (ConvertTo-A365Html $piId) + '"><span>Done</span><span class="sr-only"> &mdash; mark "' + (ConvertTo-A365Html $piTitle) + '" complete locally</span>')
+                Line '</label>'
+                if ($it.HasCard) {
+                    Line ('<a class="pi-open pi-jump" href="#' + (ConvertTo-A365Html ([string]$it.CardId)) + '">View finding</a>')
+                    Line ('<button type="button" class="pi-open js-only" data-open-finding="' + (ConvertTo-A365Html ([string]$it.CardId)) + '" hidden>Open details</button>')
+                }
+                Line '</div>'
+                Line '</li>'
+            }
+            Line '</ul>'
             Line '</li>'
         }
         Line '</ol>'
+
+        Line '<div class="path-foot">'
+        Line '<button type="button" id="resetLocalProgress" class="act-btn js-only" hidden>Reset local progress</button>'
+        Line '</div>'
     }
     Line '</section>'
 
@@ -1868,59 +2696,76 @@ function New-Agent365PreflightHtml {
                 Line '</div>'
 
                 Line '<div class="finding-full" data-result-full>'
+
+                # -- Segment: Finding --
+                Line '<div class="blade-seg">'
+                Line '<h4 class="blade-seg-title">Finding</h4>'
                 Line '<dl class="kv">'
                 if ($rPillar) { Line ('<dt>Pillar</dt><dd>' + (ConvertTo-A365Html $rPillar) + '</dd>') }
                 Line ('<dt>Area</dt><dd>' + (ConvertTo-A365Html $areaName) + '</dd>')
                 if ($rApplic) { Line ('<dt>Applicability</dt><dd>' + (ConvertTo-A365Html $rApplic) + '</dd>') }
                 if ($rProfiles) { Line ('<dt>Profiles</dt><dd>' + (ConvertTo-A365Html $rProfiles) + '</dd>') }
                 Line '</dl>'
-
                 if ($rExpected) {
                     Line ('<div class="field expected"><div class="field-label">Expected</div><div class="field-value">' + (ConvertTo-A365Html $rExpected) + '</div></div>')
                 }
-
                 if ($observedIsRedacted) {
                     Line '<div class="field observed"><div class="field-label">Observed</div><div class="field-value muted">[redacted in sanitized report]</div></div>'
                 } elseif ($rObserved) {
                     Line ('<div class="field observed"><div class="field-label">Observed</div><div class="field-value">' + (ConvertTo-A365Html $rObserved) + '</div></div>')
                 }
+                Line '</div>'
 
+                # -- Segment: Remediation (exact next action, owning role, permission, docs) --
+                $docLink = Get-A365Link (Get-A365Member $r 'DocsUrl') 'Documentation'
+                if ($rRemediation -or $reqRole -or $reqPerm -or $docLink) {
+                    Line '<div class="blade-seg">'
+                    Line '<h4 class="blade-seg-title">Remediation</h4>'
+                    if ($rRemediation) {
+                        Line ('<div class="remediation"><div class="field-label">Next action</div><div>' + (ConvertTo-A365Html $rRemediation) + '</div></div>')
+                    } else {
+                        Line '<p class="small muted" style="margin:0 0 8px;">No remediation is required for this check.</p>'
+                    }
+                    if ($reqRole -or $reqPerm) {
+                        Line '<dl class="kv" style="margin-top:8px;">'
+                        if ($reqRole) { Line ('<dt>Owning role</dt><dd>' + (ConvertTo-A365Html $reqRole) + '</dd>') }
+                        if ($reqPerm) { Line ('<dt>Required permission</dt><dd class="mono">' + (ConvertTo-A365Html $reqPerm) + '</dd>') }
+                        Line '</dl>'
+                    }
+                    if ($docLink) { Line ('<div class="small" style="margin-top:8px;">' + $docLink + '</div>') }
+                    Line '</div>'
+                }
+
+                # -- Segment: Evidence (method/time/freshness + preserved API evidence) --
                 $evPairs = @()
                 $evMethod = [string](Get-A365Member $r 'EvidenceMethod' '')
                 if ($evMethod) { $evPairs += @('Evidence method', (ConvertTo-A365Html $evMethod)) }
                 $evTime = Get-A365Member $r 'EvidenceTimeUtc'
                 if ($evTime) { $evPairs += @('Evidence time', (ConvertTo-A365Html (Format-A365Date $evTime))) }
-                if ($reqPerm) { $evPairs += @('Required permission', (ConvertTo-A365Html $reqPerm)) }
-                if ($reqRole) { $evPairs += @('Required role', (ConvertTo-A365Html $reqRole)) }
                 $rRuleReview = Get-A365Member $r 'RuleReviewDate'
                 if ($rRuleReview) { $evPairs += @('Rule reviewed', (ConvertTo-A365Html (Format-A365Date $rRuleReview))) }
-                if ($evPairs.Count -gt 0) {
-                    Line '<dl class="kv" style="margin-top:12px;">'
-                    for ($i = 0; $i -lt $evPairs.Count; $i += 2) {
-                        Line ('<dt>' + $evPairs[$i] + '</dt><dd>' + $evPairs[$i + 1] + '</dd>')
-                    }
-                    Line '</dl>'
-                }
-
                 $rDetails = Get-A365Member $r 'Details'
-                if ($null -ne $rDetails) {
-                    if ($isSanitized -and $rIsSensitive) {
-                        Line '<div class="field"><div class="field-label">Details</div><div class="field-value muted">[redacted in sanitized report]</div></div>'
-                    } else {
-                        Line '<details class="result" style="margin:12px 0 0;"><summary><span class="r-marker" aria-hidden="true"></span><span class="r-title">Evidence details</span></summary><div class="result-body">'
-                        Line (Format-A365Details -Value $rDetails)
-                        Line '</div></details>'
+                $hasDetails = ($null -ne $rDetails)
+                if ($evPairs.Count -gt 0 -or $hasDetails) {
+                    Line '<div class="blade-seg">'
+                    Line '<h4 class="blade-seg-title">Evidence</h4>'
+                    if ($evPairs.Count -gt 0) {
+                        Line '<dl class="kv">'
+                        for ($i = 0; $i -lt $evPairs.Count; $i += 2) {
+                            Line ('<dt>' + $evPairs[$i] + '</dt><dd>' + $evPairs[$i + 1] + '</dd>')
+                        }
+                        Line '</dl>'
                     }
-                }
-
-                if ($rRemediation) {
-                    Line ('<div class="remediation"><div class="field-label">Remediation</div><div>' + (ConvertTo-A365Html $rRemediation) + '</div>')
-                    $docLink = Get-A365Link (Get-A365Member $r 'DocsUrl') 'Documentation'
-                    if ($docLink) { Line ('<div class="small" style="margin-top:8px;">' + $docLink + '</div>') }
+                    if ($hasDetails) {
+                        if ($isSanitized -and $rIsSensitive) {
+                            Line '<div class="field"><div class="field-label">Details</div><div class="field-value muted">[redacted in sanitized report]</div></div>'
+                        } else {
+                            Line '<details class="result" style="margin:12px 0 0;"><summary><span class="r-marker" aria-hidden="true"></span><span class="r-title">Evidence details</span></summary><div class="result-body">'
+                            Line (Format-A365Details -Value $rDetails)
+                            Line '</div></details>'
+                        }
+                    }
                     Line '</div>'
-                } else {
-                    $docLink = Get-A365Link (Get-A365Member $r 'DocsUrl') 'Documentation'
-                    if ($docLink) { Line ('<div class="small" style="margin-top:10px;">' + $docLink + '</div>') }
                 }
 
                 Line '</div>'
@@ -1935,28 +2780,74 @@ function New-Agent365PreflightHtml {
         Line '</div>'
     }
     Line '</section>'
-        # --- Manual attestations ---
-    if ($attest.Count -gt 0) {
+        # --- Manual attestations & answers builder ---
+    if ($attest.Count -gt 0 -or $gateModel.Count -gt 0) {
         Line '<section id="attestations" class="section" aria-labelledby="attestations-h">'
-        Line '<div class="section-head"><h2 id="attestations-h">Manual attestations</h2><span class="section-sub">Checks that require human confirmation</span></div>'
-        Line '<div class="table-scroll"><table class="data"><caption>Attestation questions and recorded answers</caption>'
-        Line '<thead><tr><th scope="col">Question</th><th scope="col">Required</th><th scope="col">Answer</th><th scope="col">Owner</th><th scope="col">Evidence</th><th scope="col">Status</th></tr></thead><tbody>'
-        foreach ($at in $attest) {
-            $atRequired = Get-A365Bool (Get-A365Member $at 'Required')
-            $atAnswered = Get-A365Bool (Get-A365Member $at 'Answered')
-            $atStatus = [string](Get-A365Member $at 'Status' '')
-            $atAnswer = [string](Get-A365Member $at 'Answer' '')
-            if ([string]::IsNullOrWhiteSpace($atAnswer)) { $atAnswer = if ($atAnswered) { '(answered)' } else { '(not answered)' } }
-            Line '<tr>'
-            Line ('<td>' + (ConvertTo-A365Html (Get-A365Member $at 'Question' (Get-A365Member $at 'Id' ''))) + '<div class="r-id mono">' + (ConvertTo-A365Html (Get-A365Member $at 'Id' '')) + '</div></td>')
-            Line ('<td>' + $(if ($atRequired) { 'Required' } else { 'Optional' }) + '</td>')
-            Line ('<td>' + (ConvertTo-A365Html $atAnswer) + '</td>')
-            Line ('<td>' + (ConvertTo-A365Html (Get-A365Member $at 'Owner' '')) + '</td>')
-            Line ('<td>' + (ConvertTo-A365Html (Get-A365Member $at 'EvidenceReference' '')) + '</td>')
-            Line ('<td>' + $(if ($atStatus) { Get-A365StatusPill $atStatus } else { '<span class="muted small">&mdash;</span>' }) + '</td>')
-            Line '</tr>'
+        Line '<div class="section-head"><h2 id="attestations-h">Manual attestations</h2><span class="section-sub">Checks that require human confirmation &mdash; recorded answers never change the verdict</span></div>'
+        if ($attest.Count -gt 0) {
+            Line '<div class="table-scroll"><table class="data"><caption>Attestation questions and recorded answers</caption>'
+            Line '<thead><tr><th scope="col">Question</th><th scope="col">Required</th><th scope="col">Answer</th><th scope="col">Owner</th><th scope="col">Evidence</th><th scope="col">Status</th></tr></thead><tbody>'
+            foreach ($at in $attest) {
+                $atRequired = Get-A365Bool (Get-A365Member $at 'Required')
+                $atAnswered = Get-A365Bool (Get-A365Member $at 'Answered')
+                $atStatus = [string](Get-A365Member $at 'Status' '')
+                $atAnswer = [string](Get-A365Member $at 'Answer' '')
+                if ([string]::IsNullOrWhiteSpace($atAnswer)) { $atAnswer = if ($atAnswered) { '(answered)' } else { '(not answered)' } }
+                Line '<tr>'
+                Line ('<td>' + (ConvertTo-A365Html (Get-A365Member $at 'Question' (Get-A365Member $at 'Id' ''))) + '<div class="r-id mono">' + (ConvertTo-A365Html (Get-A365Member $at 'Id' '')) + '</div></td>')
+                Line ('<td>' + $(if ($atRequired) { 'Required' } else { 'Optional' }) + '</td>')
+                Line ('<td>' + (ConvertTo-A365Html $atAnswer) + '</td>')
+                Line ('<td>' + (ConvertTo-A365Html (Get-A365Member $at 'Owner' '')) + '</td>')
+                Line ('<td>' + (ConvertTo-A365Html (Get-A365Member $at 'EvidenceReference' '')) + '</td>')
+                Line ('<td>' + $(if ($atStatus) { Get-A365StatusPill $atStatus } else { '<span class="muted small">&mdash;</span>' }) + '</td>')
+                Line '</tr>'
+            }
+            Line '</tbody></table></div>'
         }
-        Line '</tbody></table></div>'
+
+        # Answers builder (JS enhancement; values stay in memory, offline JSON export only)
+        if ($gateModel.Count -gt 0) {
+            Line '<div id="answersBuilder" class="answers-builder js-only" hidden>'
+            Line '<h3>Answers builder</h3>'
+            Line '<p class="small muted" style="margin:0 0 4px;">Record manual answers to attestable gates, then download an answers file. Values stay in this browser and are never uploaded. <strong>Recording an answer here does not change the verdict</strong> &mdash; re-run the checker with the downloaded file to apply them.</p>'
+            foreach ($gate in $gateModel) {
+                $gId = [string]$gate.Id
+                if ([string]::IsNullOrWhiteSpace($gId)) { continue }
+                $gTitle = [string]$gate.Title
+                $gReq = [bool]$gate.Required
+                $gAllowNa = [bool]$gate.AllowNotApplicable
+                $gEvidence = [string]$gate.EvidenceNeeded
+                $gSlug = Get-A365Slug $gId
+                Line ('<div class="answer-gate" data-answer-gate="' + (ConvertTo-A365Html $gId) + '" data-answer-gate-title="' + (ConvertTo-A365Html $gTitle) + '">')
+                Line '<div class="answer-gate-head">'
+                Line ('<span class="answer-gate-title">' + (ConvertTo-A365Html $gTitle) + '</span>')
+                if ($gReq) { Line '<span class="answer-gate-req">Required</span>' }
+                Line ('<span class="r-id mono">' + (ConvertTo-A365Html $gId) + '</span>')
+                Line '</div>'
+                if ($gEvidence) { Line ('<p class="answer-gate-evidence">Evidence needed: ' + (ConvertTo-A365Html $gEvidence) + '</p>') }
+                $gDoc = Get-A365Link $gate.DocsUrl 'Documentation'
+                if ($gDoc) { Line ('<p class="answer-gate-evidence">' + $gDoc + '</p>') }
+                Line ('<div class="answer-values" role="radiogroup" aria-label="' + (ConvertTo-A365Html ('Answer for ' + $gTitle)) + '">')
+                Line ('<label><input type="radio" name="ans-' + (ConvertTo-A365Html $gSlug) + '" value="Yes" data-answer-value="Yes"><span>Yes</span></label>')
+                Line ('<label><input type="radio" name="ans-' + (ConvertTo-A365Html $gSlug) + '" value="No" data-answer-value="No"><span>No</span></label>')
+                if ($gAllowNa) { Line ('<label><input type="radio" name="ans-' + (ConvertTo-A365Html $gSlug) + '" value="NotApplicable" data-answer-value="NotApplicable"><span>Not applicable</span></label>') }
+                Line '</div>'
+                Line '<div class="answer-fields">'
+                Line ('<label>Owner<input type="text" data-answer-owner autocomplete="off"></label>')
+                Line ('<label>Evidence reference<input type="text" data-answer-reference autocomplete="off"></label>')
+                Line '</div>'
+                Line '<div class="answer-fields full">'
+                Line ('<label>Notes<textarea data-answer-notes rows="2"></textarea></label>')
+                if ($gAllowNa) { Line ('<label>Justification (required for Not applicable)<textarea data-answer-justification rows="2"></textarea></label>') }
+                Line '</div>'
+                Line '</div>'
+            }
+            Line '<div class="tool-actions">'
+            Line '<button type="button" id="downloadAnswers" class="act-btn is-brand">Download answers JSON</button>'
+            Line '</div>'
+            Line '<p id="answersFeedback" class="tool-feedback" role="status" aria-live="polite"></p>'
+            Line '</div>'
+        }
         Line '</section>'
     }
 
@@ -1974,7 +2865,20 @@ function New-Agent365PreflightHtml {
             }
             $regressions = @(Get-A365Member $drift 'Regressions' @())
             $resolved = @(Get-A365Member $drift 'ResolvedBlockers' @())
+            $resolvedRequired = @(Get-A365Member $drift 'ResolvedRequiredActions' @())
             $changed = @(Get-A365Member $drift 'Changed' @())
+
+            # "Other changes" is derived from the superset "Changed"; exclude any item already
+            # surfaced in a highlighted block so resolved/regressed entries are not shown twice.
+            $driftHighlightedIds = New-Object 'System.Collections.Generic.HashSet[string]'
+            foreach ($hItem in (@($regressions) + @($resolved) + @($resolvedRequired))) {
+                $hId = [string](Get-A365Member $hItem 'Id' '')
+                if ($hId) { [void]$driftHighlightedIds.Add($hId) }
+            }
+            $otherChanges = @($changed | Where-Object {
+                $cId = [string](Get-A365Member $_ 'Id' '')
+                -not ($cId -and $driftHighlightedIds.Contains($cId))
+            })
 
             function local:DriftBlock { param($title,$items,$cls)
                 if ($items.Count -eq 0) { return }
@@ -1993,8 +2897,9 @@ function New-Agent365PreflightHtml {
             }
             DriftBlock 'Regressions' @($regressions) 's-block'
             DriftBlock 'Resolved blockers' @($resolved) 's-pass'
-            DriftBlock 'Other changes' @($changed) 's-advisory'
-            if ($regressions.Count -eq 0 -and $resolved.Count -eq 0 -and $changed.Count -eq 0) {
+            DriftBlock 'Resolved required actions' @($resolvedRequired) 's-pass'
+            DriftBlock 'Other changes' @($otherChanges) 's-advisory'
+            if ($regressions.Count -eq 0 -and $resolved.Count -eq 0 -and $resolvedRequired.Count -eq 0 -and $changed.Count -eq 0) {
                 Line '<div class="callout empty">No changes were detected since the baseline.</div>'
             }
         }
@@ -2002,7 +2907,41 @@ function New-Agent365PreflightHtml {
     }
         # --- Evidence timestamps ---
     Line '<section id="evidence" class="section" aria-labelledby="evidence-h">'
-    Line '<div class="section-head"><h2 id="evidence-h">Evidence timestamps</h2><span class="section-sub">When each observation was collected</span></div>'
+    Line '<div class="section-head"><h2 id="evidence-h">Evidence &amp; rerun</h2><span class="section-sub">When observations were collected, and how to reproduce this pre-flight</span></div>'
+
+    # Rerun command + remediation export (JS enhancements are offline-only)
+    if ($rerunModel.HasCommand -or $pathItemTotal -gt 0) {
+        Line '<div id="evidenceRerun" class="rerun-tool">'
+        if ($rerunModel.HasCommand) {
+            Line '<h3>Re-run this pre-flight</h3>'
+            if ($isSanitized) {
+                Line '<p class="small muted" style="margin:0 0 4px;">This is a sanitized command with placeholders. Replace the placeholders with your tenant target and paths before running.</p>'
+            } else {
+                Line '<p class="small muted" style="margin:0 0 4px;">Run this to reproduce the pre-flight after remediating. Re-running is the only way to confirm a real pass &mdash; local check marks do not.</p>'
+            }
+            Line '<div class="rerun-block">'
+            Line ('<pre id="rerunCommand" class="rerun-code" tabindex="0">' + (ConvertTo-A365Html ([string]$rerunModel.Command)) + '</pre>')
+            if ($rerunModel.ShowMeta) {
+                $rrMeta = @()
+                if ([string]$rerunModel.TenantTarget) { $rrMeta += ('<div><span class="rm-k">Tenant target</span> <span class="mono">' + (ConvertTo-A365Html ([string]$rerunModel.TenantTarget)) + '</span></div>') }
+                if ([string]$rerunModel.OutputPath) { $rrMeta += ('<div><span class="rm-k">Output path</span> <span class="mono">' + (ConvertTo-A365Html ([string]$rerunModel.OutputPath)) + '</span></div>') }
+                if ([string]$rerunModel.AnswersPath) { $rrMeta += ('<div><span class="rm-k">Answers file</span> <span class="mono">' + (ConvertTo-A365Html ([string]$rerunModel.AnswersPath)) + '</span></div>') }
+                if ([string]$rerunModel.Stage) { $rrMeta += ('<div><span class="rm-k">Stage</span> ' + (ConvertTo-A365Html ([string]$rerunModel.Stage)) + '</div>') }
+                if ($rrMeta.Count -gt 0) { Line ('<div class="rerun-meta">' + ($rrMeta -join '') + '</div>') }
+            }
+            Line '</div>'
+        }
+        Line '<div class="tool-actions">'
+        if ($rerunModel.HasCommand) {
+            Line '<button type="button" id="copyRerunCommand" class="act-btn is-brand js-only" hidden>Copy rerun command</button>'
+        }
+        Line '<button type="button" id="downloadRemediation" class="act-btn js-only" hidden>Download remediation checklist</button>'
+        Line '</div>'
+        Line '<p id="rerunFeedback" class="tool-feedback" role="status" aria-live="polite"></p>'
+        Line '</div>'
+    }
+
+    Line '<h3 style="margin-top:20px;">Evidence timestamps</h3>'
     $evResults = @($results | Where-Object { Get-A365Member $_ 'EvidenceTimeUtc' })
     Line '<div class="grid cols-3" style="margin-bottom:16px;">'
     Line ('<div class="stat"><div class="stat-value">' + (ConvertTo-A365Html (Format-A365Date $generatedAtUtc)) + '</div><div class="stat-label">Report generated</div></div>')

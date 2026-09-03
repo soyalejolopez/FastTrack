@@ -5,7 +5,7 @@ category: "PowerShell"
 summary: "Run a read-only Agent 365 technical pre-flight and generate self-contained HTML and JSON reports."
 author:
   - "Microsoft FastTrack"
-version: 1.1.5
+version: 1.2.0
 published: 2026-09-01
 updated: 2026-09-02
 tags:
@@ -95,6 +95,48 @@ that auditing is disabled.
    be compared with a previous JSON report.
 8. **Write reports even after partial failure.** The script produces HTML and JSON when individual
    collectors fail. Optional sanitized copies remove tenant identity and sensitive result details.
+
+## How to remediate and rerun
+
+The report is designed as a customer remediation workspace. It never changes tenant settings.
+
+1. Open **Path to Ready** and review blockers, collection gaps, required actions, and unresolved
+   manual gates in order.
+2. Make the documented change in the owning Microsoft admin portal. Use the public documentation
+   link on the finding.
+3. Capture accountable manual evidence in the in-report Answers Builder or an answers JSON file.
+4. Copy the generated rerun command. Rerun with the same stage, profiles, collectors, audit window,
+   and timeout, plus `-AnswersPath` and the current JSON file as `-PreviousResultPath`.
+5. Confirm that Blocker, ActionRequired, NotAuthorized, Error, and unresolved required manual counts
+   are all zero. Then review resolved items, drift, and nonblocking advisories.
+
+Local checklist marks in the HTML report are planning aids only. They store boolean completion state
+in the browser and never change the official verdict. A rerun is always required to collect current
+evidence and calculate a new verdict.
+
+### Controlled manual evidence
+
+Only rules explicitly approved in `config/rules.v1.json` can accept manual evidence. The current
+contract supports:
+
+- Blueprint permission review (`A365-ENTRA-005`)
+- Conditional Access coverage by authentication pattern (`A365-ENTRA-007`)
+- Defender portal controls (`A365-DEFENDER-003`)
+- Purview policy scope and enforcement review (`A365-PURVIEW-002`)
+- SharePoint boundary review when selected (`A365-SHAREPOINT-001`)
+- Stable selected-profile gates such as `A365-PROFILE-COPILOTSTUDIO`
+- The seven customer control gates `A365-MANUAL-001` through `A365-MANUAL-007`
+
+A valid `Yes` requires an accountable owner or role and an evidence reference. `No` becomes the
+rule's configured `ActionRequired` or `Blocker` status. `NotApplicable` is accepted only for rules
+that explicitly allow it and requires a justification. Evidence never overrides an automated
+Blocker, ActionRequired, NotAuthorized, or Error result; the tenant or collection issue must be
+resolved and recollected.
+
+Answers schema `1.1` adds rule and profile gates, timestamps, and N/A justification while accepting
+legacy `1.0` files. The sample includes every static gate and every supported stable profile ID.
+Remove unselected profile entries or leave them in the template; only selected, applicable gates are
+evaluated.
 
 ## Safety and data handling
 
@@ -383,14 +425,28 @@ roles remain useful for portal visibility but aren't presented as sufficient for
 
 ## Verdicts, states, and exit codes
 
+### Passing criteria
+
+| Gate | Required value for passing |
+| --- | --- |
+| `Blocker` | 0 |
+| `ActionRequired` | 0 |
+| `NotAuthorized` | 0 |
+| `Error` | 0 |
+| Unresolved required manual gates | 0 |
+
+Advisories do not block passing, but the customer should review and acknowledge their impact.
+Passing Pilot remains `Ready for pilot`; passing Production remains
+`Technical pre-flight complete`.
+
 ### Verdicts
 
 | Verdict | Meaning |
 | --- | --- |
-| `Ready for pilot` | No technical blocker or incomplete evidence was found for the selected pilot scope. Complete remaining actions and manual validation. |
+| `Ready for pilot` | Every required pass gate is clear for the selected pilot scope. Review nonblocking advisories. |
 | `Blocked` | At least one blocking technical condition or required manual answer of `No` must be resolved. |
-| `Incomplete` | Authorization, collection errors, or unanswered required attestations prevent a readiness decision. |
-| `Technical pre-flight complete` | A Production-stage technical collection completed without blockers or incomplete evidence. It is not a certification. |
+| `Incomplete` | One or more ActionRequired, authorization, collection-error, or unresolved required manual gates prevent passing. |
+| `Technical pre-flight complete` | Every required Production pass gate is clear. It is not a certification. |
 
 ### Check statuses
 
@@ -407,7 +463,8 @@ roles remain useful for portal visibility but aren't presented as sufficient for
 
 ### Actions, coverage, and attestations
 
-- **Ordered actions** place blockers and collection gaps before follow-up work.
+- **Path to Ready** and **Ordered actions** place blockers, collection gaps, required actions, and
+  unresolved evidence before advisories.
 - **Coverage** shows how much evidence was collected. It is separate from the verdict and is not a
   compliance or security score.
 - **Manual attestations** record customer-owned decisions for ownership, approval boundaries,
@@ -426,6 +483,10 @@ roles remain useful for portal visibility but aren't presented as sufficient for
 The self-contained HTML report starts with the executive verdict and ordered actions, then supports
 progressive disclosure for detailed findings:
 
+- Use the Readiness Command Center and **Open Path to Ready** to see exactly what prevents passing.
+- Use the local-only checklist to plan work without changing the official verdict.
+- Build and download a validated answers JSON file in memory; no evidence is sent over a network.
+- Copy the safe rerun command or download the remediation checklist for offline planning.
 - Search across status, title, ID, area, pillar, expected and observed evidence, remediation, roles,
   and permissions. Press `/` to focus search and `Escape` to clear it.
 - Combine status pills with compact pillar, area, and profile filters. Use **Reset filters** to
@@ -438,7 +499,8 @@ progressive disclosure for detailed findings:
   are omitted from print.
 
 The report requires no remote fonts, styles, scripts, images, or libraries. Without JavaScript, all
-finding groups and full evidence remain visible and readable.
+verdict, Path to Ready, rerun, finding, remediation, and evidence content remains visible and
+readable.
 
 ## Output
 
@@ -469,10 +531,13 @@ shows:
 
 - **Regressions:** the current status is more severe than the previous status.
 - **Resolved blockers:** a previous blocker is no longer a blocker.
+- **Resolved required actions:** a previous ActionRequired or ManualValidation gate is now passed,
+  advisory, or explicitly permitted as not applicable.
 - **Other changes:** the status changed without meeting either condition above.
 
-Use reports generated by the same or a compatible schema version. Baseline comparison detects status
-drift; it does not prove that configuration changes caused the drift.
+The current report schema is `1.1`. Baseline comparison accepts report schema `1.0` or `1.1` so
+earlier results can be carried forward. It detects status drift; it does not prove that configuration
+changes caused the drift.
 
 ## Troubleshooting
 
@@ -480,6 +545,9 @@ drift; it does not prove that configuration changes caused the drift.
 | --- | --- |
 | Microsoft.Graph.Authentication is missing or too old | Install version 2.20.0 or later yourself, or explicitly use `-InstallDependencies`. The default run never installs it. |
 | Sign-in succeeds but checks show `NotAuthorized` | Compare `RequestedScopes`, `GrantedScopes`, and `MissingScopes`. Confirm tenant consent and the signed-in user's required role separately. |
+| A result remains `ActionRequired` after adding Yes evidence | Manual evidence cannot override automated evidence. Apply the documented tenant or access change, then rerun the collector. |
+| A result remains `ManualValidation` | Confirm the ID is manually attestable and provide `Yes` with owner and evidence reference. Use the Answers Builder to validate and download the file. |
+| An answers file is rejected | Check for unknown or duplicate IDs, automated-only rules, missing owner/reference for Yes, or missing justification for permitted NotApplicable evidence. |
 | Device-code sign-in expires | Complete the code flow within the time shown by Microsoft.Graph.Authentication. Some versions show 120 seconds. Rerun if the window expires. |
 | The script prompts even though Graph is connected | The existing context is reused only when it is delegated, has a tenant ID, matches an explicitly requested tenant GUID, and contains every requested scope. |
 | Package catalog returns 403 | Confirm `CopilotPackages.Read.All` and an AI Administrator or Global Administrator role. AI Reader and Global Reader aren't sufficient for this API. |
@@ -515,6 +583,21 @@ drift; it does not prove that configuration changes caused the drift.
   an approved location.
 - The sanitized copy is a reduced support artifact, not a guarantee that all information is
   non-sensitive.
+- Local remediation checklist state is stored only as booleans in browser localStorage. Answers
+  Builder text remains in memory unless the customer downloads the JSON file.
+
+## Validation and safe testing
+
+Fixture tests cover blocked, incomplete, and passing-after-remediation states without tenant access.
+Commercial-tenant testing was also used to harden authentication, single-item role evidence, and
+asynchronous Purview Audit Search behavior. No tenant names, tenant-specific counts, credentials, or
+raw events are included in this resource.
+
+Run the automated suite with Pester 5.7.1 or 6.1.0:
+
+```powershell
+Invoke-Pester .\tests\Agent365Preflight.Tests.ps1
+```
 
 ## Rule and API freshness
 

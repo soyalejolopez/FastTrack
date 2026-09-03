@@ -4,6 +4,7 @@ $modulePath = Join-Path $resourceRoot 'Agent365Preflight.psd1'
 $readyFixturePath = Join-Path $resourceRoot 'fixtures\commercial-ready.json'
 $answersPath = Join-Path $resourceRoot 'samples\answers.sample.json'
 $reportSchemaPath = Join-Path $resourceRoot 'schema\agent365-preflight-report.schema.json'
+$answersSchemaPath = Join-Path $resourceRoot 'schema\agent365-preflight-answers.schema.json'
 $allowlistPath = Join-Path $resourceRoot 'config\operation-allowlist.v1.json'
 
 Import-Module $modulePath -Force
@@ -24,6 +25,26 @@ function New-SyntheticFixture {
     [System.IO.File]::WriteAllText(
         $path,
         ($fixture | ConvertTo-Json -Depth 100),
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    return $path
+}
+
+function New-SyntheticAnswers {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [Parameter(Mandatory)]
+        [scriptblock]$Mutator
+    )
+
+    $answers = Get-Content -LiteralPath $answersPath -Raw | ConvertFrom-Json -Depth 100
+    & $Mutator $answers
+    $path = Join-Path $TestDrive "$Name.json"
+    [System.IO.File]::WriteAllText(
+        $path,
+        ($answers | ConvertTo-Json -Depth 100),
         [System.Text.UTF8Encoding]::new($false)
     )
     return $path
@@ -174,7 +195,8 @@ Describe 'Agent 365 fixture evaluation' {
 
         ($outcome.Report.Results | Where-Object Id -eq 'A365-ENTRA-002').Status | Should -Be 'NotAuthorized'
         ($outcome.Report.Results | Where-Object Id -eq 'A365-ENTRA-004').Status | Should -Be 'Passed'
-        ($outcome.Report.Results | Where-Object Id -eq 'A365-ENTRA-005').Status | Should -Be 'ManualValidation'
+        ($outcome.Report.Results | Where-Object Id -eq 'A365-ENTRA-005').Status | Should -Be 'Passed'
+        ($outcome.Report.Results | Where-Object Id -eq 'A365-ENTRA-005').Attestation.Applied | Should -BeTrue
     }
 
     It 'uses one availability blocker for a non-commercial cloud' {
@@ -338,6 +360,344 @@ Describe 'Agent 365 fixture evaluation' {
 
         $conditionalAccess.Status | Should -Be 'NotApplicable'
         $conditionalAccess.Observed | Should -Match 'Security defaults are enabled'
+    }
+}
+
+Describe 'Passing and manual evidence contract' {
+    It 'keeps the complete sample answers file schema-valid' {
+        (Get-Content -LiteralPath $answersPath -Raw) |
+            Test-Json -SchemaFile $answersSchemaPath |
+            Should -BeTrue
+    }
+
+    It 'rejects whitespace-only required evidence in schema validation' {
+        $answers = Get-Content -LiteralPath $answersPath -Raw | ConvertFrom-Json -Depth 100
+        ($answers.answers | Where-Object id -eq 'A365-ENTRA-005').owner = '   '
+
+        ($answers | ConvertTo-Json -Depth 100) |
+            Test-Json -SchemaFile $answersSchemaPath -ErrorAction SilentlyContinue |
+            Should -BeFalse
+    }
+
+    It 'keeps Pilot and Production incomplete when ActionRequired is the only pass gate' {
+        $fixturePath = New-SyntheticFixture -Name 'action-only' -Mutator {
+            param($fixture)
+            $fixture.licensing.qualifyingAssignedUsers = 0
+            $fixture.licensing.unknownSkuMappings = @('AGENT_365_FUTURE')
+        }
+
+        $pilot = Invoke-FixturePreflight -Name 'action-only-pilot' -FixturePath $fixturePath
+        $production = Invoke-Agent365Preflight `
+            -FixturePath $fixturePath `
+            -AnswersPath $answersPath `
+            -Stage Production `
+            -OutputPath (Join-Path $TestDrive 'action-only-production')
+
+        foreach ($outcome in @($pilot, $production)) {
+            $outcome.Report.PassCriteria.BlockerCount | Should -Be 0
+            $outcome.Report.PassCriteria.ActionRequiredCount | Should -Be 1
+            $outcome.Report.PassCriteria.NotAuthorizedCount | Should -Be 0
+            $outcome.Report.PassCriteria.ErrorCount | Should -Be 0
+            $outcome.Report.PassCriteria.IsSatisfied | Should -BeFalse
+            $outcome.Report.Verdict.Label | Should -Be 'Incomplete'
+            $outcome.Report.Verdict.Summary | Should -Match '1 required action'
+            $outcome.ExitCode | Should -Be 2
+        }
+    }
+
+    It 'reaches Ready for pilot after remediation, valid evidence, and rerun' {
+        $blockedFixture = New-SyntheticFixture -Name 'before-remediation' -Mutator {
+            param($fixture)
+            $fixture.licensing.qualifyingAssignedUsers = 0
+            $fixture.licensing.unknownSkuMappings = @('AGENT_365_FUTURE')
+        }
+        $before = Invoke-FixturePreflight -Name 'before-remediation-output' -FixturePath $blockedFixture
+        $after = Invoke-FixturePreflight `
+            -Name 'after-remediation-output' `
+            -PreviousResultPath $before.Paths.Json
+
+        $before.Report.Verdict.Label | Should -Be 'Incomplete'
+        $after.Report.Verdict.Label | Should -Be 'Ready for pilot'
+        $after.Report.PassCriteria.IsSatisfied | Should -BeTrue
+        @($after.Report.Drift.ResolvedRequiredActions | Where-Object Id -eq 'A365-FOUNDATION-002').Count | Should -Be 1
+        $afterHtml = Get-Content -LiteralPath $after.Paths.Html -Raw
+        $afterHtml | Should -Match 'Resolved required actions'
+        $driftSection = [regex]::Match($afterHtml, '<section id="drift"[\s\S]*?</section>').Value
+        ([regex]::Matches($driftSection, 'A365-FOUNDATION-002')).Count | Should -Be 1
+    }
+
+    It 'reaches Technical pre-flight complete only when Production pass gates are clear' {
+        $outcome = Invoke-Agent365Preflight `
+            -FixturePath $readyFixturePath `
+            -AnswersPath $answersPath `
+            -Stage Production `
+            -OutputPath (Join-Path $TestDrive 'production-complete')
+
+        $outcome.Report.PassCriteria.IsSatisfied | Should -BeTrue
+        $outcome.Report.Verdict.Label | Should -Be 'Technical pre-flight complete'
+        $outcome.ExitCode | Should -Be 0
+    }
+
+    It 'applies approved evidence while preserving the collected observation' {
+        $outcome = Invoke-FixturePreflight -Name 'approved-evidence'
+        $result = $outcome.Report.Results | Where-Object Id -eq 'A365-ENTRA-005'
+
+        $result.Status | Should -Be 'Passed'
+        $result.ManualAttestable | Should -BeTrue
+        $result.AttestationRequired | Should -BeTrue
+        $result.Attestation.Applied | Should -BeTrue
+        $result.Attestation.Owner | Should -Be 'Agent ID reviewer'
+        $result.Attestation.EvidenceReference | Should -Be 'Blueprint permission review record'
+        $result.Observed | Should -Match 'requested permission'
+        $result.Attestation.PreservedObserved | Should -Be $result.Observed
+    }
+
+    It 'redacts submitted manual evidence in sanitized support copies' {
+        $outcome = Invoke-FixturePreflight -Name 'sanitized-evidence'
+        $sanitized = Get-Content -LiteralPath $outcome.Paths.SanitizedJson -Raw | ConvertFrom-Json -Depth 100
+        $result = $sanitized.Results | Where-Object Id -eq 'A365-ENTRA-005'
+
+        $result.Attestation.Owner | Should -Be 'Redacted'
+        $result.Attestation.EvidenceReference | Should -Be 'Redacted'
+        $result.Attestation.Notes | Should -Be 'Redacted'
+    }
+
+    It 'redacts preserved observations for sensitive manually attestable results' {
+        $outcome = Invoke-FixturePreflight -Name 'sanitized-sensitive-evidence' -Profile @('SharePointAgents')
+        $full = Get-Content -LiteralPath $outcome.Paths.Json -Raw | ConvertFrom-Json -Depth 100
+        $sanitized = Get-Content -LiteralPath $outcome.Paths.SanitizedJson -Raw | ConvertFrom-Json -Depth 100
+        $fullResult = $full.Results | Where-Object Id -eq 'A365-SHAREPOINT-001'
+        $sanitizedResult = $sanitized.Results | Where-Object Id -eq 'A365-SHAREPOINT-001'
+
+        $fullResult.Attestation.PreservedObserved | Should -Not -Be 'Redacted in sanitized support copy.'
+        $sanitizedResult.Observed | Should -Be 'Redacted in sanitized support copy.'
+        $sanitizedResult.Attestation.PreservedObserved | Should -Be 'Redacted in sanitized support copy.'
+    }
+
+    It 'does not let Yes evidence override an automated ActionRequired result' {
+        $fixturePath = New-SyntheticFixture -Name 'automated-action' -Mutator {
+            param($fixture)
+            $fixture.conditionalAccess.enabledPolicyCount = 0
+            $fixture.conditionalAccess.reportOnlyPolicyCount = 0
+        }
+
+        $outcome = Invoke-FixturePreflight -Name 'automated-action-output' -FixturePath $fixturePath
+        $result = $outcome.Report.Results | Where-Object Id -eq 'A365-ENTRA-007'
+
+        $result.Status | Should -Be 'ActionRequired'
+        $result.Attestation.Submitted | Should -BeTrue
+        $result.Attestation.Applied | Should -BeFalse
+        $outcome.Report.Verdict.Label | Should -Be 'Incomplete'
+    }
+
+    It 'keeps unanswered approved manual gates incomplete' {
+        $answersFile = New-SyntheticAnswers -Name 'missing-approved-gate' -Mutator {
+            param($answers)
+            $answers.answers = @($answers.answers | Where-Object id -ne 'A365-ENTRA-005')
+        }
+
+        $outcome = Invoke-FixturePreflight -Name 'missing-approved-gate-output' -AnswersFile $answersFile
+        $result = $outcome.Report.Results | Where-Object Id -eq 'A365-ENTRA-005'
+
+        $result.Status | Should -Be 'ManualValidation'
+        $outcome.Report.PassCriteria.RequiredManualUnresolvedCount | Should -Be 1
+        $outcome.Report.Verdict.Label | Should -Be 'Incomplete'
+    }
+
+    It 'maps No evidence by the approved rule severity' {
+        $answersFile = New-SyntheticAnswers -Name 'no-evidence' -Mutator {
+            param($answers)
+            ($answers.answers | Where-Object id -eq 'A365-ENTRA-005').answer = 'No'
+            ($answers.answers | Where-Object id -eq 'A365-MANUAL-003').answer = 'No'
+        }
+
+        $outcome = Invoke-FixturePreflight -Name 'no-evidence-output' -AnswersFile $answersFile
+
+        ($outcome.Report.Results | Where-Object Id -eq 'A365-ENTRA-005').Status | Should -Be 'ActionRequired'
+        ($outcome.Report.Results | Where-Object Id -eq 'A365-MANUAL-003').Status | Should -Be 'Blocker'
+        $outcome.Report.Verdict.Label | Should -Be 'Blocked'
+    }
+
+    It 'rejects unknown, duplicate, and automated-only attestation IDs' {
+        $unknown = New-SyntheticAnswers -Name 'unknown-answer' -Mutator {
+            param($answers)
+            $answers.answers += [pscustomobject]@{ id = 'A365-UNKNOWN-999'; answer = 'No' }
+        }
+        $duplicate = New-SyntheticAnswers -Name 'duplicate-answer' -Mutator {
+            param($answers)
+            $answers.answers += $answers.answers[0]
+        }
+        $automated = New-SyntheticAnswers -Name 'automated-answer' -Mutator {
+            param($answers)
+            $answers.answers += [pscustomobject]@{ id = 'A365-LOCAL-001'; answer = 'No' }
+        }
+
+        { Invoke-Agent365Preflight -FixturePath $readyFixturePath -AnswersPath $unknown -OutputPath (Join-Path $TestDrive 'unknown-answer-output') } | Should -Throw '*unknown attestation id*'
+        { Invoke-Agent365Preflight -FixturePath $readyFixturePath -AnswersPath $duplicate -OutputPath (Join-Path $TestDrive 'duplicate-answer-output') } | Should -Throw '*duplicate id*'
+        { Invoke-Agent365Preflight -FixturePath $readyFixturePath -AnswersPath $automated -OutputPath (Join-Path $TestDrive 'automated-answer-output') } | Should -Throw '*automated-only rule*'
+    }
+
+    It 'rejects incomplete Yes evidence and unpermitted NotApplicable evidence' {
+        $missingOwner = New-SyntheticAnswers -Name 'missing-owner' -Mutator {
+            param($answers)
+            ($answers.answers | Where-Object id -eq 'A365-ENTRA-005').owner = ''
+        }
+        $missingReference = New-SyntheticAnswers -Name 'missing-reference' -Mutator {
+            param($answers)
+            ($answers.answers | Where-Object id -eq 'A365-ENTRA-005').evidenceReference = ''
+        }
+        $unpermittedNa = New-SyntheticAnswers -Name 'unpermitted-na' -Mutator {
+            param($answers)
+            ($answers.answers | Where-Object id -eq 'A365-ENTRA-005').answer = 'NotApplicable'
+            ($answers.answers | Where-Object id -eq 'A365-ENTRA-005') |
+                Add-Member -NotePropertyName justification -NotePropertyValue 'Not used' -Force
+        }
+
+        { Invoke-Agent365Preflight -FixturePath $readyFixturePath -AnswersPath $missingOwner -OutputPath (Join-Path $TestDrive 'missing-owner-output') } | Should -Throw '*requires an accountable owner*'
+        { Invoke-Agent365Preflight -FixturePath $readyFixturePath -AnswersPath $missingReference -OutputPath (Join-Path $TestDrive 'missing-reference-output') } | Should -Throw '*requires an evidence reference*'
+        { Invoke-Agent365Preflight -FixturePath $readyFixturePath -AnswersPath $unpermittedNa -OutputPath (Join-Path $TestDrive 'unpermitted-na-output') } | Should -Throw '*NotApplicable is not permitted*'
+    }
+
+    It 'requires a justification for permitted NotApplicable evidence' {
+        $missingJustification = New-SyntheticAnswers -Name 'missing-na-justification' -Mutator {
+            param($answers)
+            ($answers.answers | Where-Object id -eq 'A365-SHAREPOINT-001').answer = 'NotApplicable'
+        }
+        $validNa = New-SyntheticAnswers -Name 'valid-na' -Mutator {
+            param($answers)
+            $answer = $answers.answers | Where-Object id -eq 'A365-SHAREPOINT-001'
+            $answer.answer = 'NotApplicable'
+            $answer | Add-Member -NotePropertyName justification -NotePropertyValue 'The selected pilot does not use SharePoint knowledge or target sites.' -Force
+        }
+
+        { Invoke-Agent365Preflight -FixturePath $readyFixturePath -AnswersPath $missingJustification -Profile SharePointAgents -OutputPath (Join-Path $TestDrive 'missing-na-justification-output') } | Should -Throw '*requires a justification*'
+        $outcome = Invoke-Agent365Preflight `
+            -FixturePath $readyFixturePath `
+            -AnswersPath $validNa `
+            -Profile SharePointAgents `
+            -OutputPath (Join-Path $TestDrive 'valid-na-output')
+
+        ($outcome.Report.Results | Where-Object Id -eq 'A365-SHAREPOINT-001').Status | Should -Be 'NotApplicable'
+    }
+
+    It 'accepts version 1.0 answers while leaving new required gates unresolved' {
+        $legacyAnswers = New-SyntheticAnswers -Name 'legacy-answers' -Mutator {
+            param($answers)
+            $answers.schemaVersion = '1.0'
+            $answers.answers = @($answers.answers | Where-Object id -like 'A365-MANUAL-*')
+        }
+
+        $outcome = Invoke-FixturePreflight -Name 'legacy-answers-output' -AnswersFile $legacyAnswers
+
+        $outcome.Report.Verdict.Label | Should -Be 'Incomplete'
+        $outcome.Report.PassCriteria.RequiredManualUnresolvedCount | Should -BeGreaterThan 0
+    }
+
+    It 'applies evidence to selected stable profile gates' {
+        $outcome = Invoke-FixturePreflight -Name 'profile-evidence' -Profile @('CopilotStudio')
+        $result = $outcome.Report.Results | Where-Object Id -eq 'A365-PROFILE-COPILOTSTUDIO'
+
+        $result.Status | Should -Be 'Passed'
+        $result.Attestation.Applied | Should -BeTrue
+        @($outcome.Report.ManuallyAttestableGates | Where-Object Id -eq $result.Id).Count | Should -Be 1
+    }
+
+    It 'builds ordered Path to Ready and safe full and sanitized rerun commands' {
+        $fixturePath = New-SyntheticFixture -Name 'path-to-ready' -Mutator {
+            param($fixture)
+            $fixture.licensing.qualifyingAssignedUsers = 0
+            $fixture.licensing.unknownSkuMappings = @('AGENT_365_FUTURE')
+        }
+        $outcome = Invoke-Agent365Preflight `
+            -FixturePath $fixturePath `
+            -AnswersPath $answersPath `
+            -Profile CopilotStudio `
+            -Collector TenantFoundation,Licensing,AgentIdentity `
+            -Stage Pilot `
+            -AuditWindowDays 14 `
+            -AuditQueryTimeoutSeconds 300 `
+            -UseDeviceCode `
+            -IncludeSanitizedCopy `
+            -OutputPath (Join-Path $TestDrive 'path-to-ready-output')
+        $item = $outcome.Report.PathToReady.Items | Where-Object Id -eq 'A365-FOUNDATION-002'
+        $sanitized = Get-Content -LiteralPath $outcome.Paths.SanitizedJson -Raw | ConvertFrom-Json -Depth 100
+
+        $outcome.Report.PathToReady.IsReady | Should -BeFalse
+        $item.Status | Should -Be 'ActionRequired'
+        $item.Priority | Should -Be 3
+        $item.RequiresTenantChange | Should -BeTrue
+        $item.RequiresRerun | Should -BeTrue
+        $outcome.Report.Rerun.Command | Should -Match '-Profile ControlPlane,CopilotStudio'
+        $outcome.Report.Rerun.Command | Should -Match '-Collector TenantFoundation,Licensing,AgentIdentity'
+        $outcome.Report.Rerun.Command | Should -Match '-AuditWindowDays 14'
+        $outcome.Report.Rerun.Command | Should -Match '-AuditQueryTimeoutSeconds 300'
+        $outcome.Report.Rerun.Command | Should -Match '-AnswersPath'
+        $outcome.Report.Rerun.Command | Should -Match '-PreviousResultPath'
+        $outcome.Report.Rerun.Command | Should -Match '-UseDeviceCode'
+        $outcome.Report.Rerun.Command | Should -Not -Match 'ClientId|CertificateThumbprint|ClientSecret'
+        $sanitized.Rerun.Command | Should -Match '<tenant-guid-or-domain>'
+        $sanitized.Rerun.Command | Should -Match '<previous-report\.json>'
+        $sanitized.Rerun.Command | Should -Match '<output-folder>'
+        $sanitized.Rerun.Command | Should -Not -Match [regex]::Escape($TestDrive)
+    }
+
+    It 'orders Path to Ready from blockers through advisories' {
+        $fixturePath = New-SyntheticFixture -Name 'path-priority' -Mutator {
+            param($fixture)
+            $fixture.licensing.qualifyingAssignedUsers = 0
+            $fixture.licensing.unknownSkuMappings = @()
+            $fixture.licensing.subscribedSkus = @(
+                $fixture.licensing.subscribedSkus |
+                    Where-Object skuPartNumber -ne 'MICROSOFT_365_E5'
+            )
+            $fixture.authentication.grantedScopes = @(
+                $fixture.authentication.grantedScopes |
+                    Where-Object { $_ -ne 'CopilotPackages.Read.All' }
+            )
+            $fixture.registry.available = $false
+            $fixture.defender.agentsInfo.available = $false
+            $fixture.conditionalAccess.enabledPolicyCount = 0
+            $fixture.conditionalAccess.reportOnlyPolicyCount = 0
+            $fixture.collectionIssues = @(
+                [pscustomobject]@{
+                    Adapter = 'Graph'
+                    Operation = 'Agent package catalog'
+                    Category = 'PermissionOrRole'
+                    StatusCode = 403
+                    Message = 'Registry read is not authorized.'
+                    RequiredPermission = 'CopilotPackages.Read.All'
+                    DocsUrl = 'https://learn.microsoft.com/microsoft-365/copilot/extensibility/api/admin-settings/package/copilotpackages-list'
+                },
+                [pscustomobject]@{
+                    Adapter = 'Graph'
+                    Operation = 'Defender agentsInfo aggregate query'
+                    Category = 'Api'
+                    StatusCode = 500
+                    Message = 'Synthetic Defender collection error.'
+                    RequiredPermission = 'ThreatHunting.Read.All'
+                    DocsUrl = 'https://learn.microsoft.com/defender-xdr/advanced-hunting-agentsinfo-table'
+                }
+            )
+        }
+        $answersFile = New-SyntheticAnswers -Name 'path-priority-answers' -Mutator {
+            param($answers)
+            $answers.answers = @($answers.answers | Where-Object id -ne 'A365-ENTRA-005')
+        }
+
+        $outcome = Invoke-FixturePreflight `
+            -Name 'path-priority-output' `
+            -FixturePath $fixturePath `
+            -AnswersFile $answersFile
+        $items = @($outcome.Report.PathToReady.Items)
+        $priorities = @($items.Priority)
+
+        $priorities -join ',' | Should -Be (@($priorities | Sort-Object) -join ',')
+        ($items | Where-Object Id -eq 'A365-FOUNDATION-002').Priority | Should -Be 1
+        ($items | Where-Object Id -eq 'A365-REGISTRY-001').Priority | Should -Be 2
+        ($items | Where-Object Id -eq 'A365-DEFENDER-001').Priority | Should -Be 2
+        ($items | Where-Object Id -eq 'A365-ENTRA-007').Priority | Should -Be 3
+        ($items | Where-Object Id -eq 'A365-ENTRA-005').Priority | Should -Be 4
+        ($items | Where-Object Id -eq 'A365-FOUNDATION-003').Priority | Should -Be 5
     }
 }
 
@@ -1358,7 +1718,25 @@ Describe 'Report comparison, redaction, and rendering' {
         $html | Should -Match 'Not explicitly pinned'
         $html | Should -Not -Match '<link[^>]+stylesheet'
         $html | Should -Not -Match '<script[^>]+src='
+        $outcome.Report.SchemaVersion | Should -Be '1.1'
         $json | Test-Json -SchemaFile $reportSchemaPath | Should -Be $true
+    }
+
+    It 'accepts report schema 1.0 and 1.1 baselines' {
+        $current = Invoke-FixturePreflight -Name 'schema-1-1-baseline'
+        $currentComparison = Invoke-FixturePreflight -Name 'schema-1-1-current' -PreviousResultPath $current.Paths.Json
+        $legacy = Get-Content -LiteralPath $current.Paths.Json -Raw | ConvertFrom-Json -Depth 100
+        $legacy.SchemaVersion = '1.0'
+        $legacyPath = Join-Path $TestDrive 'schema-1-0-baseline.json'
+        [System.IO.File]::WriteAllText(
+            $legacyPath,
+            ($legacy | ConvertTo-Json -Depth 100),
+            [System.Text.UTF8Encoding]::new($false)
+        )
+        $legacyComparison = Invoke-FixturePreflight -Name 'schema-1-0-current' -PreviousResultPath $legacyPath
+
+        $currentComparison.Report.Drift.HasBaseline | Should -BeTrue
+        $legacyComparison.Report.Drift.HasBaseline | Should -BeTrue
     }
 
     It 'renders the complete accessible interactive findings contract' {
@@ -1419,6 +1797,55 @@ Describe 'Report comparison, redaction, and rendering' {
         $html | Should -Match '\.filter-pill \{[\s\S]*?min-height: 40px;'
         $html | Should -Match '\.advanced > summary \{[\s\S]*?min-height: 40px;'
         $html | Should -Match '\.grid > \* \{ min-width: 0; \}'
+    }
+
+    It 'renders the remediation workspace, answers builder, and rerun tools safely' {
+        $fixturePath = New-SyntheticFixture -Name 'remediation-workspace' -Mutator {
+            param($fixture)
+            $fixture.licensing.qualifyingAssignedUsers = 0
+            $fixture.licensing.unknownSkuMappings = @('AGENT_365_FUTURE')
+        }
+        $outcome = Invoke-FixturePreflight -Name 'remediation-workspace-output' -FixturePath $fixturePath -Profile @('CopilotStudio')
+        $html = Get-Content -LiteralPath $outcome.Paths.Html -Raw
+        $hooks = @(
+            'id="commandCenter"',
+            'id="openPathToReady"',
+            'id="workspaceNav"',
+            'id="pathToReady"',
+            'data-path-item',
+            'data-local-complete',
+            'id="localProgressNotice"',
+            'id="resetLocalProgress"',
+            'id="answersBuilder"',
+            'data-answer-gate',
+            'data-answer-value',
+            'data-answer-owner',
+            'data-answer-reference',
+            'data-answer-notes',
+            'id="downloadAnswers"',
+            'id="answersFeedback"',
+            'id="rerunCommand"',
+            'id="copyRerunCommand"',
+            'id="downloadRemediation"',
+            'id="rerunFeedback"',
+            'id="evidenceRerun"'
+        )
+
+        foreach ($hook in $hooks) {
+            $html.Contains($hook) | Should -BeTrue
+        }
+
+        $html | Should -Match 'Local check marks never change the verdict'
+        $html | Should -Match 'schemaVersion: "1\.1"'
+        $html | Should -Match 'new Blob'
+        $html | Should -Match 'createObjectURL'
+        $html | Should -Not -Match '\beval\s*\('
+        $html | Should -Not -Match '\.innerHTML\s*='
+        $html | Should -Not -Match 'fetch\s*\('
+        $html | Should -Not -Match 'localStorage\.setItem\([^,\r\n]*(owner|reference|notes|answer)'
+        $html | Should -Match '\.theme-toggle \{[\s\S]*?min-height: 40px;'
+        $html | Should -Match '\.search-clear \{[\s\S]*?width: 40px; height: 40px;'
+        ([regex]::Matches($html, 'data-answer-gate="')).Count | Should -Be $outcome.Report.ManuallyAttestableGates.Count
     }
 
     It 'keeps interactive hooks feature-identical in sanitized reports' {

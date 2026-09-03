@@ -13,12 +13,16 @@
     "Profiles",
     "Collectors",
     "Verdict",
+    "PassCriteria",
+    "PathToReady",
     "Tenant",
     "Coverage",
     "Authentication",
     "Results",
     "Actions",
     "ManualAttestations",
+    "ManuallyAttestableGates",
+    "Rerun",
     "Drift",
     "Sources",
     "CollectionIssues",
@@ -26,7 +30,7 @@
   ],
   "properties": {
     "SchemaVersion": {
-      "const": "1.0"
+      "const": "1.1"
     },
     "ToolVersion": {
       "type": "string",
@@ -71,7 +75,7 @@
     },
     "Verdict": {
       "type": "object",
-      "required": ["Label", "Summary", "BlockerCount", "ActionRequiredCount", "AuthorizationGapCount"],
+      "required": ["Label", "Summary", "BlockerCount", "ActionRequiredCount", "AuthorizationGapCount", "ErrorCount", "RequiredManualUnresolvedCount"],
       "properties": {
         "Label": {
           "enum": ["Ready for pilot", "Blocked", "Incomplete", "Technical pre-flight complete"]
@@ -90,6 +94,35 @@
         "AuthorizationGapCount": {
           "type": "integer",
           "minimum": 0
+        },
+        "ErrorCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "RequiredManualUnresolvedCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "PassCriteria": {
+      "$ref": "#/$defs/passCriteria"
+    },
+    "PathToReady": {
+      "type": "object",
+      "required": ["IsReady", "GateCounts", "Phases", "Items"],
+      "properties": {
+        "IsReady": {
+          "type": "boolean"
+        },
+        "GateCounts": {
+          "$ref": "#/$defs/passCriteria"
+        },
+        "Phases": {
+          "type": "array"
+        },
+        "Items": {
+          "type": "array"
         }
       }
     },
@@ -204,8 +237,55 @@
     "ManualAttestations": {
       "type": "array"
     },
+    "ManuallyAttestableGates": {
+      "type": "array"
+    },
+    "Rerun": {
+      "type": "object",
+      "required": [
+        "Command",
+        "SanitizedCommand",
+        "TenantTarget",
+        "AnswersPath",
+        "PreviousResultPath",
+        "OutputPath",
+        "IncludeSanitizedCopy",
+        "Stage",
+        "Profiles",
+        "Collectors",
+        "AuditWindowDays",
+        "AuditQueryTimeoutSeconds",
+        "UseDeviceCode"
+      ]
+    },
     "Drift": {
-      "type": "object"
+      "type": "object",
+      "required": [
+        "HasBaseline",
+        "BaselineGeneratedAtUtc",
+        "Regressions",
+        "ResolvedBlockers",
+        "ResolvedRequiredActions",
+        "Changed"
+      ],
+      "properties": {
+        "HasBaseline": {
+          "type": "boolean"
+        },
+        "BaselineGeneratedAtUtc": {},
+        "Regressions": {
+          "type": "array"
+        },
+        "ResolvedBlockers": {
+          "type": "array"
+        },
+        "ResolvedRequiredActions": {
+          "type": "array"
+        },
+        "Changed": {
+          "type": "array"
+        }
+      }
     },
     "Sources": {
       "type": "array"
@@ -254,6 +334,46 @@
     }
   },
   "$defs": {
+    "passCriteria": {
+      "type": "object",
+      "required": [
+        "BlockerCount",
+        "ActionRequiredCount",
+        "NotAuthorizedCount",
+        "ErrorCount",
+        "RequiredManualUnresolvedCount",
+        "IsSatisfied",
+        "Summary"
+      ],
+      "properties": {
+        "BlockerCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ActionRequiredCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "NotAuthorizedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ErrorCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "RequiredManualUnresolvedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "IsSatisfied": {
+          "type": "boolean"
+        },
+        "Summary": {
+          "type": "string"
+        }
+      }
+    },
     "result": {
       "type": "object",
       "required": [
@@ -272,7 +392,11 @@
         "RequiredRole",
         "Remediation",
         "DocsUrl",
-        "RuleReviewDate"
+        "RuleReviewDate",
+        "ManualAttestable",
+        "AttestationRequired",
+        "AttestationDefinition",
+        "Attestation"
       ],
       "properties": {
         "Id": {
@@ -325,6 +449,18 @@
         "RuleReviewDate": {
           "type": "string",
           "format": "date"
+        },
+        "ManualAttestable": {
+          "type": "boolean"
+        },
+        "AttestationRequired": {
+          "type": "boolean"
+        },
+        "AttestationDefinition": {
+          "type": ["object", "null"]
+        },
+        "Attestation": {
+          "type": ["object", "null"]
         },
         "Details": {},
         "IsSensitive": {
