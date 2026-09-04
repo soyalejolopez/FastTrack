@@ -2,6 +2,13 @@
 
 All notable changes to this resource are documented in this file.
 
+## 1.4.1 - 2026-09-04
+
+- Added `START-HERE.txt` for immediate use from an extracted customer folder.
+- Added a deterministic, allowlisted standalone `Agent365Preflight-<version>.zip` package builder.
+- Added extracted-package file-list, exclusion, reproducibility, and launcher E2E validation.
+- Clarified standalone-package and full-repository acquisition paths without promising an unavailable release asset.
+
 ## 1.4.0 - 2026-09-04
 
 - Added the guided `Start-Agent365Preflight.ps1` customer launcher with prerequisite checks, recommended scope selection, WAM/device-code recovery, and full-report opening.

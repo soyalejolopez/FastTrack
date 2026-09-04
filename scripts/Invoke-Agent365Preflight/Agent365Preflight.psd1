@@ -1,6 +1,6 @@
 @{
     RootModule = 'Agent365Preflight.psm1'
-    ModuleVersion = '1.4.0'
+    ModuleVersion = '1.4.1'
     GUID = '87c4af68-5403-4cf6-8aca-0d649c9e5ca5'
     Author = 'Microsoft FastTrack'
     CompanyName = 'Microsoft'
@@ -23,7 +23,7 @@
             Tags = @('Agent365', 'Microsoft365', 'Readiness', 'Preflight')
             ProjectUri = 'https://github.com/microsoft/FastTrack'
             LicenseUri = 'https://github.com/microsoft/FastTrack/blob/master/LICENSE-CODE'
-            ReleaseNotes = 'Adds a guided customer launcher and report-linked one-command resume workflow.'
+            ReleaseNotes = 'Adds a standalone customer ZIP package builder and immediate START-HERE guide.'
         }
     }
 }

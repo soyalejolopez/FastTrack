@@ -4,6 +4,8 @@ $launcherPath = Join-Path $resourceRoot 'Start-Agent365Preflight.ps1'
 $modulePath = Join-Path $resourceRoot 'Agent365Preflight.psd1'
 $fixturePath = Join-Path $resourceRoot 'fixtures\commercial-ready.json'
 $answersPath = Join-Path $resourceRoot 'samples\answers.sample.json'
+$packageBuilderPath = Join-Path $resourceRoot 'Build-Agent365PreflightPackage.ps1'
+$startHerePath = Join-Path $resourceRoot 'START-HERE.txt'
 
 Import-Module $modulePath -Force
 . $launcherPath
@@ -439,6 +441,111 @@ Describe 'Clean package self-service journey' {
         $second.Outcome.Report.Rerun.Command | Should -Not -Match ([regex]::Escape($resourceRoot))
         $resumeText | Should -Match ([regex]::Escape($packageLauncher.Replace("'", "''")))
         $resumeText | Should -Not -Match '\bInvoke-Expression\b|\biex\b|ClientSecret|Bearer|[A-Fa-f0-9]{40}'
+    }
+
+    Describe 'Standalone customer package' {
+        BeforeAll {
+            $packageOutputA = Join-Path $TestDrive 'package-a'
+            $packageOutputB = Join-Path $TestDrive 'package-b'
+            $packageA = & $packageBuilderPath -OutputDirectory $packageOutputA -Force
+            $packageB = & $packageBuilderPath -OutputDirectory $packageOutputB -Force
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $archive = [System.IO.Compression.ZipFile]::OpenRead($packageA.Path)
+            try {
+                $packageEntries = @($archive.Entries | ForEach-Object { $_.FullName })
+            }
+            finally {
+                $archive.Dispose()
+            }
+            $extractedPath = Join-Path $TestDrive 'standalone-extracted'
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($packageA.Path, $extractedPath)
+            $extractedRoot = Join-Path $extractedPath $packageA.RootFolder
+        }
+
+        It 'contains the exact customer runtime allowlist under one intuitive root' {
+            $expectedFiles = @(
+                'START-HERE.txt',
+                'Agent365Preflight.psd1',
+                'Agent365Preflight.psm1',
+                'CHANGELOG.md',
+                'Invoke-Agent365Preflight.ps1',
+                'Private/ReportRenderer.ps1',
+                'README.md',
+                'Start-Agent365Preflight.ps1',
+                'VERSION',
+                'config/guidance.v1.json',
+                'config/operation-allowlist.v1.json',
+                'config/rules.v1.json',
+                'config/sku-catalog.v1.json',
+                'fixtures/commercial-ready.json',
+                'samples/answers.sample.json',
+                'schema/agent365-preflight-answers.schema.json',
+                'schema/agent365-preflight-report.schema.json'
+            )
+            $expectedEntries = @($expectedFiles | ForEach-Object { "$($packageA.RootFolder)/$_" })
+
+            $packageA.FileCount | Should -Be 17
+            @($packageEntries | Sort-Object) | Should -Be @($expectedEntries | Sort-Object)
+            $packageEntries[0] | Should -Be "$($packageA.RootFolder)/START-HERE.txt"
+            (Get-ChildItem -LiteralPath $extractedPath -Force).Count | Should -Be 1
+            Test-Path -LiteralPath (Join-Path $extractedRoot 'Start-Agent365Preflight.ps1') | Should -BeTrue
+        }
+
+        It 'excludes tests, build tooling, generated output, Git data, and customer evidence' {
+            $entryText = $packageEntries -join "`n"
+
+            $entryText | Should -Not -Match '(?i)(^|/)tests?/|Build-Agent365PreflightPackage|\.playwright|\.git|test-results|Agent365PreflightOutput|customer.*answers'
+            @($packageEntries | Where-Object { $_ -match '(?i)-sanitized\.(html|json)$|Agent365Preflight-\d{8}-\d{6}\.(html|json)$' }).Count | Should -Be 0
+        }
+
+        It 'contains no development path, personal fork URL, secret, or remote execution bootstrap' {
+            $packageText = @(
+                Get-ChildItem -LiteralPath $extractedRoot -Recurse -File |
+                    ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }
+            ) -join "`n"
+            $builderText = Get-Content -LiteralPath $packageBuilderPath -Raw
+
+            $packageText | Should -Not -Match ([regex]::Escape($resourceRoot))
+            $packageText | Should -Not -Match '(?i)github\.com/soyalejolopez|alejanl|claw-skills|BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY|Bearer\s+[A-Za-z0-9._~-]{20,}'
+            $builderText | Should -Not -Match '(?i)\bInvoke-Expression\b|\biex\b|Invoke-WebRequest|Start-BitsTransfer|DownloadString'
+        }
+
+        It 'builds the same ordered bytes from unchanged source files' {
+            $packageA.SHA256 | Should -Be $packageB.SHA256
+            $packageA.FileName | Should -Be 'Agent365Preflight-1.4.1.zip'
+            $packageA.RootFolder | Should -Be 'Agent365Preflight-1.4.1'
+        }
+
+        It 'puts the immediate customer instructions beside the launcher' {
+            $startHere = Get-Content -LiteralPath (Join-Path $extractedRoot 'START-HERE.txt') -Raw
+
+            $startHere | Should -Match 'Windows Terminal with PowerShell 7'
+            $startHere | Should -Match '\\Start-Agent365Preflight\.ps1'
+            $startHere | Should -Match 'Incomplete verdict is expected'
+            $startHere | Should -Match 'FULL local report'
+            $startHere | Should -Match 'SANITIZED report'
+            $startHere | Should -Match 'Resume-Agent365Preflight\.ps1'
+            $startHere | Should -Match '(?s)Do not share.*credentials'
+            $startHere | Should -Not -Match 'soyalejolopez|alejanl|claw-skills'
+        }
+
+        It 'runs Sample mode directly from the extracted standalone root' {
+            $launcher = Join-Path $extractedRoot 'Start-Agent365Preflight.ps1'
+            $outputPath = Join-Path $TestDrive 'standalone-output'
+            $result = & $launcher `
+                -Mode Sample `
+                -NonInteractive `
+                -PassThru `
+                -OpenReport Never `
+                -OutputPath $outputPath
+
+            $result.ExitCode | Should -Be 2
+            $result.Outcome.Report.Verdict.Label | Should -Be 'Incomplete'
+            $result.Outcome.Paths.Html | Should -Exist
+            $result.Outcome.Paths.Resume | Should -Exist
+            $result.Outcome.Report.Rerun.Command | Should -Match ([regex]::Escape($extractedRoot))
+            $result.Outcome.Report.Rerun.Command | Should -Not -Match ([regex]::Escape($resourceRoot))
+        }
     }
 
     Describe 'Customer journey documentation' {

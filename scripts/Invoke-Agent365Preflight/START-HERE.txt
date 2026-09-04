@@ -1,0 +1,37 @@
+MICROSOFT AGENT 365 PRE-FLIGHT - START HERE
+================================================
+
+1. Use Windows Terminal with PowerShell 7.
+2. Extract this ZIP, then right-click this folder and choose
+   "Open in Terminal" (or open Windows Terminal and change to this folder).
+3. Run:
+
+   .\Start-Agent365Preflight.ps1
+
+The launcher:
+- checks PowerShell, the Microsoft Graph authentication module, network access,
+  and the output folder;
+- offers a safe sample run or a guided live Control Plane pre-flight;
+- explains the read-only permissions before sign-in;
+- opens the full local working report for remediation; and
+- creates Resume-Agent365Preflight.ps1 for the next run.
+
+The tool only collects evidence. It does not configure the tenant, grant
+consent, assign licenses, change policies, or deploy agents.
+
+An Incomplete verdict is expected on the first run. Use the FULL local report
+to review findings and download guided answers. The SANITIZED report is only a
+reduced sharing copy. After downloading answers, run the Resume script in the
+output folder. You do not need to move the downloaded file.
+
+Minimum prerequisites:
+- PowerShell 7
+- Microsoft.Graph.Authentication 2.20.0 or later (the launcher asks before
+  any CurrentUser installation)
+- HTTPS access to graph.microsoft.com for a live run
+
+Sign in only through the Microsoft prompt opened by the launcher. Do not share
+your password, device code, token, certificate, or other credentials with
+anyone.
+
+See README.md for permissions, privacy, troubleshooting, and advanced use.

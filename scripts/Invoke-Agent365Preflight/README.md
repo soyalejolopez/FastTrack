@@ -5,7 +5,7 @@ category: "PowerShell"
 summary: "Run a read-only Agent 365 technical pre-flight and generate self-contained HTML and JSON reports."
 author:
   - "Microsoft FastTrack"
-version: 1.4.0
+version: 1.4.1
 published: 2026-09-01
 updated: 2026-09-04
 tags:
@@ -41,21 +41,47 @@ prerequisites:
 
 ## START HERE
 
-1. Download the repository ZIP from
-   [microsoft/FastTrack](https://github.com/microsoft/FastTrack/archive/refs/heads/master.zip).
-2. Extract it. Open **Windows Terminal** with PowerShell 7 in
-   `FastTrack-master\scripts\Invoke-Agent365Preflight`.
-3. Run:
+Choose the acquisition path available to you:
 
-   ```powershell
-   .\Start-Agent365Preflight.ps1
-   ```
+### FastTrack catalog or GitHub resource page
+
+Read the rendered README first. If the catalog entry provides a standalone
+`Agent365Preflight-<version>.zip`, download and extract it. Do not assume a standalone package is
+attached unless the catalog or resource page shows one.
+
+Open the extracted `Agent365Preflight-<version>` folder. `START-HERE.txt` and
+`Start-Agent365Preflight.ps1` are visible at that root.
+
+### Repository clone or full repository ZIP
+
+Clone [microsoft/FastTrack](https://github.com/microsoft/FastTrack), or download its
+[master branch ZIP](https://github.com/microsoft/FastTrack/archive/refs/heads/master.zip). Then
+navigate to:
+
+```text
+scripts\Invoke-Agent365Preflight
+```
+
+For either path, open **Windows Terminal** with PowerShell 7 in the resource folder and run:
+
+```powershell
+.\Start-Agent365Preflight.ps1
+```
 
 The launcher checks prerequisites, explains permissions before sign-in, offers a safe sample run,
 runs the recommended Control Plane pre-flight, opens the **full local working report**, and guides
 the answer-and-rerun flow. `Invoke-Agent365Preflight.ps1` remains available for advanced or
 unattended automation. When the launcher asks whether to open the report, pressing Enter accepts the
 documented default of opening the full report; the sanitized sharing copy is never auto-opened.
+
+Maintainers can build the standalone archive without downloading or executing remote code:
+
+```powershell
+.\Build-Agent365PreflightPackage.ps1 -OutputDirectory C:\Temp -Force
+```
+
+The builder uses a strict customer-runtime allowlist. It excludes tests, Git files, generated
+reports, browser artifacts, and customer evidence.
 
 `Invoke-Agent365Preflight` is a read-only Microsoft Agent 365 technical pre-flight checker. It
 collects evidence, applies versioned public rules, and creates a self-contained HTML report plus a
