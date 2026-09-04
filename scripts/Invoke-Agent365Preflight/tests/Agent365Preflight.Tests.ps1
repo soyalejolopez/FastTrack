@@ -777,7 +777,7 @@ Describe 'Manual evidence guidance contract' {
     It 'rejects non-public guidance sources' {
         $rules = Get-Content -LiteralPath (Join-Path $resourceRoot 'config\rules.v1.json') -Raw | ConvertFrom-Json -Depth 100
         $guidance = Get-Content -LiteralPath $guidancePath -Raw | ConvertFrom-Json -Depth 100
-        $guidance.items.'A365-MANUAL-001'.publicSources[0].url = 'https://internal.example.invalid/owners'
+        $guidance.items.'A365-MANUAL-001'.publicSources[0].url = 'https://contoso.invalid/owners'
 
         InModuleScope Agent365Preflight -Parameters @{ Rules = $rules; Guidance = $guidance } {
             { Test-A365GuidanceContract -Rules $Rules -Guidance $Guidance } |
@@ -1827,14 +1827,60 @@ Describe 'Report comparison, redaction, and rendering' {
         $html | Should -Match 'Not explicitly pinned'
         $html | Should -Not -Match '<link[^>]+stylesheet'
         $html | Should -Not -Match '<script[^>]+src='
-        $outcome.Report.SchemaVersion | Should -Be '1.2'
+        $outcome.Report.SchemaVersion | Should -Be '1.3'
         $outcome.Report.GuidanceVersion | Should -Be '1.0.0'
+        $outcome.Report.ReportId | Should -Match '^Agent365Preflight-\d{8}-\d{6}$'
+        $outcome.Report.Resume.AnswerFileName | Should -Be "$($outcome.Report.ReportId)-answers.json"
+        $outcome.Paths.Resume | Should -Exist
         $json | Test-Json -SchemaFile $reportSchemaPath | Should -Be $true
     }
 
-    It 'accepts report schema 1.0, 1.1, and 1.2 baselines' {
-        $current = Invoke-FixturePreflight -Name 'schema-1-2-baseline'
-        $currentComparison = Invoke-FixturePreflight -Name 'schema-1-2-current' -PreviousResultPath $current.Paths.Json
+    It 'generates a path-safe secret-free resume helper and sanitized placeholders' {
+        $outputPath = Join-Path $TestDrive "customer's output; Write-Host injected"
+        $outcome = Invoke-Agent365Preflight `
+            -FixturePath $readyFixturePath `
+            -OutputPath $outputPath `
+            -IncludeSanitizedCopy
+        $resumeText = Get-Content -LiteralPath $outcome.Paths.Resume -Raw
+        $sanitized = Get-Content -LiteralPath $outcome.Paths.SanitizedJson -Raw | ConvertFrom-Json -Depth 100
+
+        $resumeText | Should -Match 'Start-Agent365Preflight\.ps1'
+        $resumeText | Should -Match "customer''s output; Write-Host injected"
+        $resumeText | Should -Not -Match '\bInvoke-Expression\b|\biex\b|ClientSecret|Bearer|[A-Fa-f0-9]{40}'
+        $outcome.Report.Resume.Command | Should -Match "^& '.*Resume-Agent365Preflight\.ps1'$"
+        $outcome.Report.Resume.AnswerFileName | Should -Be "$($outcome.Report.ReportId)-answers.json"
+        $outcome.Report.Rerun.AnswersPath | Should -Match ([regex]::Escape($outcome.Report.Resume.AnswerFileName))
+        $sanitized.Resume.Available | Should -BeFalse
+        $sanitized.Resume.Command | Should -Be "& '<output-folder>\Resume-Agent365Preflight.ps1'"
+        $sanitized.Resume.ScriptPath | Should -Not -Match [regex]::Escape($TestDrive)
+        ($sanitized.Resume.AnswerSearchPaths -join ' ') | Should -Not -Match [regex]::Escape($TestDrive)
+    }
+
+    It 'never derives the sanitized rerun entry path from an apostrophe-containing real path' {
+        InModuleScope Agent365Preflight {
+            $metadata = New-A365RerunMetadata `
+                -Stage Pilot `
+                -Profiles @('ControlPlane') `
+                -Collectors @('TenantFoundation') `
+                -AuditWindowDays 7 `
+                -AuditQueryTimeoutSeconds 300 `
+                -TenantId 'contoso.onmicrosoft.com' `
+                -CurrentJsonPath "C:\O'Brien\report.json" `
+                -EntryScriptPath "C:\O'Brien\Invoke-Agent365Preflight.ps1" `
+                -AnswerPath "C:\O'Brien\report-answers.json" `
+                -OutputPath "C:\O'Brien" `
+                -IncludeSanitizedCopy $true `
+                -UseDeviceCode $false
+
+            $metadata.Command | Should -Match "C:\\O''Brien\\Invoke-Agent365Preflight\.ps1"
+            $metadata.SanitizedCommand | Should -Match "<resource-folder>\\Invoke-Agent365Preflight\.ps1"
+            $metadata.SanitizedCommand | Should -Not -Match "O''Brien|C:\\"
+        }
+    }
+
+    It 'accepts report schema 1.0 through 1.3 baselines' {
+        $current = Invoke-FixturePreflight -Name 'schema-1-3-baseline'
+        $currentComparison = Invoke-FixturePreflight -Name 'schema-1-3-current' -PreviousResultPath $current.Paths.Json
         $legacy = Get-Content -LiteralPath $current.Paths.Json -Raw | ConvertFrom-Json -Depth 100
         $legacy.SchemaVersion = '1.0'
         $legacyPath = Join-Path $TestDrive 'schema-1-0-baseline.json'
@@ -1853,10 +1899,20 @@ Describe 'Report comparison, redaction, and rendering' {
             [System.Text.UTF8Encoding]::new($false)
         )
         $priorComparison = Invoke-FixturePreflight -Name 'schema-1-1-current' -PreviousResultPath $priorPath
+        $priorTwo = Get-Content -LiteralPath $current.Paths.Json -Raw | ConvertFrom-Json -Depth 100
+        $priorTwo.SchemaVersion = '1.2'
+        $priorTwoPath = Join-Path $TestDrive 'schema-1-2-baseline.json'
+        [System.IO.File]::WriteAllText(
+            $priorTwoPath,
+            ($priorTwo | ConvertTo-Json -Depth 100),
+            [System.Text.UTF8Encoding]::new($false)
+        )
+        $priorTwoComparison = Invoke-FixturePreflight -Name 'schema-1-2-current' -PreviousResultPath $priorTwoPath
 
         $currentComparison.Report.Drift.HasBaseline | Should -BeTrue
         $legacyComparison.Report.Drift.HasBaseline | Should -BeTrue
         $priorComparison.Report.Drift.HasBaseline | Should -BeTrue
+        $priorTwoComparison.Report.Drift.HasBaseline | Should -BeTrue
     }
 
     It 'renders the complete accessible interactive findings contract' {
@@ -1966,6 +2022,14 @@ Describe 'Report comparison, redaction, and rendering' {
         $html | Should -Match '\.theme-toggle \{[\s\S]*?min-height: 40px;'
         $html | Should -Match '\.search-clear \{[\s\S]*?width: 40px; height: 40px;'
         ([regex]::Matches($html, 'data-answer-gate="')).Count | Should -Be $outcome.Report.ManuallyAttestableGates.Count
+        $html | Should -Match ('data-answer-filename="' + [regex]::Escape($outcome.Report.Resume.AnswerFileName) + '"')
+        $html | Should -Match 'Full local working report'
+        $html | Should -Match 'id="whatNext"'
+        $html | Should -Match 'Start remediation'
+        $html | Should -Match 'id="resumeCommand"'
+        $html | Should -Match 'id="copyResumeCommand"'
+        $html | Should -Match 'Advanced rerun command'
+        $html | Should -Match 'Answers download started\. Next: run Resume-Agent365Preflight\.ps1 from the output folder\.'
     }
 
     It 'renders canonical guidance for search, dialog, no-JavaScript, print, and checklist workflows' {
@@ -2032,6 +2096,10 @@ Describe 'Report comparison, redaction, and rendering' {
             $full.Contains($hook) | Should -Be $true
             $sanitized.Contains($hook) | Should -Be $true
         }
+        $full | Should -Match 'Full local working report'
+        $sanitized | Should -Match 'Sanitized sharing copy'
+        $sanitized | Should -Match 'Do not use this copy to complete remediation\. Open the full local report generated alongside it\.'
+        $sanitized | Should -Not -Match ([regex]::Escape($outcome.Report.Resume.ScriptPath))
     }
 
     It 'HTML-encodes untrusted collection errors inside searchable finding attributes' {

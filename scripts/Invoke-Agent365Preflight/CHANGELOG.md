@@ -2,6 +2,14 @@
 
 All notable changes to this resource are documented in this file.
 
+## 1.4.0 - 2026-09-04
+
+- Added the guided `Start-Agent365Preflight.ps1` customer launcher with prerequisite checks, recommended scope selection, WAM/device-code recovery, and full-report opening.
+- Added a generated, secret-free `Resume-Agent365Preflight.ps1` helper and deterministic report-linked answers filename.
+- Added automatic answers discovery in Downloads or the report folder with schema validation and explicit selection when multiple candidates exist.
+- Clarified full working reports versus sanitized sharing copies and added state-aware next steps.
+- Added clean-package fixture-to-resume coverage without tenant access.
+
 ## 1.3.0 - 2026-09-02
 
 - Added complete structured review guidance for every manually attestable static and profile gate.

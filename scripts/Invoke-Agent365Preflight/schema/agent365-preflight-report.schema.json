@@ -5,6 +5,7 @@
   "type": "object",
   "required": [
     "SchemaVersion",
+    "ReportId",
     "ToolVersion",
     "GeneratedAtUtc",
     "RuleSetVersion",
@@ -24,6 +25,7 @@
     "Actions",
     "ManualAttestations",
     "ManuallyAttestableGates",
+    "Resume",
     "Rerun",
     "Drift",
     "Sources",
@@ -32,7 +34,11 @@
   ],
   "properties": {
     "SchemaVersion": {
-      "const": "1.2"
+      "const": "1.3"
+    },
+    "ReportId": {
+      "type": "string",
+      "pattern": "^Agent365Preflight-[0-9]{8}-[0-9]{6}$"
     },
     "ToolVersion": {
       "type": "string",
@@ -251,6 +257,37 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/manuallyAttestableGate"
+      }
+    },
+    "Resume": {
+      "type": "object",
+      "required": [
+        "Available",
+        "ReportId",
+        "ScriptPath",
+        "Command",
+        "SanitizedCommand",
+        "AnswerFileName",
+        "AnswerSearchPaths"
+      ],
+      "properties": {
+        "Available": { "type": "boolean" },
+        "ReportId": {
+          "type": "string",
+          "pattern": "^Agent365Preflight-[0-9]{8}-[0-9]{6}$"
+        },
+        "ScriptPath": { "type": "string" },
+        "Command": { "type": "string" },
+        "SanitizedCommand": { "type": "string" },
+        "AnswerFileName": {
+          "type": "string",
+          "pattern": "^Agent365Preflight-[0-9]{8}-[0-9]{6}-answers\\.json$"
+        },
+        "AnswerSearchPaths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        }
       }
     },
     "Rerun": {

@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:ToolVersion = '1.3.0'
+$script:ToolVersion = '1.4.0'
 $script:ModuleRoot = $PSScriptRoot
 $script:RulesPath = Join-Path $PSScriptRoot 'config\rules.v1.json'
 $script:GuidancePath = Join-Path $PSScriptRoot 'config\guidance.v1.json'
@@ -2926,6 +2926,12 @@ function New-A365RerunMetadata {
         [string]$CurrentJsonPath,
 
         [Parameter(Mandatory)]
+        [string]$EntryScriptPath,
+
+        [Parameter(Mandatory)]
+        [string]$AnswerPath,
+
+        [Parameter(Mandatory)]
         [string]$OutputPath,
 
         [Parameter()]
@@ -2937,8 +2943,6 @@ function New-A365RerunMetadata {
 
     $profileValue = $Profiles -join ','
     $collectorValue = $Collectors -join ','
-    $answerPlaceholder = '.\answers.customer.json'
-
     $fullArguments = [System.Collections.Generic.List[string]]::new()
     if ($TenantId) {
         $fullArguments.Add("-TenantId $(ConvertTo-A365PowerShellLiteral $TenantId)")
@@ -2951,7 +2955,7 @@ function New-A365RerunMetadata {
     $fullArguments.Add("-Collector $collectorValue")
     $fullArguments.Add("-AuditWindowDays $AuditWindowDays")
     $fullArguments.Add("-AuditQueryTimeoutSeconds $AuditQueryTimeoutSeconds")
-    $fullArguments.Add("-AnswersPath $(ConvertTo-A365PowerShellLiteral $answerPlaceholder)")
+    $fullArguments.Add("-AnswersPath $(ConvertTo-A365PowerShellLiteral $AnswerPath)")
     $fullArguments.Add("-PreviousResultPath $(ConvertTo-A365PowerShellLiteral $CurrentJsonPath)")
     if ($IncludeSanitizedCopy) {
         $fullArguments.Add('-IncludeSanitizedCopy')
@@ -2976,9 +2980,12 @@ function New-A365RerunMetadata {
     $sanitizedArguments.Add("-OutputPath '<output-folder>'")
 
     $formatCommand = {
-        param([System.Collections.Generic.List[string]]$Arguments)
+        param(
+            [System.Collections.Generic.List[string]]$Arguments,
+            [string]$ScriptPath
+        )
         $lines = [System.Collections.Generic.List[string]]::new()
-        $lines.Add('.\Invoke-Agent365Preflight.ps1 `')
+        $lines.Add("& $(ConvertTo-A365PowerShellLiteral $ScriptPath) ``")
         for ($index = 0; $index -lt $Arguments.Count; $index++) {
             $suffix = if ($index -lt ($Arguments.Count - 1)) { ' `' } else { '' }
             $lines.Add("  $($Arguments[$index])$suffix")
@@ -2987,10 +2994,10 @@ function New-A365RerunMetadata {
     }
 
     return [pscustomobject][ordered]@{
-        Command = & $formatCommand $fullArguments
-        SanitizedCommand = & $formatCommand $sanitizedArguments
+        Command = & $formatCommand $fullArguments $EntryScriptPath
+        SanitizedCommand = & $formatCommand $sanitizedArguments '<resource-folder>\Invoke-Agent365Preflight.ps1'
         TenantTarget = $TenantId
-        AnswersPath = $answerPlaceholder
+        AnswersPath = $AnswerPath
         PreviousResultPath = $CurrentJsonPath
         OutputPath = $OutputPath
         IncludeSanitizedCopy = $IncludeSanitizedCopy
@@ -3001,6 +3008,137 @@ function New-A365RerunMetadata {
         AuditQueryTimeoutSeconds = $AuditQueryTimeoutSeconds
         UseDeviceCode = $UseDeviceCode
     }
+}
+
+function Get-A365DownloadsPath {
+    $profilePath = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+    if ([string]::IsNullOrWhiteSpace($profilePath)) {
+        return $null
+    }
+
+    return Join-Path $profilePath 'Downloads'
+}
+
+function New-A365ResumeMetadata {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ReportId,
+
+        [Parameter(Mandatory)]
+        [string]$ScriptPath,
+
+        [Parameter(Mandatory)]
+        [string]$AnswerFileName,
+
+        [Parameter(Mandatory)]
+        [string]$OutputPath
+    )
+
+    $downloadsPath = Get-A365DownloadsPath
+    [object[]]$searchPaths = @(
+        Join-Path $OutputPath $AnswerFileName
+        if ($downloadsPath) {
+            Join-Path $downloadsPath $AnswerFileName
+        }
+    )
+
+    return [pscustomobject][ordered]@{
+        Available = $true
+        ReportId = $ReportId
+        ScriptPath = $ScriptPath
+        Command = "& $(ConvertTo-A365PowerShellLiteral $ScriptPath)"
+        SanitizedCommand = "& '<output-folder>\Resume-Agent365Preflight.ps1'"
+        AnswerFileName = $AnswerFileName
+        AnswerSearchPaths = $searchPaths
+    }
+}
+
+function Write-A365ResumeScript {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [string]$LauncherPath,
+
+        [Parameter(Mandatory)]
+        [string]$PreviousResultPath,
+
+        [Parameter()]
+        [bool]$UseDeviceCode
+    )
+
+    $launcherLiteral = ConvertTo-A365PowerShellLiteral $LauncherPath
+    $previousLiteral = ConvertTo-A365PowerShellLiteral $PreviousResultPath
+    $deviceLine = if ($UseDeviceCode) { '    UseDeviceCode = $true' } else { $null }
+    $lines = @(
+        '#requires -Version 7.0'
+        ''
+        '<#'
+        'Runs the Agent 365 pre-flight customer launcher in Resume mode.'
+        'This generated helper contains no credentials, tokens, or certificate material.'
+        '#>'
+        '[CmdletBinding()]'
+        'param('
+        '    [Parameter()]'
+        '    [string]$AnswersPath,'
+        ''
+        '    [Parameter()]'
+        "    [ValidateSet('Ask', 'Always', 'Never')]"
+        "    [string]`$OpenReport = 'Ask',"
+        ''
+        '    [Parameter()]'
+        '    [switch]$UseDeviceCode,'
+        ''
+        '    [Parameter()]'
+        '    [switch]$NonInteractive,'
+        ''
+        '    [Parameter()]'
+        '    [switch]$PassThru,'
+        ''
+        '    [Parameter()]'
+        '    [string]$ClientId,'
+        ''
+        '    [Parameter()]'
+        '    [string]$CertificateThumbprint'
+        ')'
+        ''
+        "`$launcherPath = $launcherLiteral"
+        "`$previousResultPath = $previousLiteral"
+        'if (-not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) {'
+        '    throw "The Agent 365 pre-flight launcher was not found: $launcherPath"'
+        '}'
+        'if (-not (Test-Path -LiteralPath $previousResultPath -PathType Leaf)) {'
+        '    throw "The previous full report was not found: $previousResultPath"'
+        '}'
+        ''
+        '$parameters = @{'
+        "    Mode = 'Resume'"
+        '    PreviousResultPath = $previousResultPath'
+        '    OpenReport = $OpenReport'
+        '}'
+        $deviceLine
+        'if ($AnswersPath) { $parameters.AnswersPath = $AnswersPath }'
+        'if ($UseDeviceCode) { $parameters.UseDeviceCode = $true }'
+        'if ($NonInteractive) { $parameters.NonInteractive = $true }'
+        'if ($PassThru) { $parameters.PassThru = $true }'
+        'if ($ClientId) { $parameters.ClientId = $ClientId }'
+        'if ($CertificateThumbprint) { $parameters.CertificateThumbprint = $CertificateThumbprint }'
+        ''
+        '$result = & $launcherPath @parameters'
+        'if ($PassThru) {'
+        '    $result'
+        '    return'
+        '}'
+        'exit $LASTEXITCODE'
+    ) | Where-Object { $null -ne $_ }
+
+    [System.IO.File]::WriteAllLines(
+        $Path,
+        $lines,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    return (Resolve-Path -LiteralPath $Path).Path
 }
 
 function Compare-Agent365PreflightResult {
@@ -3172,6 +3310,15 @@ function New-Agent365SanitizedReport {
         $sanitized.Rerun.PreviousResultPath = '<previous-report.json>'
         $sanitized.Rerun.OutputPath = '<output-folder>'
     }
+    if ($sanitized.PSObject.Properties['Resume'] -and $null -ne $sanitized.Resume) {
+        $sanitized.Resume.Available = $false
+        $sanitized.Resume.ScriptPath = '<output-folder>\Resume-Agent365Preflight.ps1'
+        $sanitized.Resume.Command = $sanitized.Resume.SanitizedCommand
+        $sanitized.Resume.AnswerSearchPaths = @(
+            "<output-folder>\$($sanitized.Resume.AnswerFileName)"
+            "<Downloads>\$($sanitized.Resume.AnswerFileName)"
+        )
+    }
 
     if ($sanitized.Runtime.PSObject.Properties['OutputFiles']) {
         $sanitized.Runtime.OutputFiles = @()
@@ -3300,8 +3447,8 @@ function Invoke-Agent365Preflight {
             -Rules $rules
     }
 
-    if ($previous -and (Get-A365Property -InputObject $previous -Name 'SchemaVersion' -Default '') -notin @('1.0', '1.1', '1.2')) {
-        throw 'Previous result SchemaVersion must be 1.0, 1.1, or 1.2.'
+    if ($previous -and (Get-A365Property -InputObject $previous -Name 'SchemaVersion' -Default '') -notin @('1.0', '1.1', '1.2', '1.3')) {
+        throw 'Previous result SchemaVersion must be 1.0, 1.1, 1.2, or 1.3.'
     }
     if ($previous -and $null -eq $previous.PSObject.Properties['Results']) {
         throw 'Previous result must contain a Results array.'
@@ -3363,8 +3510,31 @@ function Invoke-Agent365Preflight {
         actualTenantId = $null
         matchedVerifiedDomain = $null
     })
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $reportId = "Agent365Preflight-$stamp"
+    $jsonPath = Join-Path $resolvedOutputPath "$reportId.json"
+    $htmlPath = Join-Path $resolvedOutputPath "$reportId.html"
+    $sanitizedJsonPath = if ($IncludeSanitizedCopy) { Join-Path $resolvedOutputPath "$reportId-sanitized.json" } else { $null }
+    $sanitizedHtmlPath = if ($IncludeSanitizedCopy) { Join-Path $resolvedOutputPath "$reportId-sanitized.html" } else { $null }
+    $resumeScriptPath = Join-Path $resolvedOutputPath 'Resume-Agent365Preflight.ps1'
+    $answerFileName = "$reportId-answers.json"
+    $downloadsPath = Get-A365DownloadsPath
+    $answerPath = if ($downloadsPath) {
+        Join-Path $downloadsPath $answerFileName
+    }
+    else {
+        Join-Path $resolvedOutputPath $answerFileName
+    }
+    $entryScriptPath = Join-Path $script:ModuleRoot 'Invoke-Agent365Preflight.ps1'
+    $launcherPath = Join-Path $script:ModuleRoot 'Start-Agent365Preflight.ps1'
+    $resumeMetadata = New-A365ResumeMetadata `
+        -ReportId $reportId `
+        -ScriptPath $resumeScriptPath `
+        -AnswerFileName $answerFileName `
+        -OutputPath $resolvedOutputPath
     $report = [pscustomobject][ordered]@{
-        SchemaVersion = '1.2'
+        SchemaVersion = '1.3'
+        ReportId = $reportId
         ToolVersion = $script:ToolVersion
         GeneratedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
         RuleSetVersion = $rules.version
@@ -3424,6 +3594,7 @@ function Invoke-Agent365Preflight {
         Actions = @(Get-A365Actions -Results $results)
         ManualAttestations = $manualAttestations
         ManuallyAttestableGates = $manuallyAttestableGates
+        Resume = $resumeMetadata
         Rerun = $null
         Drift = [pscustomobject]@{
             HasBaseline = $false
@@ -3457,13 +3628,7 @@ function Invoke-Agent365Preflight {
 
     $report.Drift = Compare-Agent365PreflightResult -Current $report -Previous $previous
 
-    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $jsonPath = Join-Path $resolvedOutputPath "Agent365Preflight-$stamp.json"
-    $htmlPath = Join-Path $resolvedOutputPath "Agent365Preflight-$stamp.html"
-    $sanitizedJsonPath = if ($IncludeSanitizedCopy) { Join-Path $resolvedOutputPath "Agent365Preflight-$stamp-sanitized.json" } else { $null }
-    $sanitizedHtmlPath = if ($IncludeSanitizedCopy) { Join-Path $resolvedOutputPath "Agent365Preflight-$stamp-sanitized.html" } else { $null }
-
-    $outputFiles = @($htmlPath, $jsonPath)
+    $outputFiles = @($htmlPath, $jsonPath, $resumeScriptPath)
     if ($IncludeSanitizedCopy) {
         $outputFiles += @($sanitizedHtmlPath, $sanitizedJsonPath)
     }
@@ -3475,12 +3640,19 @@ function Invoke-Agent365Preflight {
         -AuditQueryTimeoutSeconds $AuditQueryTimeoutSeconds `
         -TenantId $TenantId `
         -CurrentJsonPath $jsonPath `
+        -EntryScriptPath $entryScriptPath `
+        -AnswerPath $answerPath `
         -OutputPath $resolvedOutputPath `
         -IncludeSanitizedCopy ([bool]$IncludeSanitizedCopy) `
         -UseDeviceCode ([bool]$UseDeviceCode)
     $report.Runtime.OutputFiles = $outputFiles
     $report.Runtime.DurationSeconds = [Math]::Round(((Get-Date) - $started).TotalSeconds, 2)
 
+    $resumeScriptPath = Write-A365ResumeScript `
+        -Path $resumeScriptPath `
+        -LauncherPath $launcherPath `
+        -PreviousResultPath $jsonPath `
+        -UseDeviceCode ([bool]$UseDeviceCode)
     $jsonPath = Write-A365JsonFile -InputObject $report -Path $jsonPath
     $htmlPath = New-Agent365PreflightHtml -Report $report -Path $htmlPath
 
@@ -3498,6 +3670,7 @@ function Invoke-Agent365Preflight {
             Json = $jsonPath
             SanitizedHtml = $sanitizedHtmlPath
             SanitizedJson = $sanitizedJsonPath
+            Resume = $resumeScriptPath
         }
     }
 }

@@ -5,9 +5,9 @@ category: "PowerShell"
 summary: "Run a read-only Agent 365 technical pre-flight and generate self-contained HTML and JSON reports."
 author:
   - "Microsoft FastTrack"
-version: 1.3.0
+version: 1.4.0
 published: 2026-09-01
-updated: 2026-09-02
+updated: 2026-09-04
 tags:
   - agent-365
   - readiness
@@ -24,12 +24,12 @@ whyUseIt:
   - "Collect public-rule-based evidence across licensing, roles, registry, Entra, Defender, Purview, and selected profiles."
   - "Generate a full local report and an optional redacted support copy."
 howToUse: |-
-  1. Review the permissions and privacy notes in this README.
-  2. Open PowerShell 7 in this folder.
+  1. Download and extract the resource.
+  2. Open Windows Terminal with PowerShell 7 in this folder.
   3. Run:
 
      ```powershell
-     .\Invoke-Agent365Preflight.ps1 -OutputPath "C:\Temp\Agent365Preflight"
+     .\Start-Agent365Preflight.ps1
      ```
 prerequisites:
   - "PowerShell 7"
@@ -38,6 +38,24 @@ prerequisites:
 ---
 
 # Microsoft FastTrack Open Source - Invoke-Agent365Preflight
+
+## START HERE
+
+1. Download the repository ZIP from
+   [microsoft/FastTrack](https://github.com/microsoft/FastTrack/archive/refs/heads/master.zip).
+2. Extract it. Open **Windows Terminal** with PowerShell 7 in
+   `FastTrack-master\scripts\Invoke-Agent365Preflight`.
+3. Run:
+
+   ```powershell
+   .\Start-Agent365Preflight.ps1
+   ```
+
+The launcher checks prerequisites, explains permissions before sign-in, offers a safe sample run,
+runs the recommended Control Plane pre-flight, opens the **full local working report**, and guides
+the answer-and-rerun flow. `Invoke-Agent365Preflight.ps1` remains available for advanced or
+unattended automation. When the launcher asks whether to open the report, pressing Enter accepts the
+documented default of opening the full report; the sanitized sharing copy is never auto-opened.
 
 `Invoke-Agent365Preflight` is a read-only Microsoft Agent 365 technical pre-flight checker. It
 collects evidence, applies versioned public rules, and creates a self-contained HTML report plus a
@@ -95,6 +113,9 @@ that auditing is disabled.
    be compared with a previous JSON report.
 8. **Write reports even after partial failure.** The script produces HTML and JSON when individual
    collectors fail. Optional sanitized copies remove tenant identity and sensitive result details.
+9. **Resume without rebuilding the command.** Each run writes a local resume helper and a unique
+   expected answers filename. The helper validates the previous full report and matching answers,
+   preserves the original scope, and runs the next comparison in the same output folder.
 
 ## How to remediate and rerun
 
@@ -104,9 +125,11 @@ The report is designed as a customer remediation workspace. It never changes ten
    manual gates in order.
 2. Make the documented change in the owning Microsoft admin portal. Use the public documentation
    link on the finding.
-3. Capture accountable manual evidence in the in-report Answers Builder or an answers JSON file.
-4. Copy the generated rerun command. Rerun with the same stage, profiles, collectors, audit window,
-   and timeout, plus `-AnswersPath` and the current JSON file as `-PreviousResultPath`.
+3. Capture accountable manual evidence in the full report's guided Answers Builder and download
+   the report-linked answers JSON file. Do not remediate from the sanitized sharing copy.
+4. Run the one-command `Resume-Agent365Preflight.ps1` helper in the output folder. It finds the
+   matching answers file in Downloads or beside the report, preserves the original settings, and
+   uses the current JSON report as the baseline.
 5. Confirm that Blocker, ActionRequired, NotAuthorized, Error, and unresolved required manual counts
    are all zero. Then review resolved items, drift, and nonblocking advisories.
 
@@ -142,6 +165,10 @@ no-JavaScript output. Microsoft Learn links support the in-report steps rather t
 Guidance helps the accountable customer reviewer make and document a defensible decision. It does
 not approve the control, infer an answer, replace customer policy, or change the current verdict.
 Only a valid answers file supplied on a rerun can apply manual evidence.
+
+Each downloaded answers file uses the report-linked name
+`Agent365Preflight-<run-id>-answers.json`. The report and generated resume helper look for that
+exact name, so the customer does not need to move the browser download or edit a command.
 
 Answers schema `1.1` adds rule and profile gates, timestamps, and N/A justification while accepting
 legacy `1.0` files. The sample includes every static gate and every supported stable profile ID.
@@ -279,42 +306,44 @@ Get-Module Microsoft.Graph.Authentication -ListAvailable |
 
 The script never installs a module unless you explicitly use `-InstallDependencies`.
 
-### Start with fixture mode
+### Start with the guided launcher
 
-Run the included synthetic scenario before connecting to a tenant:
+Run the launcher and choose **Try safely with sample data** before connecting to a tenant:
 
 ```powershell
-.\Invoke-Agent365Preflight.ps1 `
-  -FixturePath .\fixtures\commercial-ready.json `
-  -AnswersPath .\samples\answers.sample.json `
-  -IncludeSanitizedCopy `
-  -OutputPath .\out
+.\Start-Agent365Preflight.ps1
 ```
 
-Fixture mode demonstrates the reports and exit codes without authentication or tenant access. The
-included answers are examples for this synthetic scenario only. Do not reuse them as real
-attestations.
+Fixture mode demonstrates the first-run `Incomplete` journey without authentication or tenant
+access. The report explains each manual gate and produces a local resume helper.
 
 ### First live run
 
-Start with tenant foundation, licensing, roles, registry, and Agent Identity evidence:
+Run the launcher in a native Windows Terminal and choose **Run the recommended Control Plane
+pre-flight**. It asks for the tenant verified domain or GUID and stage, then selects the standard
+Graph collectors and explains every derived scope before authentication.
 
 ```powershell
-.\Invoke-Agent365Preflight.ps1 `
-  -TenantId "contoso.onmicrosoft.com" `
-  -UseDeviceCode `
-  -Collector TenantFoundation,Licensing,Roles,Registry,AgentIdentity `
-  -Stage Pilot `
-  -OutputPath "C:\Temp\Agent365Preflight"
+.\Start-Agent365Preflight.ps1
 ```
 
-Read the printed scope list before the sign-in prompt. If consent or a required role is missing, the
-script continues where possible and records the gap. Because this first run omits an answers file,
-the verdict remains `Incomplete` until the required customer attestations are supplied.
+On Windows, normal interactive authentication is the recommended path because the same process keeps
+the delegated Graph context for collection and later resume runs. Microsoft.Graph.Authentication
+2.34 and later uses Windows Authentication Manager (WAM) for normal Windows interactive sign-in.
+Run it directly in Windows Terminal or PowerShell so the broker has a parent window. Embedded or
+background terminals can fail with a window-handle error; the launcher detects common embedded
+hosts, explains the problem, and offers device code.
 
-`-UseDeviceCode` is useful in terminals without a browser control. Follow the module's prompt and
-complete sign-in promptly. Some Microsoft.Graph.Authentication versions display a 120-second
-completion window; if it expires, rerun the command.
+Device code remains a portable fallback. Be ready to open `https://microsoft.com/devicelogin`,
+enter the code, and complete consent immediately. Recent module versions can provide about 120
+seconds. If the code expires, the launcher stays open and offers **Try again now**.
+
+Do not use `Set-MgGraphOption -DisableLoginByWAM` as this tool's standard workaround. Use a native
+Windows terminal for WAM, or choose device code. A custom app registration is not required for the
+normal interactive first-use flow.
+
+If consent or a required role is missing, collection continues where safe and records the gap.
+`Incomplete` is expected on the first run because required customer evidence has not been supplied.
 
 ### Pin delegated sign-in to the intended tenant
 
@@ -332,29 +361,25 @@ successful full report records the expected and connected tenant evidence under
 
 ## Recommended pilot run
 
-`ControlPlane` is always selected. Add profiles only for agent platforms in the planned pilot, and
-select the collectors needed to evaluate them.
-
-Copy the sample answers and replace every example with customer-reviewed evidence:
+For most customers, use the guided **Recommended** mode:
 
 ```powershell
-Copy-Item .\samples\answers.sample.json .\answers.customer.json
+.\Start-Agent365Preflight.ps1 -Mode Recommended -TenantId "contoso.onmicrosoft.com"
 ```
+
+`ControlPlane` and the standard Graph collectors are selected automatically. Use **Advanced/custom**
+only when adding platform profiles, SharePoint target sites, optional workload sessions, or a
+different collector scope.
+
+After reviewing and fixing the full report, download the guided answers file and run:
 
 ```powershell
-.\Invoke-Agent365Preflight.ps1 `
-  -Profile CopilotStudio,AgentBuilder,SharePointAgents `
-  -Collector TenantFoundation,Licensing,Roles,Registry,AgentIdentity,ConditionalAccess,SharePoint `
-  -Stage Pilot `
-  -SharePointSiteUrl "https://contoso.sharepoint.com/sites/agent-pilot" `
-  -AnswersPath .\answers.customer.json `
-  -IncludeSanitizedCopy `
-  -OutputPath "C:\Temp\Agent365Preflight"
+& "C:\Temp\Agent365Preflight\Resume-Agent365Preflight.ps1"
 ```
 
-Before using `-AnswersPath` for a real pilot, copy `samples\answers.sample.json`, replace every
-example owner and evidence reference, and confirm each answer with the responsible customer owner.
-A required answer of `No` is a blocker. An unanswered required item keeps the report incomplete.
+The helper contains no secrets. It locates the exact report-linked answers file in Downloads or the
+output folder, validates it, reuses the report's stage, profiles, collectors, audit settings, and
+tenant target, and opens the new full report after the rerun.
 
 ### Production technical pre-flight
 
@@ -387,6 +412,20 @@ Fixture mode never authenticates or calls a tenant. It is suitable for demos and
 ```
 
 ## Parameters
+
+### Guided launcher
+
+| Parameter | Purpose |
+| --- | --- |
+| `-Mode` | `Guided`, `Sample`, `Recommended`, `Resume`, or `Advanced`. No argument starts the wizard. |
+| `-Authentication` | `Auto`, `Interactive`, or `DeviceCode`. Auto favors normal interactive WAM in a native Windows terminal. |
+| `-PreviousResultPath` | Full report JSON used by Resume mode. Sanitized reports are rejected. |
+| `-AnswersPath` | Optional explicit answers path. Otherwise Resume finds the exact report-linked filename. |
+| `-OpenReport` | `Ask`, `Always`, or `Never`. Only the full local report is opened. |
+| `-NonInteractive` | Uses supplied parameters without prompts. Intended for repeatable tests and automation. |
+| `-InstallDependencies` | Explicit opt-in to install Microsoft.Graph.Authentication for CurrentUser. |
+
+### Advanced engine
 
 | Parameter | Purpose |
 | --- | --- |
@@ -547,7 +586,7 @@ shows:
   advisory, or explicitly permitted as not applicable.
 - **Other changes:** the status changed without meeting either condition above.
 
-The current report schema is `1.2`. Baseline comparison accepts report schema `1.0`, `1.1`, or `1.2`
+The current report schema is `1.3`. Baseline comparison accepts report schema `1.0` through `1.3`
 so earlier results can be carried forward. It detects status drift; it does not prove that
 configuration changes caused the drift.
 
@@ -555,12 +594,16 @@ configuration changes caused the drift.
 
 | Symptom | What to check |
 | --- | --- |
+| Windows says running scripts is disabled or the extracted script is blocked | Confirm the ZIP came from the canonical Microsoft FastTrack repository. From the extracted resource folder, use `Get-ChildItem -Recurse -File | Unblock-File` if your organization permits it. Do not lower the computer-wide execution policy. |
 | Microsoft.Graph.Authentication is missing or too old | Install version 2.20.0 or later yourself, or explicitly use `-InstallDependencies`. The default run never installs it. |
 | Sign-in succeeds but checks show `NotAuthorized` | Compare `RequestedScopes`, `GrantedScopes`, and `MissingScopes`. Confirm tenant consent and the signed-in user's required role separately. |
 | A result remains `ActionRequired` after adding Yes evidence | Manual evidence cannot override automated evidence. Apply the documented tenant or access change, then rerun the collector. |
 | A result remains `ManualValidation` | Confirm the ID is manually attestable and provide `Yes` with owner and evidence reference. Use the Answers Builder to validate and download the file. |
 | An answers file is rejected | Check for unknown or duplicate IDs, automated-only rules, missing owner/reference for Yes, or missing justification for permitted NotApplicable evidence. |
-| Device-code sign-in expires | Complete the code flow within the time shown by Microsoft.Graph.Authentication. Some versions show 120 seconds. Rerun if the window expires. |
+| Device-code sign-in expires | Complete the code flow within the time shown by Microsoft.Graph.Authentication. Some versions show about 120 seconds. The guided launcher keeps running and offers **Try again now**. |
+| Interactive sign-in reports a WAM or parent-window error | Open Windows Terminal or PowerShell directly and rerun the launcher, or choose device code. Embedded and background terminals cannot reliably host the WAM parent window. |
+| I opened the sanitized report | Use it only as a sharing copy. Open the full local HTML generated beside it to complete remediation and build answers. |
+| The resume helper cannot find answers | Download answers again from the same full report. The unique filename must match the report ID and can remain in Downloads or the output folder. |
 | The script prompts even though Graph is connected | The existing context is reused only when it is delegated, has a tenant ID, matches an explicitly requested tenant GUID, and contains every requested scope. |
 | Package catalog returns 403 | Confirm `CopilotPackages.Read.All` and an AI Administrator or Global Administrator role. AI Reader and Global Reader aren't sufficient for this API. |
 | Agent Identity owners or sponsors return 403 | Owners use `AgentIdentityBlueprint.Read.All`; sponsors require `Application.Read.All`. Nonowners also need Agent ID Administrator. |
@@ -588,6 +631,8 @@ configuration changes caused the drift.
 - `-IncludeBeta` records explicit opt-in, but the current v1 rules use no beta API.
 - Certificate app-only mode covers Microsoft Graph only. Optional Purview and SharePoint module
   collectors are skipped.
+- The generated resume helper references the extracted resource location. If the resource folder is
+  moved or deleted after a run, extract it again or start a new guided run.
 - The Purview Audit Search API creates a query-job record that the service can retain. A query that
   times out locally can continue running server-side.
 - The report can contain tenant identifiers, account information, site URLs, summarized policy
@@ -608,7 +653,7 @@ raw events are included in this resource.
 Run the automated suite with Pester 5.7.1 or 6.1.0:
 
 ```powershell
-Invoke-Pester .\tests\Agent365Preflight.Tests.ps1
+Invoke-Pester .\tests
 ```
 
 ## Rule and API freshness
@@ -618,6 +663,9 @@ the code. Each report records the rule-set version, review date, evidence time, 
 Review `config/rules.v1.json`, `config/sku-catalog.v1.json`, and
 `config/operation-allowlist.v1.json` before relying on the tool after material product or API
 changes.
+
+Review `config/guidance.v1.json` with the rule set because it controls the customer-facing answer
+criteria, evidence checklists, verification steps, and public sources.
 
 ## Public sources
 
@@ -630,6 +678,7 @@ changes.
 - [Defender Security for AI](https://learn.microsoft.com/defender-xdr/security-for-ai/defender-security-for-ai)
 - [Purview support for Agent 365](https://learn.microsoft.com/purview/ai-agent-365)
 - [Agent 365 integration with SharePoint and OneDrive](https://learn.microsoft.com/microsoft-agent-365/admin/sharepoint-integration)
+- [Microsoft Graph PowerShell authentication commands](https://learn.microsoft.com/powershell/microsoftgraph/authentication-commands)
 
 ## Applies To
 

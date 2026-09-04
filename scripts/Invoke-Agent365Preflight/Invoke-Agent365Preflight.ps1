@@ -8,7 +8,8 @@ Runs a read-only Microsoft Agent 365 technical pre-flight.
 Collects customer-controlled tenant evidence using approved read-only operations, evaluates a
 versioned public rule set, and writes self-contained HTML and JSON reports with guided manual
 evidence review. The tool does not configure the tenant and does not provide a security or
-compliance certification.
+compliance certification. Customers should normally start with Start-Agent365Preflight.ps1; this
+entry point remains the advanced and automation interface.
 
 .PARAMETER Profile
 Selects optional workload profiles. ControlPlane is always included.

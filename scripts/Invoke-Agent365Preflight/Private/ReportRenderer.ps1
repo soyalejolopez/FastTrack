@@ -557,6 +557,47 @@ function Get-A365RerunModel {
     }
 }
 
+function Get-A365ResumeModel {
+    <#
+        Normalize the Resume contract (the one-command re-run launcher). In
+        sanitized mode only the placeholder-safe command is surfaced and the
+        real script path and answer search paths are withheld, so no tenant or
+        local path can leak from a full report rendered sanitized. The
+        answer-file name is derived from the deterministic report id and is
+        already placeholder-safe, so it is surfaced in both modes.
+    #>
+    [CmdletBinding()]
+    param([object]$Report, [bool]$IsSanitized)
+
+    $rz = Get-A365Member $Report 'Resume'
+    if ($null -eq $rz) {
+        return @{ HasCommand = $false; Available = $false; Command = ''; AnswerFileName = ''; AnswerSearchPaths = @() }
+    }
+
+    if ($IsSanitized) {
+        $cmd = [string](Get-A365Member $rz 'SanitizedCommand' '')
+        if ([string]::IsNullOrWhiteSpace($cmd)) { $cmd = [string](Get-A365Member $rz 'Command' '') }
+        return @{
+            HasCommand        = -not [string]::IsNullOrWhiteSpace($cmd)
+            Available         = $false
+            Command           = $cmd
+            AnswerFileName    = [string](Get-A365Member $rz 'AnswerFileName' '')
+            AnswerSearchPaths = @()
+        }
+    }
+
+    $cmd = [string](Get-A365Member $rz 'Command' '')
+    $searchPaths = @(Get-A365Member $rz 'AnswerSearchPaths' @()) | ForEach-Object { [string]$_ } | Where-Object { $_ }
+    return @{
+        HasCommand        = -not [string]::IsNullOrWhiteSpace($cmd)
+        Available         = (Get-A365Bool (Get-A365Member $rz 'Available'))
+        Command           = $cmd
+        ScriptPath        = [string](Get-A365Member $rz 'ScriptPath' '')
+        AnswerFileName    = [string](Get-A365Member $rz 'AnswerFileName' '')
+        AnswerSearchPaths = @($searchPaths)
+    }
+}
+
 function Get-A365GuidanceModel {
     <#
         Normalize a canonical structured Guidance object (attached to a gate or a
@@ -1504,6 +1545,73 @@ body.guidance-open { overflow: hidden; }
 .act-btn:hover { border-color: var(--brand); }
 .act-btn.is-brand { color: var(--link); }
 
+/* --- Secondary CTA (paired with .cta-primary in the command center) --- */
+.cta-secondary {
+  font: inherit; font-size: .9rem; font-weight: 600; cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 18px;
+  border-radius: var(--radius); border: 1px solid var(--surface-border-strong); background: var(--bg-elevated); color: var(--text);
+}
+.cta-secondary:hover { border-color: var(--brand); color: var(--link); }
+
+/* --- Report identity: full working copy vs sanitized sharing copy --- */
+.report-identity {
+  border: 1px solid var(--surface-border); border-radius: var(--radius);
+  padding: 14px 18px; margin: 16px 0; background: var(--bg-elevated);
+}
+.report-identity .ri-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.report-identity .ri-glyph { font-size: 1rem; line-height: 1; flex: none; }
+.report-identity .ri-label { font-weight: 700; font-size: .95rem; color: var(--text); letter-spacing: -0.01em; }
+.report-identity .ri-id {
+  font-family: var(--font-mono); font-size: .72rem; color: var(--text-secondary);
+  padding: 2px 8px; border: 1px solid var(--surface-border); border-radius: 999px; background: var(--bg-sunken);
+  word-break: break-all;
+}
+.report-identity .ri-note { margin: 8px 0 0; font-size: .9rem; color: var(--text); }
+.report-identity .ri-sub { margin: 4px 0 0; font-size: .82rem; color: var(--text-secondary); }
+.report-identity.is-full { border-left: 4px solid var(--brand); }
+.report-identity.is-sanitized {
+  border-left: 4px solid var(--action); background: var(--action-bg);
+  border-color: color-mix(in srgb, var(--action) 30%, var(--surface-border));
+}
+.report-identity.is-sanitized .ri-note strong { color: var(--text); }
+
+/* --- What happens next: Fix -> Document -> Rerun editorial sequence --- */
+.next-steps { margin: 2px 0 0; }
+.next-steps-title { margin: 0 0 12px; font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; }
+.next-steps-list {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+}
+.next-step {
+  position: relative; display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px 16px; border: 1px solid var(--surface-border); border-radius: var(--radius); background: var(--bg-elevated);
+}
+.next-step .ns-num {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; font-family: var(--font-mono); font-size: .82rem; font-weight: 700;
+  background: var(--bg-sunken); border: 1px solid var(--surface-border-strong); color: var(--brand);
+}
+.next-step .ns-body { display: grid; gap: 3px; }
+.next-step .ns-name { font-weight: 700; font-size: .9rem; color: var(--text); }
+.next-step .ns-desc { font-size: .82rem; color: var(--text-secondary); line-height: 1.45; }
+.next-steps-list .next-step:not(:last-child)::after {
+  content: "\2192"; position: absolute; right: -11px; top: 50%; transform: translateY(-50%);
+  color: var(--text-muted); font-size: .95rem; z-index: 1;
+}
+
+/* --- Resume launcher (primary) + advanced rerun disclosure --- */
+.resume-primary { display: grid; gap: 4px; }
+.resume-primary > h3 { margin: 0; }
+.rerun-code.is-primary { border-color: color-mix(in srgb, var(--brand) 45%, var(--surface-border)); border-left: 3px solid var(--brand); }
+.advanced-rerun { margin-top: 14px; border-top: 1px solid var(--surface-border); padding-top: 6px; }
+.advanced-rerun > summary {
+  cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+  min-height: 40px; padding: 6px 2px; font-weight: 600; font-size: .88rem; color: var(--text-secondary);
+}
+.advanced-rerun > summary:hover { color: var(--text); }
+.advanced-rerun .ar-hint { font-weight: 400; font-size: .8rem; color: var(--text-muted); }
+.advanced-rerun-body { display: grid; gap: 10px; padding-top: 8px; }
+
 /* --- Readiness command center --- */
 .command-center {
   background: var(--bg-elevated); border: 1px solid var(--surface-border); border-radius: var(--radius-lg);
@@ -1674,6 +1782,15 @@ body.guidance-open { overflow: hidden; }
   .path-item { grid-template-columns: auto minmax(0,1fr); }
   .pi-side { grid-column: 2; justify-items: start; grid-auto-flow: column; }
 }
+@media (max-width: 768px) {
+  .next-steps-list { grid-template-columns: 1fr; gap: 10px; }
+  .next-steps-list .next-step:not(:last-child)::after { content: none; }
+}
+@media (max-width: 400px) {
+  .cc-actions .cta-primary, .cc-actions .cta-secondary { width: 100%; }
+  .report-identity { padding: 12px 14px; }
+  .advanced-rerun > summary { padding: 8px 2px; }
+}
 
 @media print {
   :root { --bg: #fff; --bg-elevated: #fff; --bg-sunken: #fff; --text: #000; --text-secondary: #222; --text-muted: #444; }
@@ -1695,6 +1812,10 @@ body.guidance-open { overflow: hidden; }
   thead { display: table-header-group; }
   .workspace-nav, .cc-actions, .command-actions, .tool-actions, .pi-open, .pi-check, .local-progress-notice { display: none !important; }
   .answer-values, .answer-fields { display: none !important; }
+  .next-steps-list { grid-template-columns: 1fr !important; }
+  .next-steps-list .next-step::after { content: none !important; }
+  .report-identity { break-inside: avoid; border-color: #999 !important; }
+  .advanced-rerun-body { display: block !important; }
   .command-center { display: block !important; box-shadow: none !important; border-color: #999 !important; }
   .command-center::before { display: none !important; }
   .path-phase::before { display: none !important; }
@@ -2254,6 +2375,8 @@ function Get-A365Script {
     answersRoot.hidden = false;
     var downloadAnswers = document.getElementById("downloadAnswers");
     var answersFeedback = document.getElementById("answersFeedback");
+    var answersFileName = answersRoot.getAttribute("data-answer-filename") || "agent365-answers.json";
+    var answersResumeCmd = answersRoot.getAttribute("data-resume-command") || "";
     function gateFieldVal(scope, sel) {
       var el = scope.querySelector(sel);
       return el ? trimStr(el.value) : "";
@@ -2308,8 +2431,17 @@ function Get-A365Script {
           return;
         }
         var payload = { schemaVersion: "1.1", answers: res.items };
-        var ok = offlineDownload("agent365-answers.json", "application/json;charset=utf-8", JSON.stringify(payload, null, 2));
-        setFeedbackEl(answersFeedback, ok ? ("Downloaded " + res.items.length + " answer" + (res.items.length === 1 ? "" : "s") + ". Re-run the checker with this file to apply them.") : "Download is not available in this browser.", ok ? "ok" : "error");
+        var ok = offlineDownload(answersFileName, "application/json;charset=utf-8", JSON.stringify(payload, null, 2));
+        setFeedbackEl(answersFeedback, ok ? "Answers download started. Next: run Resume-Agent365Preflight.ps1 from the output folder." : "Download is not available in this browser.", ok ? "ok" : "error");
+      });
+    }
+    var copyResumeAnswers = document.getElementById("copyResumeAnswers");
+    if (copyResumeAnswers && answersResumeCmd) {
+      copyResumeAnswers.hidden = false;
+      copyResumeAnswers.addEventListener("click", function () {
+        copyText(answersResumeCmd, function (ok) {
+          setFeedbackEl(answersFeedback, ok ? "Resume command copied. Run it from the output folder after your download completes." : "Copy is unavailable — select the command text manually.", ok ? "ok" : "error");
+        });
       });
     }
   }
@@ -2498,6 +2630,19 @@ function Get-A365Script {
     for (var gd = 0; gd < gDocs.length; gd++) {
       if (gDocs[gd].tagName === "DETAILS") { gDocs[gd].open = false; }
     }
+  }
+
+  // ---- Resume launcher: copy the one-command re-run ----
+  var resumeCmdEl = document.getElementById("resumeCommand");
+  var resumeFeedback = document.getElementById("resumeFeedback");
+  var copyResume = document.getElementById("copyResumeCommand");
+  if (copyResume && resumeCmdEl) {
+    copyResume.hidden = false;
+    copyResume.addEventListener("click", function () {
+      copyText(resumeCmdEl.textContent || "", function (ok) {
+        setFeedbackEl(resumeFeedback, ok ? "Resume command copied to the clipboard." : "Copy is unavailable — select the command text manually.", ok ? "ok" : "error");
+      });
+    });
   }
 
   // ---- Rerun command: copy + remediation checklist download ----
@@ -2700,6 +2845,8 @@ function New-Agent365PreflightHtml {
     $passModel  = Get-A365PassModel $Report $verdict $results
     $pathPhases = @(Get-A365PathModel $Report $results $slugById | Where-Object { $null -ne $_ })
     $rerunModel = Get-A365RerunModel $Report $isSanitized
+    $resumeModel = Get-A365ResumeModel $Report $isSanitized
+    $reportId = [string](Get-A365Member $Report 'ReportId' '')
     $gateModel  = @(Get-A365GateModel $Report $attest $results)
     $pathItemTotal = 0
     foreach ($ph in $pathPhases) { $pathItemTotal += @($ph.Items).Count }
@@ -2763,6 +2910,33 @@ function New-Agent365PreflightHtml {
     Line '<span class="db-icon" aria-hidden="true">&#x2139;</span>'
     Line '<div><strong>This is a technical pre-flight, not a security or compliance certification.</strong> It reports whether the technical prerequisites for a Microsoft Agent 365 pilot appear to be in place at the time of collection. It does not assess, audit, or certify the security or regulatory compliance of your tenant.</div>'
     Line '</div>'
+
+    # --- Persistent report identity (full local working report vs sanitized sharing copy) ---
+    $reportIdChip = ''
+    if (-not [string]::IsNullOrWhiteSpace($reportId)) {
+        $reportIdChip = '<span class="ri-id" title="Report run id">' + (ConvertTo-A365Html $reportId) + '</span>'
+    }
+    $hasSanitizedCopy = $false
+    foreach ($of in @(Get-A365Member $runtime 'OutputFiles' @())) {
+        if ([string]$of -match '(?i)-sanitized\.(html|json)$') { $hasSanitizedCopy = $true; break }
+    }
+    if ($isSanitized) {
+        Line '<div class="report-identity is-sanitized" role="note" aria-label="Sanitized sharing copy">'
+        Line ('<div class="ri-head"><span class="ri-glyph" aria-hidden="true">&#x1F517;</span><span class="ri-label">Sanitized sharing copy</span>' + $reportIdChip + '</div>')
+        Line '<p class="ri-note"><strong>Do not use this copy to complete remediation. Open the full local report generated alongside it.</strong></p>'
+        Line '<p class="ri-sub">This copy has tenant identifiers, paths, and evidence removed to reduce tenant-specific detail when sharing with colleagues or Microsoft. It is a summary for discussion only.</p>'
+        Line '</div>'
+    } else {
+        Line '<div class="report-identity is-full" role="note" aria-label="Full local working report">'
+        Line ('<div class="ri-head"><span class="ri-glyph" aria-hidden="true">&#x1F4C1;</span><span class="ri-label">Full local working report</span>' + $reportIdChip + '</div>')
+        Line '<p class="ri-note">This is your working copy. It contains local evidence collected from your tenant, so use it to complete remediation.</p>'
+        if ($hasSanitizedCopy) {
+            Line '<p class="ri-sub">Keep it with your project team rather than sharing broadly. A separate sanitized copy is generated alongside it for sharing.</p>'
+        } else {
+            Line '<p class="ri-sub">Keep it with your project team rather than sharing broadly. You can generate a sanitized sharing copy for distribution with <code>-IncludeSanitizedCopy</code>.</p>'
+        }
+        Line '</div>'
+    }
 
     # --- Badge row ---
     $hasBadges = $isSanitized -or $betaEnabled -or $fixtureMode -or $stage -or $schemaVersion
@@ -2836,16 +3010,47 @@ function New-Agent365PreflightHtml {
     Line '<p class="cc-note">Coverage is not the verdict and not a compliance score.</p>'
     Line '</div>'
 
-    # Primary CTA
+    # Primary CTA (state-driven decision surface)
     Line '<div class="cc-actions">'
-    if ($pathItemTotal -gt 0) {
-        Line ('<a class="cta-primary" id="openPathToReady" href="#pathToReady">Open Path to Ready <span aria-hidden="true">(' + $pathItemTotal + ')</span></a>')
+    if ($ccSatisfied) {
+        Line '<a class="cta-primary" id="reviewAdvisories" href="#checks">Review advisories</a>'
+        if ($pathItemTotal -gt 0) {
+            Line '<a class="cta-secondary" id="openPathToReady" href="#pathToReady">Open Path to Ready</a>'
+        } else {
+            Line '<a class="cta-secondary" id="openPathToReady" href="#pathToReady">View Path to Ready</a>'
+        }
     } else {
-        Line '<a class="cta-primary" id="openPathToReady" href="#pathToReady">View Path to Ready</a>'
+        if ($pathItemTotal -gt 0) {
+            Line ('<a class="cta-primary" id="openPathToReady" href="#pathToReady">Start remediation <span aria-hidden="true">(' + $pathItemTotal + ')</span></a>')
+        } else {
+            Line '<a class="cta-primary" id="openPathToReady" href="#pathToReady">Start remediation</a>'
+        }
+        Line '<a class="cta-secondary" href="#whatNext">What happens next</a>'
     }
     Line '</div>'
     Line '</div>'
     Line '</div></section>'
+
+    # --- What happens next (Fix -> Document -> Rerun editorial sequence) ---
+    if ($ccSatisfied) {
+        $nsFix = 'No blockers to clear. Review the advisories below and close any that apply to your pilot.'
+        $nsDoc = 'Keep your manual attestation evidence current so it is ready for pilot sign-off.'
+        $nsRun = 'Re-run the pre-flight with the one-command launcher before pilot to reconfirm this pass.'
+    } else {
+        $nsFix = 'Work through Path to Ready to clear every blocker and required action in your tenant.'
+        $nsDoc = 'Record manual attestations in the Answers Builder to capture the evidence you have gathered.'
+        $nsRun = 'Re-run with the one-command Resume launcher &mdash; only a fresh run confirms a real technical pass.'
+    }
+    Line '<section id="whatNext" class="section" aria-labelledby="whatNext-h">'
+    Line '<div class="next-steps">'
+    Line '<h2 id="whatNext-h" class="next-steps-title">What happens next</h2>'
+    Line '<ol class="next-steps-list">'
+    Line ('<li class="next-step"><span class="ns-num" aria-hidden="true">1</span><div class="ns-body"><span class="ns-name">Fix</span><span class="ns-desc">' + $nsFix + '</span></div></li>')
+    Line ('<li class="next-step"><span class="ns-num" aria-hidden="true">2</span><div class="ns-body"><span class="ns-name">Document</span><span class="ns-desc">' + $nsDoc + '</span></div></li>')
+    Line ('<li class="next-step"><span class="ns-num" aria-hidden="true">3</span><div class="ns-body"><span class="ns-name">Rerun</span><span class="ns-desc">' + $nsRun + '</span></div></li>')
+    Line '</ol>'
+    Line '</div>'
+    Line '</section>'
 
     # --- Availability gate (non-commercial clouds) ---
     if (-not $isCommercialCloud) {
@@ -3420,9 +3625,22 @@ function New-Agent365PreflightHtml {
 
         # Answers builder (JS enhancement; values stay in memory, offline JSON export only)
         if ($gateModel.Count -gt 0) {
-            Line '<div id="answersBuilder" class="answers-builder js-only" hidden>'
+            $answersDownloadName = 'agent365-answers.json'
+            if ($resumeModel.HasCommand -and -not [string]::IsNullOrWhiteSpace([string]$resumeModel.AnswerFileName)) {
+                $answersDownloadName = [string]$resumeModel.AnswerFileName
+            }
+            $abAttrs = ' data-answer-filename="' + (ConvertTo-A365Html $answersDownloadName) + '"'
+            if ($resumeModel.HasCommand) {
+                $abAttrs += ' data-resume-command="' + (ConvertTo-A365Html ([string]$resumeModel.Command)) + '"'
+            }
+            Line ('<div id="answersBuilder" class="answers-builder js-only"' + $abAttrs + ' hidden>')
             Line '<h3>Answers builder</h3>'
             Line '<p class="small muted" style="margin:0 0 4px;">Record manual answers to attestable gates, then download an answers file. Values stay in this browser and are never uploaded. <strong>Recording an answer here does not change the verdict</strong> &mdash; re-run the checker with the downloaded file to apply them.</p>'
+            if ($isSanitized) {
+                Line '<p class="small muted" style="margin:0 0 8px;">This is the sanitized sharing copy. <strong>Complete remediation in the full local report</strong> and re-run with its launcher; the resume command shown here is placeholder-safe and cannot run remediation.</p>'
+            } else {
+                Line '<p class="small muted" style="margin:0 0 8px;">After you download, run the Resume launcher from the report output folder to apply these answers. It picks up this report&rsquo;s answers file automatically.</p>'
+            }
             foreach ($gate in $gateModel) {
                 $gId = [string]$gate.Id
                 if ([string]::IsNullOrWhiteSpace($gId)) { continue }
@@ -3456,6 +3674,9 @@ function New-Agent365PreflightHtml {
             }
             Line '<div class="tool-actions">'
             Line '<button type="button" id="downloadAnswers" class="act-btn is-brand">Download answers JSON</button>'
+            if ($resumeModel.HasCommand) {
+                Line '<button type="button" id="copyResumeAnswers" class="act-btn js-only" hidden>Copy resume command</button>'
+            }
             Line '</div>'
             Line '<p id="answersFeedback" class="tool-feedback" role="status" aria-live="polite"></p>'
             Line '</div>'
@@ -3557,35 +3778,64 @@ function New-Agent365PreflightHtml {
     Line '<section id="evidence" class="section" aria-labelledby="evidence-h">'
     Line '<div class="section-head"><h2 id="evidence-h">Evidence &amp; rerun</h2><span class="section-sub">When observations were collected, and how to reproduce this pre-flight</span></div>'
 
-    # Rerun command + remediation export (JS enhancements are offline-only)
-    if ($rerunModel.HasCommand -or $pathItemTotal -gt 0) {
+    # Resume launcher (primary) + advanced rerun disclosure. JS enhancements are offline-only.
+    if ($resumeModel.HasCommand -or $rerunModel.HasCommand -or $pathItemTotal -gt 0) {
         Line '<div id="evidenceRerun" class="rerun-tool">'
-        if ($rerunModel.HasCommand) {
-            Line '<h3>Re-run this pre-flight</h3>'
+
+        # Primary: the one-command Resume launcher
+        if ($resumeModel.HasCommand) {
+            $rzAnswerName = [string]$resumeModel.AnswerFileName
+            Line '<div class="resume-primary">'
+            Line '<h3>Re-run in one command</h3>'
             if ($isSanitized) {
-                Line '<p class="small muted" style="margin:0 0 4px;">This is a sanitized command with placeholders. Replace the placeholders with your tenant target and paths before running.</p>'
+                Line '<p class="small muted" style="margin:0 0 8px;">This launcher command is placeholder-safe for sharing. <strong>Completing remediation requires the full local report</strong> generated alongside this copy &mdash; open it and run its Resume launcher from that output folder.</p>'
             } else {
-                Line '<p class="small muted" style="margin:0 0 4px;">Run this to reproduce the pre-flight after remediating. Re-running is the only way to confirm a real pass &mdash; local check marks do not.</p>'
+                $rzNameHtml = if (-not [string]::IsNullOrWhiteSpace($rzAnswerName)) { 'this report&rsquo;s answers file (<span class="mono">' + (ConvertTo-A365Html $rzAnswerName) + '</span>)' } else { 'this report&rsquo;s answers file' }
+                Line ('<p class="small muted" style="margin:0 0 8px;">Run this from the report output folder after remediating. It discovers ' + $rzNameHtml + ' from the output folder or your Downloads, and preserves the original stage, profiles, and collectors. Re-running is the only way to confirm a real technical pass &mdash; local check marks do not.</p>')
             }
             Line '<div class="rerun-block">'
-            Line ('<pre id="rerunCommand" class="rerun-code" tabindex="0">' + (ConvertTo-A365Html ([string]$rerunModel.Command)) + '</pre>')
-            if ($rerunModel.ShowMeta) {
-                $rrMeta = @()
-                if ([string]$rerunModel.TenantTarget) { $rrMeta += ('<div><span class="rm-k">Tenant target</span> <span class="mono">' + (ConvertTo-A365Html ([string]$rerunModel.TenantTarget)) + '</span></div>') }
-                if ([string]$rerunModel.OutputPath) { $rrMeta += ('<div><span class="rm-k">Output path</span> <span class="mono">' + (ConvertTo-A365Html ([string]$rerunModel.OutputPath)) + '</span></div>') }
-                if ([string]$rerunModel.AnswersPath) { $rrMeta += ('<div><span class="rm-k">Answers file</span> <span class="mono">' + (ConvertTo-A365Html ([string]$rerunModel.AnswersPath)) + '</span></div>') }
-                if ([string]$rerunModel.Stage) { $rrMeta += ('<div><span class="rm-k">Stage</span> ' + (ConvertTo-A365Html ([string]$rerunModel.Stage)) + '</div>') }
-                if ($rrMeta.Count -gt 0) { Line ('<div class="rerun-meta">' + ($rrMeta -join '') + '</div>') }
-            }
+            Line ('<pre id="resumeCommand" class="rerun-code is-primary" tabindex="0">' + (ConvertTo-A365Html ([string]$resumeModel.Command)) + '</pre>')
+            Line '</div>'
+            Line '<div class="tool-actions">'
+            Line '<button type="button" id="copyResumeCommand" class="act-btn is-brand js-only" hidden>Copy resume command</button>'
+            Line '</div>'
+            Line '<p id="resumeFeedback" class="tool-feedback" role="status" aria-live="polite"></p>'
             Line '</div>'
         }
-        Line '<div class="tool-actions">'
-        if ($rerunModel.HasCommand) {
-            Line '<button type="button" id="copyRerunCommand" class="act-btn is-brand js-only" hidden>Copy rerun command</button>'
+
+        # Advanced: the raw rerun command, its options, and remediation export
+        if ($rerunModel.HasCommand -or $pathItemTotal -gt 0) {
+            Line '<details class="advanced-rerun">'
+            Line '<summary><span class="ar-label">Advanced rerun command</span><span class="ar-hint">Full raw command and options</span></summary>'
+            Line '<div class="advanced-rerun-body">'
+            if ($rerunModel.HasCommand) {
+                if ($isSanitized) {
+                    Line '<p class="small muted" style="margin:0 0 4px;">This is a sanitized command with placeholders. Replace the placeholders with your tenant target and paths before running.</p>'
+                } else {
+                    Line '<p class="small muted" style="margin:0 0 4px;">Prefer the one-command launcher above. Use this raw command only when you need to change the tenant target, paths, or other options.</p>'
+                }
+                Line '<div class="rerun-block">'
+                Line ('<pre id="rerunCommand" class="rerun-code" tabindex="0">' + (ConvertTo-A365Html ([string]$rerunModel.Command)) + '</pre>')
+                if ($rerunModel.ShowMeta) {
+                    $rrMeta = @()
+                    if ([string]$rerunModel.TenantTarget) { $rrMeta += ('<div><span class="rm-k">Tenant target</span> <span class="mono">' + (ConvertTo-A365Html ([string]$rerunModel.TenantTarget)) + '</span></div>') }
+                    if ([string]$rerunModel.OutputPath) { $rrMeta += ('<div><span class="rm-k">Output path</span> <span class="mono">' + (ConvertTo-A365Html ([string]$rerunModel.OutputPath)) + '</span></div>') }
+                    if ([string]$rerunModel.AnswersPath) { $rrMeta += ('<div><span class="rm-k">Answers file</span> <span class="mono">' + (ConvertTo-A365Html ([string]$rerunModel.AnswersPath)) + '</span></div>') }
+                    if ([string]$rerunModel.Stage) { $rrMeta += ('<div><span class="rm-k">Stage</span> ' + (ConvertTo-A365Html ([string]$rerunModel.Stage)) + '</div>') }
+                    if ($rrMeta.Count -gt 0) { Line ('<div class="rerun-meta">' + ($rrMeta -join '') + '</div>') }
+                }
+                Line '</div>'
+            }
+            Line '<div class="tool-actions">'
+            if ($rerunModel.HasCommand) {
+                Line '<button type="button" id="copyRerunCommand" class="act-btn js-only" hidden>Copy rerun command</button>'
+            }
+            Line '<button type="button" id="downloadRemediation" class="act-btn js-only" hidden>Download remediation checklist</button>'
+            Line '</div>'
+            Line '<p id="rerunFeedback" class="tool-feedback" role="status" aria-live="polite"></p>'
+            Line '</div>'
+            Line '</details>'
         }
-        Line '<button type="button" id="downloadRemediation" class="act-btn js-only" hidden>Download remediation checklist</button>'
-        Line '</div>'
-        Line '<p id="rerunFeedback" class="tool-feedback" role="status" aria-live="polite"></p>'
         Line '</div>'
     }
 
