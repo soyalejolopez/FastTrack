@@ -9,6 +9,8 @@ $startHerePath = Join-Path $resourceRoot 'START-HERE.txt'
 
 Import-Module $modulePath -Force
 . $launcherPath
+. (Join-Path $PSScriptRoot 'TestData.ps1')
+$answersPath = Join-Path $resourceRoot 'samples\answers.sample.json'
 
 function New-JourneyTestEnvironment {
     param([bool]$GraphReady = $true)
@@ -254,6 +256,8 @@ Describe 'Customer launcher authentication recovery' {
             [pscustomobject]@{
                 TenantId = '11111111-1111-1111-1111-111111111111'
                 AuthType = 'Delegated'
+                ContextScope = 'Process'
+                Environment = 'Global'
                 Account = 'admin@contoso.invalid'
                 Scopes = @('Organization.Read.All')
             }
@@ -341,7 +345,7 @@ Describe 'Report-linked resume discovery and validation' {
 
     It 'discovers the exact report-linked answers file in the output folder' {
         $expectedAnswers = Join-Path $script:resumeOutput $script:first.Report.Resume.AnswerFileName
-        Copy-Item -LiteralPath (Join-Path $resourceRoot 'samples\answers.sample.json') -Destination $expectedAnswers
+        $null = New-A365TestBundle -Report $script:first.Report -TemplatePath $answersPath -Path $expectedAnswers
 
         $plan = Get-A365ResumePlan `
             -PreviousResultPath $script:first.Paths.Json `
@@ -425,7 +429,7 @@ Describe 'Clean package self-service journey' {
             -OpenReport Never `
             -OutputPath $outputPath
         $expectedAnswers = Join-Path $outputPath $first.Outcome.Report.Resume.AnswerFileName
-        Copy-Item -LiteralPath (Join-Path $packageRoot 'samples\answers.sample.json') -Destination $expectedAnswers
+        $null = New-A365TestBundle -Report $first.Outcome.Report -TemplatePath (Join-Path $packageRoot 'samples\answers.sample.json') -Path $expectedAnswers
         $second = & $first.Outcome.Paths.Resume `
             -AnswersPath $expectedAnswers `
             -NonInteractive `
@@ -447,8 +451,8 @@ Describe 'Clean package self-service journey' {
         BeforeAll {
             $packageOutputA = Join-Path $TestDrive 'package-a'
             $packageOutputB = Join-Path $TestDrive 'package-b'
-            $packageA = & $packageBuilderPath -OutputDirectory $packageOutputA -Force
-            $packageB = & $packageBuilderPath -OutputDirectory $packageOutputB -Force
+            $packageA = & $packageBuilderPath -OutputDirectory $packageOutputA -BuiltAtUtc '2026-09-05T00:00:00Z' -Force
+            $packageB = & $packageBuilderPath -OutputDirectory $packageOutputB -BuiltAtUtc '2026-09-05T00:00:00Z' -Force
             Add-Type -AssemblyName System.IO.Compression.FileSystem
             $archive = [System.IO.Compression.ZipFile]::OpenRead($packageA.Path)
             try {
@@ -470,6 +474,19 @@ Describe 'Clean package self-service journey' {
                 'CHANGELOG.md',
                 'Invoke-Agent365Preflight.ps1',
                 'Private/ReportRenderer.ps1',
+                'Private/EvidenceContracts.ps1',
+                'Private/TrustReceipt.ps1',
+                'Private/ReportExperience.css',
+                'Private/EvidenceWorkspace.js',
+                'Test-Agent365Runtime.ps1',
+                'Test-Agent365Package.ps1',
+                'OFFBOARDING.md',
+                'RELEASE-CHECKLIST.md',
+                'config/assessment-policy.v2.json',
+                'config/strings.en.json',
+                'LICENSE',
+                'LICENSE-CODE',
+                'release-manifest.json',
                 'README.md',
                 'Start-Agent365Preflight.ps1',
                 'VERSION',
@@ -484,7 +501,7 @@ Describe 'Clean package self-service journey' {
             )
             $expectedEntries = @($expectedFiles | ForEach-Object { "$($packageA.RootFolder)/$_" })
 
-            $packageA.FileCount | Should -Be 17
+            $packageA.FileCount | Should -Be $expectedFiles.Count
             @($packageEntries | Sort-Object) | Should -Be @($expectedEntries | Sort-Object)
             $packageEntries[0] | Should -Be "$($packageA.RootFolder)/START-HERE.txt"
             (Get-ChildItem -LiteralPath $extractedPath -Force).Count | Should -Be 1
@@ -501,6 +518,7 @@ Describe 'Clean package self-service journey' {
         It 'contains no development path, personal fork URL, secret, or remote execution bootstrap' {
             $packageText = @(
                 Get-ChildItem -LiteralPath $extractedRoot -Recurse -File |
+                    Where-Object Name -ne 'release-manifest.json' |
                     ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }
             ) -join "`n"
             $builderText = Get-Content -LiteralPath $packageBuilderPath -Raw
@@ -512,8 +530,8 @@ Describe 'Clean package self-service journey' {
 
         It 'builds the same ordered bytes from unchanged source files' {
             $packageA.SHA256 | Should -Be $packageB.SHA256
-            $packageA.FileName | Should -Be 'Agent365Preflight-1.4.1.zip'
-            $packageA.RootFolder | Should -Be 'Agent365Preflight-1.4.1'
+            $packageA.FileName | Should -Be 'Agent365Preflight-2.0.0.zip'
+            $packageA.RootFolder | Should -Be 'Agent365Preflight-2.0.0'
         }
 
         It 'puts the immediate customer instructions beside the launcher' {
@@ -570,7 +588,7 @@ Describe 'Clean package self-service journey' {
             $readme | Should -Match 'Do not use `Set-MgGraphOption -DisableLoginByWAM`'
             $readme | Should -Match 'full local working report'
             $readme | Should -Match 'Resume-Agent365Preflight\.ps1'
-            $readme | Should -Match 'exact report-linked answers file'
+            $readme | Should -Match 'context-bound report-linked answer revisions'
         }
 
         It 'keeps runtime answer validation compatible with the PowerShell 7.0 minimum' {

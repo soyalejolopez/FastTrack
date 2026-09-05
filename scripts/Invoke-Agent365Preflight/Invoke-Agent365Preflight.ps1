@@ -196,7 +196,19 @@ param(
     [string]$ClientId,
 
     [Parameter()]
-    [string]$CertificateThumbprint
+    [string]$CertificateThumbprint,
+
+    [ValidateSet('ActiveRoles', 'PIM')]
+    [string]$RolePolicy = 'ActiveRoles',
+
+    [string[]]$ExcludeRequirement = @(),
+
+    [string]$ScopeJustification,
+
+    [string]$DelegatedClientId,
+
+    [ValidateSet('Commercial', 'USGov', 'China')]
+    [string]$Cloud = 'Commercial'
 )
 
 $modulePath = Join-Path $PSScriptRoot 'Agent365Preflight.psd1'

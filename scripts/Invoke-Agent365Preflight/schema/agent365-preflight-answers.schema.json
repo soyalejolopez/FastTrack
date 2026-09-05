@@ -10,8 +10,16 @@
       "type": "string"
     },
     "schemaVersion": {
-      "enum": ["1.0", "1.1"]
+      "enum": ["1.0", "1.1", "2.0"]
     },
+    "sourceReportId": { "type": "string" },
+    "assessmentFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "modifiedAtUtc": { "type": "string", "format": "date-time" },
+    "bundleId": { "type": "string" },
+    "baseRevision": { "type": "string" },
+    "contentHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "draft": { "type": "boolean" },
     "answers": {
       "type": "array",
       "items": {
@@ -41,7 +49,11 @@
           },
           "justification": {
             "type": "string"
-          }
+          },
+          "binding": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "modifiedAtUtc": { "type": "string", "format": "date-time" },
+          "reviewDecision": { "enum": ["Retain", "Revalidate", "Edit"] },
+          "baseHash": { "type": "string" }
         },
         "allOf": [
           {
@@ -87,5 +99,12 @@
         ]
       }
     }
-  }
+  },
+  "allOf": [{
+    "if": { "properties": { "schemaVersion": { "const": "2.0" } } },
+    "then": {
+      "required": ["sourceReportId", "assessmentFingerprint", "generatedAtUtc", "modifiedAtUtc", "bundleId", "contentHash"],
+      "properties": { "answers": { "items": { "required": ["binding", "answeredAtUtc", "modifiedAtUtc", "reviewDecision"] } } }
+    }
+  }]
 }

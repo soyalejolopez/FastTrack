@@ -10,6 +10,7 @@ $guidancePath = Join-Path $resourceRoot 'config\guidance.v1.json'
 
 Import-Module $modulePath -Force
 Import-Module Microsoft.Graph.Authentication -MinimumVersion 2.20.0 -Force
+. (Join-Path $PSScriptRoot 'TestData.ps1')
 
 function New-SyntheticFixture {
     param(
@@ -72,7 +73,11 @@ function Invoke-FixturePreflight {
         ),
 
         [Parameter()]
-        [string]$AnswersFile = $answersPath
+        [string]$AnswersFile = $answersPath,
+
+        [string]$Stage = 'Pilot',
+
+        [string]$RolePolicy = 'ActiveRoles'
     )
 
     $outputPath = Join-Path $TestDrive $Name
@@ -83,9 +88,22 @@ function Invoke-FixturePreflight {
         Profile = $Profile
         Collector = $Collector
         IncludeSanitizedCopy = $true
+        Stage = $Stage
+        RolePolicy = $RolePolicy
     }
     if ($PreviousResultPath) {
         $parameters.PreviousResultPath = $PreviousResultPath
+    }
+    if ($AnswersFile -and (Get-Content -LiteralPath $AnswersFile -Raw | ConvertFrom-Json).schemaVersion -ne '1.0') {
+        $baseline = if ($PreviousResultPath) { Get-Content -LiteralPath $PreviousResultPath -Raw | ConvertFrom-Json -Depth 100 } else {
+            $initialParameters = @{} + $parameters
+            $null = $initialParameters.Remove('AnswersPath')
+            $initialParameters.OutputPath = Join-Path $TestDrive "$Name-initial"
+            $initial = Invoke-Agent365Preflight @initialParameters
+            $parameters.PreviousResultPath = $initial.Paths.Json
+            $initial.Report
+        }
+        $parameters.AnswersPath = New-A365TestBundle -Report $baseline -TemplatePath $AnswersFile -Path (Join-Path $TestDrive "$Name-bound-answers.json")
     }
     return Invoke-Agent365Preflight @parameters
 }
@@ -321,7 +339,7 @@ Describe 'Agent 365 fixture evaluation' {
             }
         }
 
-        $outcome = Invoke-FixturePreflight -Name 'single-eligible-role-output' -FixturePath $fixturePath
+        $outcome = Invoke-FixturePreflight -Name 'single-eligible-role-output' -FixturePath $fixturePath -RolePolicy PIM
         $roleResult = $outcome.Report.Results | Where-Object Id -eq 'A365-FOUNDATION-005'
         $html = Get-Content -LiteralPath $outcome.Paths.Html -Raw
 
@@ -381,8 +399,8 @@ Describe 'Passing and manual evidence contract' {
         ) -join [Environment]::NewLine
 
         $readme | Should -Match '\| `ActionRequired` \| The finding must be resolved before passing\. Until then, the overall verdict is `Incomplete`\.'
-        $readme | Should -Match '\| `0` \| All pass gates are clear: zero Blocker, ActionRequired, NotAuthorized, Error, and unresolved required manual gates\.'
-        $readme | Should -Match '\| `2` \| One or more ActionRequired, NotAuthorized, Error, unresolved required manual gates, or other collection gaps prevent passing\.'
+        $readme | Should -Match '\| `0` \| All pass gates are clear: zero Blocker, ActionRequired, NotAssessed, NotAuthorized, Error, and unresolved required manual gates\.'
+        $readme | Should -Match '\| `2` \| One or more ActionRequired, NotAssessed, NotAuthorized, Error, unresolved required manual gates, or other collection gaps prevent passing\.'
         $customerText | Should -Not -Match 'does not automatically block|before or during (the )?pilot|no blockers (is|are) enough|No blockers and collection is complete enough'
     }
 
@@ -403,11 +421,7 @@ Describe 'Passing and manual evidence contract' {
         }
 
         $pilot = Invoke-FixturePreflight -Name 'action-only-pilot' -FixturePath $fixturePath
-        $production = Invoke-Agent365Preflight `
-            -FixturePath $fixturePath `
-            -AnswersPath $answersPath `
-            -Stage Production `
-            -OutputPath (Join-Path $TestDrive 'action-only-production')
+        $production = Invoke-FixturePreflight -Name 'action-only-production' -FixturePath $fixturePath -Stage Production
 
         foreach ($outcome in @($pilot, $production)) {
             $outcome.Report.PassCriteria.BlockerCount | Should -Be 0
@@ -443,11 +457,7 @@ Describe 'Passing and manual evidence contract' {
     }
 
     It 'reaches Technical pre-flight complete only when Production pass gates are clear' {
-        $outcome = Invoke-Agent365Preflight `
-            -FixturePath $readyFixturePath `
-            -AnswersPath $answersPath `
-            -Stage Production `
-            -OutputPath (Join-Path $TestDrive 'production-complete')
+        $outcome = Invoke-FixturePreflight -Name 'production-complete' -Stage Production
 
         $outcome.Report.PassCriteria.IsSatisfied | Should -BeTrue
         $outcome.Report.Verdict.Label | Should -Be 'Technical pre-flight complete'
@@ -586,14 +596,14 @@ Describe 'Passing and manual evidence contract' {
             $answer | Add-Member -NotePropertyName justification -NotePropertyValue 'The selected pilot does not use SharePoint knowledge or target sites.' -Force
         }
 
-        { Invoke-Agent365Preflight -FixturePath $readyFixturePath -AnswersPath $missingJustification -Profile SharePointAgents -OutputPath (Join-Path $TestDrive 'missing-na-justification-output') } | Should -Throw '*requires a justification*'
+        { Invoke-Agent365Preflight -FixturePath $readyFixturePath -AnswersPath $missingJustification -OutputPath (Join-Path $TestDrive 'missing-na-justification-output') } | Should -Throw '*requires a justification*'
         $outcome = Invoke-Agent365Preflight `
             -FixturePath $readyFixturePath `
             -AnswersPath $validNa `
-            -Profile SharePointAgents `
             -OutputPath (Join-Path $TestDrive 'valid-na-output')
 
         ($outcome.Report.Results | Where-Object Id -eq 'A365-SHAREPOINT-001').Status | Should -Be 'NotApplicable'
+        { Invoke-Agent365Preflight -FixturePath $readyFixturePath -AnswersPath $validNa -Profile SharePointAgents -OutputPath (Join-Path $TestDrive 'contradictory-na') } | Should -Throw '*NotApplicable is not permitted*'
     }
 
     It 'accepts version 1.0 answers while leaving new required gates unresolved' {
@@ -791,8 +801,8 @@ Describe 'Manual evidence guidance contract' {
         $sharePoint = $gates | Where-Object Id -eq 'A365-SHAREPOINT-001'
         [object[]]$notAllowed = @($gates | Where-Object Id -ne 'A365-SHAREPOINT-001')
 
-        $sharePoint.AllowNotApplicable | Should -BeTrue
-        $sharePoint.Guidance.NotApplicableAllowed | Should -BeTrue
+        $sharePoint.AllowNotApplicable | Should -BeFalse
+        $sharePoint.Guidance.NotApplicableAllowed | Should -BeFalse
         foreach ($gate in $notAllowed) {
             $gate.AllowNotApplicable | Should -BeFalse
             $gate.Guidance.NotApplicableAllowed | Should -BeFalse
@@ -813,17 +823,17 @@ Describe 'Manual evidence guidance contract' {
 Describe 'Paging and throttling' {
     It 'follows Microsoft Graph next links' {
         $pages = @{
-            first = [pscustomobject]@{
-                value = @([pscustomobject]@{ id = 1 }, [pscustomobject]@{ id = 2 })
-                '@odata.nextLink' = 'second'
+            'https://graph.microsoft.com/v1.0/users' = [pscustomobject]@{
+                value = @([pscustomobject]@{ id = 1; assignedPlans = @() }, [pscustomobject]@{ id = 2; assignedPlans = @() })
+                '@odata.nextLink' = 'https://graph.microsoft.com/v1.0/users?$skiptoken=2'
             }
 
-            second = [pscustomobject]@{
-                value = @([pscustomobject]@{ id = 3 })
+            'https://graph.microsoft.com/v1.0/users?$skiptoken=2' = [pscustomobject]@{
+                value = @([pscustomobject]@{ id = 3; assignedPlans = @() })
             }
         }
 
-        $items = Invoke-Agent365PagedRequest -InitialUri 'first' -RequestScript {
+        $items = Invoke-Agent365PagedRequest -InitialUri 'https://graph.microsoft.com/v1.0/users' -RequestScript {
             param($uri)
             return $pages[$uri]
         }
@@ -836,7 +846,7 @@ Describe 'Paging and throttling' {
         $script:requestCount = 0
         $script:sleepCount = 0
 
-        $items = Invoke-Agent365PagedRequest -InitialUri 'first' -RequestScript {
+        $items = Invoke-Agent365PagedRequest -InitialUri 'https://graph.microsoft.com/v1.0/users' -RequestScript {
             param($uri)
             $script:requestCount++
             if ($script:requestCount -eq 1) {
@@ -849,7 +859,7 @@ Describe 'Paging and throttling' {
             return [pscustomobject]@{
                 StatusCode = 200
                 Body = [pscustomobject]@{
-                    value = @([pscustomobject]@{ id = 'after-retry' })
+                    value = @([pscustomobject]@{ id = 'after-retry'; assignedPlans = @() })
                 }
             }
         } -SleepScript {
@@ -1038,12 +1048,12 @@ Describe 'Collector-scoped consent and stable profile identity' {
         ($scopes -contains 'Application.Read.All') | Should -Be $false
     }
 
-    It 'marks unselected collector checks not applicable instead of passed' {
+    It 'marks unselected applicable collector checks not assessed' {
         $outcome = Invoke-FixturePreflight -Name 'registry-only' -Collector @('Registry')
 
         ($outcome.Report.Collectors -contains 'TenantFoundation') | Should -Be $true
         ($outcome.Report.Results | Where-Object Id -eq 'A365-REGISTRY-001').Status | Should -Be 'Passed'
-        ($outcome.Report.Results | Where-Object Id -eq 'A365-DEFENDER-001').Status | Should -Be 'NotApplicable'
+        ($outcome.Report.Results | Where-Object Id -eq 'A365-DEFENDER-001').Status | Should -Be 'NotAssessed'
         ($outcome.Report.Authentication.RequestedScopes -contains 'ThreatHunting.Read.All') | Should -Be $false
     }
 
@@ -1087,6 +1097,7 @@ Describe 'Tenant targeting safety' {
                     Scopes = @('Organization.Read.All')
                     AuthType = 'Delegated'
                     Environment = 'Global'
+                    ContextScope = 'Process'
                     Account = 'fixture@example.invalid'
                 }
             }
@@ -1439,6 +1450,7 @@ Describe 'Tenant targeting safety' {
                     Scopes = @('organization.read.all', 'Policy.Read.All')
                     AuthType = 'Delegated'
                     Environment = 'Global'
+                    ContextScope = 'Process'
                     Account = 'fixture@example.invalid'
                 }
             }
@@ -1566,6 +1578,8 @@ Describe 'Tenant targeting safety' {
                     TenantId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
                     Scopes = @('Organization.Read.All')
                     AuthType = 'Delegated'
+                    ContextScope = 'Process'
+                    Environment = 'Global'
                     Account = 'fixture@example.invalid'
                 }
             }
@@ -1574,6 +1588,7 @@ Describe 'Tenant targeting safety' {
                     value = @(
                         [pscustomobject]@{
                             id = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                            displayName = 'Synthetic tenant'
                             verifiedDomains = @(
                                 [pscustomobject]@{ name = 'fixture.onmicrosoft.com'; isDefault = $true }
                             )
@@ -1774,6 +1789,15 @@ Describe 'Report comparison, redaction, and rendering' {
                 [pscustomobject]@{ Id = 'A365-TWO-002'; Title = 'Two'; Status = 'Passed' }
             )
         }
+        foreach ($report in @($current, $previous)) {
+            $report | Add-Member -NotePropertyName SchemaVersion -NotePropertyValue '2.0'
+            $report | Add-Member -NotePropertyName Tenant -NotePropertyValue ([pscustomobject]@{ TenantId = 'fixture'; Cloud = 'Global' })
+            $report | Add-Member -NotePropertyName FixtureMode -NotePropertyValue $true
+            $report | Add-Member -NotePropertyName Collectors -NotePropertyValue @('TenantFoundation')
+            $report | Add-Member -NotePropertyName AssessmentScope -NotePropertyValue ([pscustomobject]@{ Fingerprint = 'same' })
+            $report | Add-Member -NotePropertyName ConfigurationManifest -NotePropertyValue ([pscustomobject]@{ SemanticsHash = 'same' })
+            $report | Add-Member -NotePropertyName RunSpecification -NotePropertyValue ([pscustomobject]@{ AuditWindowDays = 7; AuditQueryTimeoutSeconds = 300; AuthenticationMode = 'Fixture' })
+        }
 
         $drift = Compare-Agent365PreflightResult -Current $current -Previous $previous
 
@@ -1827,9 +1851,9 @@ Describe 'Report comparison, redaction, and rendering' {
         $html | Should -Match 'Not explicitly pinned'
         $html | Should -Not -Match '<link[^>]+stylesheet'
         $html | Should -Not -Match '<script[^>]+src='
-        $outcome.Report.SchemaVersion | Should -Be '1.3'
+        $outcome.Report.SchemaVersion | Should -Be '2.0'
         $outcome.Report.GuidanceVersion | Should -Be '1.0.0'
-        $outcome.Report.ReportId | Should -Match '^Agent365Preflight-\d{8}-\d{6}$'
+        $outcome.Report.ReportId | Should -Match '^Agent365Preflight-\d{8}-\d{6}-[a-f0-9]{8}$'
         $outcome.Report.Resume.AnswerFileName | Should -Be "$($outcome.Report.ReportId)-answers.json"
         $outcome.Paths.Resume | Should -Exist
         $json | Test-Json -SchemaFile $reportSchemaPath | Should -Be $true
@@ -1847,7 +1871,7 @@ Describe 'Report comparison, redaction, and rendering' {
         $resumeText | Should -Match 'Start-Agent365Preflight\.ps1'
         $resumeText | Should -Match "customer''s output; Write-Host injected"
         $resumeText | Should -Not -Match '\bInvoke-Expression\b|\biex\b|ClientSecret|Bearer|[A-Fa-f0-9]{40}'
-        $outcome.Report.Resume.Command | Should -Match "^& '.*Resume-Agent365Preflight\.ps1'$"
+        $outcome.Report.Resume.Command | Should -Match "^& '.*Resume-Agent365Preflight-\d{8}-\d{6}-[a-f0-9]{8}\.ps1'$"
         $outcome.Report.Resume.AnswerFileName | Should -Be "$($outcome.Report.ReportId)-answers.json"
         $outcome.Report.Rerun.AnswersPath | Should -Match ([regex]::Escape($outcome.Report.Resume.AnswerFileName))
         $sanitized.Resume.Available | Should -BeFalse
@@ -2011,7 +2035,7 @@ Describe 'Report comparison, redaction, and rendering' {
             $html.Contains($hook) | Should -BeTrue
         }
 
-        $html | Should -Match 'Local check marks never change the verdict'
+        $html | Should -Match 'Local check marks track tasks only'
         $html | Should -Match 'schemaVersion: "1\.1"'
         $html | Should -Match 'new Blob'
         $html | Should -Match 'createObjectURL'

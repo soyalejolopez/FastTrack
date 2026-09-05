@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "2.0",
+  "version": "2.0.0",
+  "owner": "Microsoft FastTrack resource maintainers",
+  "reviewDate": "2026-09-05",
+  "reviewCadenceDays": 30,
+  "validThrough": "2026-10-05",
+  "expiredCriticalRulePolicy": { "Pilot": "ActionRequired", "Production": "Blocker" },
+  "manualEvidence": {
+    "defaultMaxAgeDays": 30,
+    "gateMaxAgeDays": {
+      "A365-ENTRA-005": 14,
+      "A365-ENTRA-007": 14,
+      "A365-DEFENDER-003": 14,
+      "A365-PURVIEW-002": 14,
+      "A365-SHAREPOINT-001": 14
+    }
+  },
+  "maximumRequestedScopes": [
+    "Organization.Read.All", "User.Read.All", "RoleManagement.Read.Directory",
+    "RoleEligibilitySchedule.Read.Directory", "ServiceHealth.Read.All",
+    "CopilotPackages.Read.All", "AgentIdentityBlueprint.Read.All", "Application.Read.All",
+    "Policy.Read.All", "ThreatHunting.Read.All", "AuditLogsQuery.Read.All"
+  ],
+  "updatePolicy": "No automatic network update check, telemetry, download, or execution. Release owner reviews official sources and publishes a new reviewed package."
+}

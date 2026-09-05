@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:ToolVersion = '1.4.1'
+$script:ToolVersion = '2.0.0'
 $script:ModuleRoot = $PSScriptRoot
 $script:RulesPath = Join-Path $PSScriptRoot 'config\rules.v1.json'
 $script:GuidancePath = Join-Path $PSScriptRoot 'config\guidance.v1.json'
@@ -8,6 +8,8 @@ $script:SkuCatalogPath = Join-Path $PSScriptRoot 'config\sku-catalog.v1.json'
 $script:AllowlistPath = Join-Path $PSScriptRoot 'config\operation-allowlist.v1.json'
 
 . (Join-Path $PSScriptRoot 'Private\ReportRenderer.ps1')
+. (Join-Path $PSScriptRoot 'Private\EvidenceContracts.ps1')
+. (Join-Path $PSScriptRoot 'Private\TrustReceipt.ps1')
 
 function Get-A365Property {
     param(
@@ -47,7 +49,9 @@ function Read-A365Json {
     }
 
     try {
-        return Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 100 -ErrorAction Stop
+        $jsonOptions = @{ Depth = 100; ErrorAction = 'Stop' }
+        if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) { $jsonOptions.DateKind = 'String' }
+        return Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json @jsonOptions
     }
     catch {
         throw "$Description is not valid JSON: $Path. $($_.Exception.Message)"
@@ -98,7 +102,10 @@ function Get-Agent365RequiredScopes {
             'Defender',
             'Purview',
             'SharePoint'
-        )
+        ),
+
+        [ValidateSet('ActiveRoles', 'PIM')]
+        [string]$RolePolicy = 'ActiveRoles'
     )
 
     $null = $Profile
@@ -109,7 +116,7 @@ function Get-Agent365RequiredScopes {
     $scopeMap = @{
         TenantFoundation = @('Organization.Read.All')
         Licensing = @('Organization.Read.All', 'User.Read.All')
-        Roles = @('RoleManagement.Read.Directory', 'RoleEligibilitySchedule.Read.Directory')
+        Roles = @('RoleManagement.Read.Directory')
         ServiceHealth = @('ServiceHealth.Read.All')
         Registry = @('CopilotPackages.Read.All')
         AgentIdentity = @('AgentIdentityBlueprint.Read.All', 'Application.Read.All')
@@ -118,6 +125,7 @@ function Get-Agent365RequiredScopes {
         Purview = @('AuditLogsQuery.Read.All')
         SharePoint = @()
     }
+    if ($RolePolicy -eq 'PIM') { $scopeMap.Roles += 'RoleEligibilitySchedule.Read.Directory' }
 
     return @(
         foreach ($collectorName in $collectors) {
@@ -166,7 +174,8 @@ function Test-Agent365OperationAllowed {
             return $false
         }
 
-        if ($Allowlist.graph.hosts -notcontains $uri.DnsSafeHost) {
+        if ($uri.Scheme -ne 'https' -or $uri.Port -ne 443 -or $uri.UserInfo -or $uri.Fragment -or
+            $Allowlist.graph.hosts -notcontains $uri.DnsSafeHost) {
             return $false
         }
 
@@ -211,8 +220,14 @@ function Invoke-Agent365PagedRequest {
 
     $items = [System.Collections.Generic.List[object]]::new()
     $uri = $InitialUri
+    $visited = [System.Collections.Generic.HashSet[string]]::new()
+    $allowlist = Read-A365Json -Path $script:AllowlistPath -Description 'Operation allowlist'
 
     while ($uri) {
+        if (-not (Test-Agent365OperationAllowed -Adapter Graph -Method GET -Target $uri -Allowlist $allowlist) -or
+            -not $visited.Add($uri) -or $visited.Count -gt 10000) {
+            throw 'MalformedEvidence: invalid, repeated, or excessive pagination.'
+        }
         $attempt = 0
         $response = $null
 
@@ -234,6 +249,8 @@ function Invoke-Agent365PagedRequest {
         }
 
         $body = Get-A365Property -InputObject $response -Name 'Body' -Default $response
+        if ([int]$statusCode -lt 200 -or [int]$statusCode -ge 300) { throw "ServiceFailure: HTTP $statusCode." }
+        $null = Assert-A365RawResponse -Response $body -Uri $uri -Method GET -Allowlist $allowlist
         foreach ($item in @(Get-A365Property -InputObject $body -Name 'value' -Default @())) {
             $items.Add($item)
         }
@@ -252,6 +269,7 @@ function Get-A365HttpError {
 
     $exception = $ErrorRecord.Exception
     $statusCode = Get-A365Property -InputObject $exception -Name 'ResponseStatusCode' -Default $null
+    if ($null -eq $statusCode) { $statusCode = Get-A365Property $exception StatusCode }
     $retryAfter = $null
 
     if ($null -eq $statusCode) {
@@ -315,6 +333,8 @@ function Resolve-A365IssueCategory {
     if ($StatusCode -eq 429) {
         return 'Throttling'
     }
+    if ($StatusCode -ge 500) { return 'ServiceFailure' }
+    if ($Message -match '^MalformedEvidence:') { return 'MalformedEvidence' }
 
     if ($Message -match '(?i)(schema|column|table|property.*not found|invalid.*query)') {
         return 'SchemaOrApi'
@@ -398,7 +418,9 @@ function Invoke-A365GraphRequest {
                 $parameters.ContentType = 'application/json'
             }
 
-            return Invoke-MgGraphRequest @parameters
+            $response = Invoke-MgGraphRequest @parameters
+            $null = Assert-A365RawResponse -Response $response -Uri $Uri -Method $Method -Body $Body -Allowlist $Allowlist
+            return $response
         }
         catch {
             $http = Get-A365HttpError -ErrorRecord $_
@@ -479,6 +501,8 @@ function Wait-A365AuditQuery {
     $startedAt = [DateTimeOffset](& $UtcNowScript)
     $deadline = $startedAt.AddSeconds($TimeoutSeconds)
     $response = $InitialResponse
+    Assert-A365RawField $response status String
+    if ($response.status -notin @('notStarted', 'running', 'succeeded', 'failed', 'cancelled')) { throw 'MalformedEvidence: unexpected audit query status.' }
     $status = ([string](Get-A365Property -InputObject $response -Name 'status' -Default 'unknownFutureValue')).Trim().ToLowerInvariant()
     $pollCount = 0
     $terminalStatuses = @('succeeded', 'failed', 'cancelled')
@@ -510,6 +534,8 @@ function Wait-A365AuditQuery {
         $response = & $RequestScript `
             "https://graph.microsoft.com/v1.0/security/auditLog/queries/$QueryId" `
             $Allowlist
+        Assert-A365RawField $response status String
+        if ($response.status -notin @('notStarted', 'running', 'succeeded', 'failed', 'cancelled')) { throw 'MalformedEvidence: unexpected audit query status.' }
         $status = ([string](Get-A365Property -InputObject $response -Name 'status' -Default 'unknownFutureValue')).Trim().ToLowerInvariant()
     }
 
@@ -536,8 +562,11 @@ function Invoke-A365GraphPages {
     )
 
     $uri = $InitialUri
+    $visited = [System.Collections.Generic.HashSet[string]]::new()
     while ($uri) {
+        if (-not $visited.Add($uri) -or $visited.Count -gt 10000) { throw 'MalformedEvidence: repeated or excessive pagination.' }
         $page = Invoke-A365GraphRequest -Method GET -Uri $uri -Allowlist $Allowlist
+        $null = Assert-A365RawResponse -Response $page -Uri $uri -Method GET -Allowlist $Allowlist
         $null = & $ProcessPage $page
         $uri = [string](Get-A365Property -InputObject $page -Name '@odata.nextLink' -Default '')
         $page = $null
@@ -662,12 +691,15 @@ function Connect-A365GraphContext {
         [string]$CertificateThumbprint,
 
         [Parameter()]
-        [switch]$UseDeviceCode
+        [switch]$UseDeviceCode,
+
+        [string]$DelegatedClientId
     )
 
     $hasClientId = -not [string]::IsNullOrWhiteSpace($ClientId)
     $hasCertificate = -not [string]::IsNullOrWhiteSpace($CertificateThumbprint)
     $appOnly = $hasClientId -or $hasCertificate
+    if ($DelegatedClientId -and $appOnly) { throw (New-A365SafeStartupException 'DelegatedClientId cannot be combined with certificate app-only parameters.') }
 
     if ($appOnly) {
         if ($UseDeviceCode) {
@@ -684,7 +716,7 @@ function Connect-A365GraphContext {
     }
 
     $existingContext = Get-A365ActiveContext
-    if (-not $appOnly -and (Test-A365ReusableDelegatedContext -Context $existingContext -Scopes $Scopes -TenantId $TenantId)) {
+    if (-not $appOnly -and (Test-A365ReusableDelegatedContext -Context $existingContext -Scopes $Scopes -TenantId $TenantId -DelegatedClientId $DelegatedClientId)) {
         return [pscustomobject]@{
             Context = $existingContext
             AppOnly = $false
@@ -718,6 +750,7 @@ function Connect-A365GraphContext {
         if ($UseDeviceCode) {
             $connectParameters.UseDeviceCode = $true
         }
+        if ($DelegatedClientId) { $connectParameters.ClientId = $DelegatedClientId }
         $null = Connect-MgGraph @connectParameters
     }
 
@@ -747,12 +780,17 @@ function Test-A365ReusableDelegatedContext {
         [string[]]$Scopes,
 
         [AllowNull()]
-        [string]$TenantId
+        [string]$TenantId,
+
+        [string]$DelegatedClientId
     )
 
     if ($null -eq $Context) {
         return $false
     }
+    if ((Get-A365Property $Context Environment 'Global') -notin @('Global', 'GlobalV2')) { return $false }
+    if ((Get-A365Property $Context ContextScope '') -ne 'Process') { return $false }
+    if ($DelegatedClientId -and (Get-A365Property $Context ClientId '') -ne $DelegatedClientId) { return $false }
 
     $actualTenantId = [string](Get-A365Property -InputObject $Context -Name 'TenantId' -Default '')
     if ([string]::IsNullOrWhiteSpace($actualTenantId)) {
@@ -850,6 +888,7 @@ function Get-A365OrganizationContext {
         -Method GET `
         -Uri 'https://graph.microsoft.com/v1.0/organization?$select=id,displayName,verifiedDomains' `
         -Allowlist $Allowlist
+    $null = Assert-A365RawResponse -Response $response -Uri 'https://graph.microsoft.com/v1.0/organization' -Method GET -Allowlist $Allowlist
     $organization = @(Get-A365Property -InputObject $response -Name 'value' -Default @()) |
         Select-Object -First 1
     $confirmedAssertion = Confirm-A365DomainTenantTarget `
@@ -966,7 +1005,12 @@ function Get-A365LiveEvidence {
         [string]$CertificateThumbprint,
 
         [Parameter()]
-        [switch]$UseDeviceCode
+        [switch]$UseDeviceCode,
+
+        [string]$DelegatedClientId,
+
+        [ValidateSet('ActiveRoles', 'PIM')]
+        [string]$RolePolicy = 'ActiveRoles'
     )
 
     $graphModule = Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
@@ -996,6 +1040,7 @@ function Get-A365LiveEvidence {
 
     if ($null -eq $graphModule) {
         return [pscustomobject][ordered]@{
+            collectorsRan = @('TenantFoundation')
             generatedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
             local = $local
             authentication = [pscustomobject]@{
@@ -1046,7 +1091,8 @@ function Get-A365LiveEvidence {
             -TenantId $TenantId `
             -ClientId $ClientId `
             -CertificateThumbprint $CertificateThumbprint `
-            -UseDeviceCode:$UseDeviceCode
+            -UseDeviceCode:$UseDeviceCode `
+            -DelegatedClientId $DelegatedClientId
         $context = $connection.Context
         $appOnly = [bool]$connection.AppOnly
         $targetAssertion = $connection.TargetAssertion
@@ -1059,6 +1105,7 @@ function Get-A365LiveEvidence {
         $authenticationIssue.Category = 'Authentication'
         $Issues.Add($authenticationIssue)
         return [pscustomobject][ordered]@{
+            collectorsRan = @('TenantFoundation')
             generatedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
             local = $local
             authentication = [pscustomobject]@{
@@ -1089,11 +1136,15 @@ function Get-A365LiveEvidence {
         grantedScopes = $grantedScopes
         useDeviceCode = [bool]$connection.UseDeviceCode
         reusedExistingContext = [bool]$connection.ReusedExistingContext
+        clientId = Get-A365Property $context ClientId
+        appName = Get-A365Property $context AppName
+        contextScope = Get-A365Property $context ContextScope
     }
 
     $environment = [string](Get-A365Property -InputObject $context -Name 'Environment' -Default 'Global')
     $commercial = $environment -in @('Global', 'GlobalV2')
     $evidence = [ordered]@{
+        collectorsRan = @('TenantFoundation')
         generatedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
         local = $local
         authentication = $authentication
@@ -1102,7 +1153,7 @@ function Get-A365LiveEvidence {
             tenantId = $context.TenantId
             primaryDomain = $null
             cloud = $environment
-            commercialAvailability = $commercial
+            commercialAvailability = $null
             targetAssertion = $targetAssertion
         }
         licensing = $null
@@ -1121,6 +1172,7 @@ function Get-A365LiveEvidence {
             -Allowlist $Allowlist `
             -TargetAssertion $targetAssertion
         $organization = $organizationContext.Organization
+        $evidence.tenant.commercialAvailability = $commercial
         $evidence.tenant.targetAssertion = $organizationContext.TargetAssertion
         if ($organization) {
             $evidence.tenant.displayName = Get-A365Property -InputObject $organization -Name 'displayName' -Default $null
@@ -1138,6 +1190,7 @@ function Get-A365LiveEvidence {
         if ((Get-A365Property -InputObject $targetAssertion -Name 'method' -Default '') -eq 'VerifiedDomain') {
             throw (New-A365SafeStartupException -Message "Unable to verify requested tenant domain '$TenantId' from Microsoft Graph organization data. No non-foundation collectors were run and no report was written. $($_.Exception.Message)")
         }
+        $evidence.tenant.commercialAvailability = $null
         $Issues.Add((New-A365CollectionIssue -Adapter Graph -Operation 'Organization context' -ErrorRecord $_ -RequiredPermission 'Organization.Read.All' -DocsUrl 'https://learn.microsoft.com/graph/api/organization-get'))
     }
 
@@ -1147,10 +1200,16 @@ function Get-A365LiveEvidence {
     }
 
     if ($Collectors -contains 'Licensing') {
+    $evidence.collectorsRan += 'Licensing'
+    Write-Progress -Activity 'Agent 365 evidence collection' -Status 'Licensing: collecting and validating' -PercentComplete 10
     try {
-        $skuResponse = Invoke-A365GraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/subscribedSkus?$select=skuId,skuPartNumber,capabilityStatus,consumedUnits,servicePlans' -Allowlist $Allowlist
+        $skuRows = [Collections.Generic.List[object]]::new()
+        Invoke-A365GraphPages -InitialUri 'https://graph.microsoft.com/v1.0/subscribedSkus?$select=skuId,skuPartNumber,capabilityStatus,consumedUnits,servicePlans' -Allowlist $Allowlist -ProcessPage {
+            param($Page)
+            foreach ($row in $Page.value) { $skuRows.Add($row) }
+        }
         $subscribedSkus = @(
-            foreach ($sku in @(Get-A365Property -InputObject $skuResponse -Name 'value' -Default @())) {
+            foreach ($sku in $skuRows) {
                 [pscustomobject][ordered]@{
                     skuPartNumber = Get-A365Property -InputObject $sku -Name 'skuPartNumber' -Default 'Unknown'
                     skuId = [string](Get-A365Property -InputObject $sku -Name 'skuId' -Default '')
@@ -1209,6 +1268,8 @@ function Get-A365LiveEvidence {
     }
 
     if ($Collectors -contains 'Roles') {
+    $evidence.collectorsRan += 'Roles'
+    Write-Progress -Activity 'Agent 365 evidence collection' -Status 'Roles: collecting and validating' -PercentComplete 20
     [object[]]$activeRoles = @()
     try {
         $activeRoles = @(
@@ -1220,6 +1281,7 @@ function Get-A365LiveEvidence {
     }
 
     [object[]]$eligibleRoles = @()
+    if ($RolePolicy -eq 'PIM') {
     try {
         $eligibleRoles = @(
             Get-A365RoleSummary -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleInstances?$expand=roleDefinition&$top=999' -Allowlist $Allowlist
@@ -1228,6 +1290,7 @@ function Get-A365LiveEvidence {
     catch {
         $Issues.Add((New-A365CollectionIssue -Adapter Graph -Operation 'Eligible directory roles' -ErrorRecord $_ -RequiredPermission 'RoleEligibilitySchedule.Read.Directory' -DocsUrl 'https://learn.microsoft.com/graph/api/rbacapplication-list-roleeligibilityscheduleinstances?view=graph-rest-1.0'))
     }
+    }
     $evidence.roles = [pscustomobject]@{
         active = $activeRoles
         eligible = $eligibleRoles
@@ -1235,6 +1298,8 @@ function Get-A365LiveEvidence {
     }
 
     if ($Collectors -contains 'ServiceHealth') {
+    $evidence.collectorsRan += 'ServiceHealth'
+    Write-Progress -Activity 'Agent 365 evidence collection' -Status 'Service health: collecting and validating' -PercentComplete 30
     try {
         $healthCounter = [pscustomobject]@{ ActiveIssueCount = 0 }
         $affectedServices = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -1264,6 +1329,8 @@ function Get-A365LiveEvidence {
     }
 
     if ($Collectors -contains 'Registry') {
+    $evidence.collectorsRan += 'Registry'
+    Write-Progress -Activity 'Agent 365 evidence collection' -Status 'Registry: collecting and validating' -PercentComplete 40
     try {
         $packageGroups = @{}
         $packageCounter = [pscustomobject]@{ Count = 0 }
@@ -1301,6 +1368,8 @@ function Get-A365LiveEvidence {
     }
 
     if ($Collectors -contains 'AgentIdentity') {
+    $evidence.collectorsRan += 'AgentIdentity'
+    Write-Progress -Activity 'Agent 365 evidence collection' -Status 'Agent identity: collecting and validating' -PercentComplete 50
     try {
         $blueprints = [System.Collections.Generic.List[object]]::new()
         Invoke-A365GraphPages -InitialUri 'https://graph.microsoft.com/v1.0/applications/microsoft.graph.agentIdentityBlueprint?$select=id,keyCredentials,passwordCredentials,requiredResourceAccess&$top=100' -Allowlist $Allowlist -ProcessPage {
@@ -1317,6 +1386,7 @@ function Get-A365LiveEvidence {
         $expiringCredentialCount = 0
         $requestedResourceCount = 0
         $requestedPermissionCount = 0
+        $permissionFingerprints = [Collections.Generic.List[string]]::new()
         $sponsorReadAvailable = $true
         $now = (Get-Date).ToUniversalTime()
 
@@ -1327,8 +1397,12 @@ function Get-A365LiveEvidence {
             }
 
             try {
-                $ownerResponse = Invoke-A365GraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications/$blueprintId/microsoft.graph.agentIdentityBlueprint/owners?`$select=id" -Allowlist $Allowlist
-                if (@(Get-A365Property -InputObject $ownerResponse -Name 'value' -Default @()).Count -eq 0) {
+                $ownerCounter = [pscustomobject]@{ Count = 0 }
+                Invoke-A365GraphPages -InitialUri "https://graph.microsoft.com/v1.0/applications/$blueprintId/microsoft.graph.agentIdentityBlueprint/owners?`$select=id" -Allowlist $Allowlist -ProcessPage {
+                    param($Page)
+                    $ownerCounter.Count += $Page.value.Count
+                }
+                if ($ownerCounter.Count -eq 0) {
                     $missingOwnerCount++
                 }
             }
@@ -1338,8 +1412,12 @@ function Get-A365LiveEvidence {
             }
 
             try {
-                $sponsorResponse = Invoke-A365GraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications/$blueprintId/microsoft.graph.agentIdentityBlueprint/sponsors?`$select=id" -Allowlist $Allowlist
-                if (@(Get-A365Property -InputObject $sponsorResponse -Name 'value' -Default @()).Count -eq 0) {
+                $sponsorCounter = [pscustomobject]@{ Count = 0 }
+                Invoke-A365GraphPages -InitialUri "https://graph.microsoft.com/v1.0/applications/$blueprintId/microsoft.graph.agentIdentityBlueprint/sponsors?`$select=id" -Allowlist $Allowlist -ProcessPage {
+                    param($Page)
+                    $sponsorCounter.Count += $Page.value.Count
+                }
+                if ($sponsorCounter.Count -eq 0) {
                     $missingSponsorCount++
                 }
             }
@@ -1369,6 +1447,8 @@ function Get-A365LiveEvidence {
             foreach ($resource in @(Get-A365Property -InputObject $blueprint -Name 'requiredResourceAccess' -Default @())) {
                 $requestedResourceCount++
                 $requestedPermissionCount += @(Get-A365Property -InputObject $resource -Name 'resourceAccess' -Default @()).Count
+                $access = @($resource.resourceAccess | Sort-Object id, type | Select-Object id, type)
+                $permissionFingerprints.Add((Get-A365ContentHash ([ordered]@{ Blueprint = $blueprintId; Resource = $resource.resourceAppId; Access = $access } | ConvertTo-Json -Depth 10 -Compress)))
             }
         }
 
@@ -1383,6 +1463,7 @@ function Get-A365LiveEvidence {
             requestedResourceCount = $requestedResourceCount
             requestedPermissionCount = $requestedPermissionCount
             sponsorReadAvailable = $sponsorReadAvailable
+            permissionMetadataFingerprint = Get-A365ContentHash (($permissionFingerprints | Sort-Object) -join '|')
         }
     }
     catch {
@@ -1392,6 +1473,8 @@ function Get-A365LiveEvidence {
     }
 
     if ($Collectors -contains 'ConditionalAccess') {
+    $evidence.collectorsRan += 'ConditionalAccess'
+    Write-Progress -Activity 'Agent 365 evidence collection' -Status 'Conditional Access: collecting and validating' -PercentComplete 60
     $conditionalAccess = [ordered]@{
         securityDefaultsKnown = $false
         securityDefaultsEnabled = $null
@@ -1399,7 +1482,9 @@ function Get-A365LiveEvidence {
         enabledPolicyCount = 0
         reportOnlyPolicyCount = 0
         disabledPolicyCount = 0
+        policyMetadataFingerprint = $null
     }
+    $policyStates = [Collections.Generic.List[string]]::new()
     try {
         $securityDefaults = Invoke-A365GraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/policies/identitySecurityDefaultsEnforcementPolicy' -Allowlist $Allowlist
         $conditionalAccess.securityDefaultsKnown = $true
@@ -1414,6 +1499,7 @@ function Get-A365LiveEvidence {
             Invoke-A365GraphPages -InitialUri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies?$select=id,state&$top=999' -Allowlist $Allowlist -ProcessPage {
                 param($Page)
                 foreach ($policy in @(Get-A365Property -InputObject $Page -Name 'value' -Default @())) {
+                    $policyStates.Add("$($policy.id)|$($policy.state)")
                     switch ([string](Get-A365Property -InputObject $policy -Name 'state' -Default 'unknown')) {
                         'enabled' { $conditionalAccess.enabledPolicyCount++ }
                         'enabledForReportingButNotEnforced' { $conditionalAccess.reportOnlyPolicyCount++ }
@@ -1422,6 +1508,7 @@ function Get-A365LiveEvidence {
                 }
             }
             $conditionalAccess.policyInventoryAvailable = $true
+            $conditionalAccess.policyMetadataFingerprint = Get-A365ContentHash (($policyStates | Sort-Object) -join '|')
         }
         catch {
             $Issues.Add((New-A365CollectionIssue -Adapter Graph -Operation 'Conditional Access policy inventory' -ErrorRecord $_ -RequiredPermission 'Policy.Read.All' -DocsUrl 'https://learn.microsoft.com/entra/identity/conditional-access/agent-id'))
@@ -1431,6 +1518,8 @@ function Get-A365LiveEvidence {
     }
 
     if ($Collectors -contains 'Defender') {
+    $evidence.collectorsRan += 'Defender'
+    Write-Progress -Activity 'Agent 365 evidence collection' -Status 'Defender: aggregate hunting queries' -PercentComplete 70
     $defender = [ordered]@{}
     foreach ($probe in @(
         @{
@@ -1471,6 +1560,8 @@ function Get-A365LiveEvidence {
     }
 
     if ($Collectors -contains 'Purview') {
+    $evidence.collectorsRan += 'Purview'
+    Write-Progress -Activity 'Agent 365 evidence collection' -Status 'Purview: audit query and policy metadata' -PercentComplete 80
     $audit = [ordered]@{
         available = $false
         queryStatus = 'notStarted'
@@ -1565,6 +1656,8 @@ function Get-A365LiveEvidence {
     }
 
     if ($Collectors -contains 'SharePoint') {
+    $evidence.collectorsRan += 'SharePoint'
+    Write-Progress -Activity 'Agent 365 evidence collection' -Status 'SharePoint: selected target sites' -PercentComplete 90
     $sharePointEvidence = [ordered]@{
         moduleAvailable = $null -ne (Get-Command -Name Get-SPOSite -ErrorAction SilentlyContinue)
         sites = @()
@@ -1599,6 +1692,7 @@ function Get-A365LiveEvidence {
     $evidence.sharePoint = [pscustomobject]$sharePointEvidence
     }
     $evidence.collectionIssues = $Issues.ToArray()
+    Write-Progress -Activity 'Agent 365 evidence collection' -Completed
     return [pscustomobject]$evidence
 }
 
@@ -1627,7 +1721,7 @@ function New-A365Result {
         [string]$Id,
 
         [Parameter(Mandatory)]
-        [ValidateSet('Passed', 'Blocker', 'ActionRequired', 'Advisory', 'ManualValidation', 'NotApplicable', 'NotAuthorized', 'Error')]
+        [ValidateSet('Passed', 'Blocker', 'ActionRequired', 'Advisory', 'ManualValidation', 'NotApplicable', 'NotAssessed', 'NotAuthorized', 'Error')]
         [string]$Status,
 
         [Parameter(Mandatory)]
@@ -1955,7 +2049,9 @@ function Get-A365AttestationDefinitions {
         [object]$Guidance,
 
         [Parameter()]
-        [switch]$IncludeAllProfiles
+        [switch]$IncludeAllProfiles,
+
+        [object]$AssessmentScope
     )
 
     $definitions = [System.Collections.Generic.List[object]]::new()
@@ -2021,6 +2117,18 @@ function Get-A365AttestationDefinitions {
         })
     }
 
+    foreach ($definition in $definitions) {
+        if ($definition.Id -eq 'A365-SHAREPOINT-001') {
+            $definition.AllowNotApplicable = $Profiles -notcontains 'SharePointAgents'
+            if ($AssessmentScope -and @($AssessmentScope.TargetSites).Count -gt 0) {
+                $definition.AllowNotApplicable = $false
+            }
+            $definition.Guidance.NotApplicableAllowed = $definition.AllowNotApplicable
+            if (-not $definition.AllowNotApplicable) {
+                $definition.Guidance.NotApplicableGuidance = 'SharePoint is in this assessment. Not applicable is not permitted while its profile or target sites are selected.'
+            }
+        }
+    }
     return $definitions.ToArray()
 }
 
@@ -2037,10 +2145,10 @@ function Test-A365AnswersInput {
     )
 
     $schemaVersion = [string](Get-A365Property -InputObject $Answers -Name 'schemaVersion' -Default '')
-    if ($schemaVersion -notin @('1.0', '1.1')) {
-        throw 'Answers file schemaVersion must be 1.0 or 1.1.'
+    if ($schemaVersion -notin @('1.0', '1.1', '2.0')) {
+        throw 'Answers file schemaVersion must be 1.0, 1.1, or 2.0. Legacy answers are drafts requiring revalidation.'
     }
-    if ($null -eq $Answers.PSObject.Properties['answers']) {
+    if ($null -eq $Answers.PSObject.Properties['answers'] -or $Answers.answers -isnot [Array]) {
         throw 'Answers file must contain an answers array.'
     }
 
@@ -2096,6 +2204,15 @@ function Test-A365AnswersInput {
             if (-not [DateTimeOffset]::TryParse($answeredAtUtc, [ref]$parsedDate)) {
                 throw "answeredAtUtc for $answerId must be a valid timestamp."
             }
+            if ($parsedDate -gt [DateTimeOffset]::UtcNow) { throw "answeredAtUtc for $answerId cannot be in the future." }
+            $modified = [string](Get-A365Property $answer modifiedAtUtc '')
+            if ($modified) {
+                $modifiedDate = [DateTimeOffset]::MinValue
+                if (-not [DateTimeOffset]::TryParse($modified, [ref]$modifiedDate) -or
+                    $modifiedDate -lt $parsedDate -or $modifiedDate -gt [DateTimeOffset]::UtcNow) {
+                    throw "Invalid modifiedAtUtc ordering for $answerId."
+                }
+            }
         }
     }
 }
@@ -2121,9 +2238,16 @@ function Get-A365Evaluation {
         [string[]]$Collectors,
 
         [AllowNull()]
-        [object]$Answers
+        [object]$Answers,
+
+        [object]$AssessmentScope,
+
+        [object]$EvidenceContext
     )
 
+    if (-not $AssessmentScope) {
+        $AssessmentScope = New-A365AssessmentScope -Rules $Rules -Stage Pilot -Profiles $Profiles
+    }
     $results = [System.Collections.Generic.List[object]]::new()
     $manualAttestations = [System.Collections.Generic.List[object]]::new()
     $evidenceTimeUtc = [string](Get-A365Property -InputObject $Evidence -Name 'generatedAtUtc' -Default (Get-Date).ToUniversalTime().ToString('o'))
@@ -2156,27 +2280,6 @@ function Get-A365Evaluation {
         'A365-PURVIEW-001' = '^Purview Audit Search aggregate query$'
         'A365-SHAREPOINT-001' = '^Get-SPOSite '
     }
-    $ruleCollectors = @{
-        'A365-FOUNDATION-002' = 'Licensing'
-        'A365-FOUNDATION-003' = 'Licensing'
-        'A365-FOUNDATION-004' = 'Roles'
-        'A365-FOUNDATION-005' = 'Roles'
-        'A365-FOUNDATION-006' = 'ServiceHealth'
-        'A365-REGISTRY-001' = 'Registry'
-        'A365-ENTRA-001' = 'AgentIdentity'
-        'A365-ENTRA-002' = 'AgentIdentity'
-        'A365-ENTRA-003' = 'AgentIdentity'
-        'A365-ENTRA-004' = 'AgentIdentity'
-        'A365-ENTRA-005' = 'AgentIdentity'
-        'A365-ENTRA-006' = 'ConditionalAccess'
-        'A365-ENTRA-007' = 'ConditionalAccess'
-        'A365-DEFENDER-001' = 'Defender'
-        'A365-DEFENDER-002' = 'Defender'
-        'A365-DEFENDER-003' = 'Defender'
-        'A365-PURVIEW-001' = 'Purview'
-        'A365-PURVIEW-002' = 'Purview'
-        'A365-SHAREPOINT-001' = 'SharePoint'
-    }
 
     $powerShellVersion = [string](Get-A365Property -InputObject $local -Name 'powerShellVersion' -Default '0.0')
     $psStatus = try {
@@ -2207,17 +2310,22 @@ function Get-A365Evaluation {
 
     $cloud = [string](Get-A365Property -InputObject $tenant -Name 'cloud' -Default 'Unknown')
     $availabilityStatus = if ($commercial -eq $true) { 'Passed' } elseif ($commercial -eq $false) { 'Blocker' } else { 'NotAuthorized' }
+    $organizationIssue = Get-A365IssueForOperation -Issues $issues -OperationPattern '^Organization context$'
+    if ($organizationIssue) {
+        $availabilityStatus = if ($organizationIssue.Category -in @('Authentication', 'TenantConsent', 'PermissionOrRole', 'Authorization')) { 'NotAuthorized' } else { 'Error' }
+    }
     $results.Add((New-A365Result -Rules $Rules -Id 'A365-FOUNDATION-001' -Status $availabilityStatus -Applicability 'Applicable' -Observed "Cloud: $cloud; commercial Agent 365 availability: $commercial" -EvidenceMethod 'Microsoft Graph organization context' -Details $null -EvidenceTimeUtc $evidenceTimeUtc))
 
     foreach ($rule in @($Rules.checks | Where-Object { $_.id -notin @('A365-LOCAL-001', 'A365-LOCAL-002', 'A365-LOCAL-003', 'A365-FOUNDATION-001') })) {
-        if ($rule.id -eq 'A365-SHAREPOINT-001' -and $Profiles -notcontains 'SharePointAgents') {
-            $results.Add((New-A365Result -Rules $Rules -Id $rule.id -Status 'NotApplicable' -Applicability 'Profile not selected' -Observed 'SharePointAgents was not selected.' -EvidenceMethod 'Selected profile declaration' -Details $null -EvidenceTimeUtc $evidenceTimeUtc))
+        $requirement = @($AssessmentScope.Requirements | Where-Object Id -eq $rule.id)[0]
+        if (-not $requirement.Applicable) {
+            $results.Add((New-A365Result -Rules $Rules -Id $rule.id -Status 'NotApplicable' -Applicability $requirement.Reason -Observed $requirement.Reason -EvidenceMethod 'Versioned assessment scope' -Details $null -EvidenceTimeUtc $evidenceTimeUtc))
             continue
         }
 
-        $collectorName = $ruleCollectors[$rule.id]
-        if ($collectorName -and $Collectors -notcontains $collectorName) {
-            $results.Add((New-A365Result -Rules $Rules -Id $rule.id -Status 'NotApplicable' -Applicability 'Collector not selected' -Observed "$collectorName collection was not selected for this run." -EvidenceMethod 'Selected collector declaration' -Details $null -EvidenceTimeUtc $evidenceTimeUtc))
+        $collectorName = $requirement.Collector
+        if ($collectorName -and $Collectors -notcontains $collectorName -and $rule.id -notin @('A365-DEFENDER-003', 'A365-PURVIEW-002')) {
+            $results.Add((New-A365Result -Rules $Rules -Id $rule.id -Status 'NotAssessed' -Applicability 'Applicable' -Observed "$collectorName was omitted. This requirement remains in the assessment and cannot pass." -EvidenceMethod 'Collection scope declaration' -Details $null -EvidenceTimeUtc $evidenceTimeUtc))
             continue
         }
 
@@ -2226,7 +2334,8 @@ function Get-A365Evaluation {
             continue
         }
 
-        if (Test-A365RequiredPermissionMissing -RequiredPermission $rule.requiredPermission -GrantedScopes $grantedScopes -AuthenticationMode $authMode) {
+        if ($authMode -ne 'InteractiveDelegated' -and
+            (Test-A365RequiredPermissionMissing -RequiredPermission $rule.requiredPermission -GrantedScopes $grantedScopes -AuthenticationMode $authMode)) {
             $results.Add((New-A365Result -Rules $Rules -Id $rule.id -Status 'NotAuthorized' -Applicability 'Applicable' -Observed "Required delegated permission is missing. Granted: $($grantedScopes -join ', ')" -EvidenceMethod 'Microsoft Graph authentication context' -Details $null -EvidenceTimeUtc $evidenceTimeUtc))
             continue
         }
@@ -2293,7 +2402,7 @@ function Get-A365Evaluation {
                             (Get-A365Property -InputObject $_ -Name 'role' -Default '') -in $targetRoles
                         }
                 )
-                $status = if ($null -eq $roles -or $null -eq (Get-A365Property -InputObject $roles -Name 'active' -Default $null)) { 'Error' } elseif ($found.Count -gt 0) { 'Passed' } else { 'ActionRequired' }
+                $status = if ($null -eq $roles -or $null -eq $roles.PSObject.Properties['active']) { 'Error' } elseif ($found.Count -gt 0) { 'Passed' } else { 'ActionRequired' }
                 $observed = if ($found.Count -gt 0) { ($found | ForEach-Object { "$($_.role): $($_.assignmentCount)" }) -join '; ' } else { 'No visible active Agent 365 management read role assignment.' }
                 $results.Add((New-A365Result -Rules $Rules -Id $rule.id -Status $status -Applicability 'Applicable' -Observed $observed -EvidenceMethod 'Microsoft Graph role assignments aggregate' -Details $active -EvidenceTimeUtc $evidenceTimeUtc))
             }
@@ -2364,7 +2473,8 @@ function Get-A365Evaluation {
                 $resources = [int](Get-A365Property -InputObject $identity -Name 'requestedResourceCount' -Default 0)
                 $permissions = [int](Get-A365Property -InputObject $identity -Name 'requestedPermissionCount' -Default 0)
                 $status = if ($available) { 'ManualValidation' } else { 'Error' }
-                $results.Add((New-A365Result -Rules $Rules -Id $rule.id -Status $status -Applicability 'When blueprints exist' -Observed "$permissions requested permission entry or entries across $resources resource(s). Names and values were not persisted." -EvidenceMethod 'Aggregate requiredResourceAccess count' -Details $null -EvidenceTimeUtc $evidenceTimeUtc))
+                $permissionDetails = [pscustomobject]@{ MetadataFingerprint = Get-A365Property $identity permissionMetadataFingerprint '' }
+                $results.Add((New-A365Result -Rules $Rules -Id $rule.id -Status $status -Applicability 'When blueprints exist' -Observed "$permissions requested permission entry or entries across $resources resource(s). Names and values were not persisted." -EvidenceMethod 'Aggregate requiredResourceAccess count and metadata fingerprint' -Details $permissionDetails -EvidenceTimeUtc $evidenceTimeUtc))
             }
             'A365-ENTRA-006' {
                 $ca = Get-A365Property -InputObject $Evidence -Name 'conditionalAccess' -Default $null
@@ -2448,13 +2558,21 @@ function Get-A365Evaluation {
                 $observed = if (-not $moduleAvailable) { 'The SharePoint Online module was not available.' } elseif ($sites.Count -eq 0) { 'No target-site evidence was supplied or collected.' } else { "$($sites.Count) target site(s) checked; $($unreadable.Count) unreadable. Access boundaries still require manual review." }
                 $results.Add((New-A365Result -Rules $Rules -Id $rule.id -Status $status -Applicability 'Selected profile' -Observed $observed -EvidenceMethod 'Approved Get-SPOSite command when available' -Details $sites -IsSensitive $true -EvidenceTimeUtc $evidenceTimeUtc))
             }
+            default {
+                $results.Add((New-A365Result -Rules $Rules -Id $rule.id -Status 'NotAssessed' -Applicability 'Applicable' -Observed 'This rule is not implemented by the installed source version. Obtain a matching reviewed release.' -EvidenceMethod 'Rule implementation contract' -Details $null -EvidenceTimeUtc $evidenceTimeUtc))
+            }
         }
     }
 
     foreach ($profile in @($Profiles | Where-Object { $_ -ne 'ControlPlane' })) {
         $docsProperty = $Rules.profileGuidance.PSObject.Properties[$profile]
         $docsUrl = if ($docsProperty) { [string]$docsProperty.Value } else { 'https://learn.microsoft.com/microsoft-agent-365/' }
-        $results.Add((New-A365ProfileResult -Profile $profile -DocsUrl $docsUrl -EvidenceTimeUtc $evidenceTimeUtc -RuleReviewDate $Rules.reviewDate))
+        $profileResult = New-A365ProfileResult -Profile $profile -DocsUrl $docsUrl -EvidenceTimeUtc $evidenceTimeUtc -RuleReviewDate $Rules.reviewDate
+        if ($profileResult.Id -in @($AssessmentScope.ExcludedRequirements)) {
+            $profileResult.Status = 'NotApplicable'
+            $profileResult.Applicability = 'Explicit justified assessment exclusion'
+        }
+        $results.Add($profileResult)
     }
 
     [object[]]$answerList = @()
@@ -2466,7 +2584,12 @@ function Get-A365Evaluation {
         $answerValue = [string](Get-A365Property -InputObject $answer -Name 'answer' -Default '')
         $answered = [bool]$answerValue
 
-        if ($commercial -eq $false) {
+        if ($attestation.id -in @($AssessmentScope.ExcludedRequirements)) {
+            $status = 'NotApplicable'
+            $applicability = 'Explicit justified assessment exclusion'
+            $observed = $AssessmentScope.Justification
+        }
+        elseif ($commercial -eq $false) {
             $status = 'NotApplicable'
             $applicability = 'Unsupported cloud'
             $observed = 'Not evaluated after the commercial availability gate.'
@@ -2517,7 +2640,7 @@ function Get-A365Evaluation {
         })
     }
 
-    [object[]]$definitions = @(Get-A365AttestationDefinitions -Rules $Rules -Profiles $Profiles -Guidance $Guidance)
+    [object[]]$definitions = @(Get-A365AttestationDefinitions -Rules $Rules -Profiles $Profiles -Guidance $Guidance -AssessmentScope $AssessmentScope)
     $definitionById = @{}
     foreach ($definition in $definitions) {
         $definitionById[[string]$definition.Id] = $definition
@@ -2528,6 +2651,17 @@ function Get-A365Evaluation {
     }
 
     foreach ($result in $results.ToArray()) {
+        $collectionState = switch ($result.Status) {
+            'NotApplicable' { 'OutOfScope' }
+            'NotAssessed' { 'NotRun' }
+            'NotAuthorized' { 'AuthorizationFailure' }
+            'Error' { 'Failed' }
+            default { 'Collected' }
+        }
+        if ($result.Id -match '^A365-(MANUAL|PROFILE)-' -or $result.Id -in @('A365-DEFENDER-003', 'A365-PURVIEW-002')) {
+            $collectionState = 'CustomerAssertion'
+        }
+        $result | Add-Member -NotePropertyName CollectionState -NotePropertyValue $collectionState -Force
         $definition = $definitionById[[string]$result.Id]
         $manualAttestable = $null -ne $definition
         $result | Add-Member -NotePropertyName ManualAttestable -NotePropertyValue $manualAttestable -Force
@@ -2542,8 +2676,10 @@ function Get-A365Evaluation {
         $answer = $answerById[[string]$result.Id]
         $answerValue = [string](Get-A365Property -InputObject $answer -Name 'answer' -Default '')
         $baseStatus = [string]$result.Status
+        $binding = if ($EvidenceContext) { Get-A365GateBinding -Result $result -Context $EvidenceContext } else { '' }
+        $freshness = Get-A365AnswerFreshness -Answer $answer -Result $result -Context $EvidenceContext -Binding $binding
         $applied = $false
-        if ($baseStatus -eq 'ManualValidation' -and $answerValue) {
+        if ($baseStatus -eq 'ManualValidation' -and $answerValue -and ($freshness -eq 'Current' -or $answerValue -eq 'No')) {
             switch ($answerValue) {
                 'Yes' {
                     $result.Status = 'Passed'
@@ -2568,6 +2704,7 @@ function Get-A365Evaluation {
             RequiredRole = [string]$definition.RequiredRole
             Guidance = $definition.Guidance
             Source = [string]$definition.Source
+            Binding = $binding
         }) -Force
         $result | Add-Member -NotePropertyName Attestation -NotePropertyValue ([pscustomobject][ordered]@{
             Submitted = $null -ne $answer
@@ -2576,6 +2713,10 @@ function Get-A365Evaluation {
             EvidenceReference = Get-A365Property -InputObject $answer -Name 'evidenceReference' -Default $null
             Notes = Get-A365Property -InputObject $answer -Name 'notes' -Default $null
             AnsweredAtUtc = Get-A365Property -InputObject $answer -Name 'answeredAtUtc' -Default $null
+            ModifiedAtUtc = Get-A365Property -InputObject $answer -Name 'modifiedAtUtc' -Default $null
+            Binding = Get-A365Property -InputObject $answer -Name 'binding' -Default $null
+            ReviewDecision = Get-A365Property -InputObject $answer -Name 'reviewDecision' -Default $null
+            Freshness = $freshness
             Justification = Get-A365Property -InputObject $answer -Name 'justification' -Default $null
             Applied = $applied
             PreservedObserved = $result.Observed
@@ -2603,7 +2744,7 @@ function Get-A365Coverage {
     )
 
     $applicable = @($Results | Where-Object { $_.Status -ne 'NotApplicable' })
-    $collected = @($applicable | Where-Object { $_.Status -notin @('NotAuthorized', 'Error') })
+    $collected = @($applicable | Where-Object { $_.Status -notin @('NotAssessed', 'NotAuthorized', 'Error', 'ManualValidation') })
 
     $coverage = [ordered]@{
         Total = $applicable.Count
@@ -2615,9 +2756,17 @@ function Get-A365Coverage {
         ManualValidation = @($Results | Where-Object Status -eq 'ManualValidation').Count
         NotApplicable = @($Results | Where-Object Status -eq 'NotApplicable').Count
         NotAuthorized = @($Results | Where-Object Status -eq 'NotAuthorized').Count
+        NotAssessed = @($Results | Where-Object Status -eq 'NotAssessed').Count
         Error = @($Results | Where-Object Status -eq 'Error').Count
         Percentage = if ($applicable.Count -eq 0) { 0 } else { [Math]::Round(($collected.Count / $applicable.Count) * 100, 1) }
     }
+    $automated = @($applicable | Where-Object { (Get-A365Property $_ CollectionState '') -ne 'CustomerAssertion' })
+    $acquired = @($automated | Where-Object { (Get-A365Property $_ CollectionState '') -eq 'Collected' })
+    $assertions = @($applicable | Where-Object { (Get-A365Property $_ ManualAttestable $false) -and (Get-A365Property $_ AttestationRequired $false) })
+    $accepted = @($assertions | Where-Object { (Get-A365Property (Get-A365Property $_ Attestation) Applied $false) -and $_.Status -eq 'Passed' })
+    $coverage.CollectionCompleteness = [pscustomobject]@{ Collected = $acquired.Count; Required = $automated.Count }
+    $coverage.RequirementsSatisfied = [pscustomobject]@{ Satisfied = $coverage.Passed; Applicable = $applicable.Count }
+    $coverage.CustomerAssertions = [pscustomobject]@{ Accepted = $accepted.Count; Required = $assertions.Count }
     return [pscustomobject]$coverage
 }
 
@@ -2632,6 +2781,7 @@ function Get-A365PassCriteria {
     $actionRequiredCount = @($Results | Where-Object Status -eq 'ActionRequired').Count
     $notAuthorizedCount = @($Results | Where-Object Status -eq 'NotAuthorized').Count
     $errorCount = @($Results | Where-Object Status -eq 'Error').Count
+    $notAssessedCount = @($Results | Where-Object Status -eq 'NotAssessed').Count
     $requiredManualUnresolvedCount = @(
         $Results |
             Where-Object {
@@ -2645,6 +2795,7 @@ function Get-A365PassCriteria {
         $actionRequiredCount -eq 0 -and
         $notAuthorizedCount -eq 0 -and
         $errorCount -eq 0 -and
+        $notAssessedCount -eq 0 -and
         $requiredManualUnresolvedCount -eq 0
     )
 
@@ -2652,7 +2803,7 @@ function Get-A365PassCriteria {
         'All required pass gates are satisfied. Advisories remain for customer review.'
     }
     else {
-        "$blockerCount blocker(s), $actionRequiredCount required action(s), $notAuthorizedCount authorization gap(s), $errorCount collection error(s), and $requiredManualUnresolvedCount unresolved required manual gate(s) prevent passing."
+        "$blockerCount known blocker(s), $notAssessedCount unassessed requirement(s), $actionRequiredCount required action(s), $notAuthorizedCount authorization gap(s), $errorCount collection error(s), and $requiredManualUnresolvedCount unresolved required manual gate(s) prevent passing. Unknown requirements are not evidence of improvement."
     }
 
     return [pscustomobject][ordered]@{
@@ -2660,6 +2811,7 @@ function Get-A365PassCriteria {
         ActionRequiredCount = $actionRequiredCount
         NotAuthorizedCount = $notAuthorizedCount
         ErrorCount = $errorCount
+        NotAssessedCount = $notAssessedCount
         RequiredManualUnresolvedCount = $requiredManualUnresolvedCount
         IsSatisfied = $isSatisfied
         Summary = $summary
@@ -2687,9 +2839,9 @@ function Get-A365Verdict {
         $summary = "$blockerCount blocking condition(s) must be resolved before the selected stage."
         $exitCode = 1
     }
-    elseif ($actionCount -gt 0 -or $authorizationGapCount -gt 0 -or $errorCount -gt 0 -or $unansweredRequired -gt 0) {
+    elseif (-not $PassCriteria.IsSatisfied) {
         $label = 'Incomplete'
-        $summary = "Evidence is incomplete: $actionCount required action(s), $authorizationGapCount authorization gap(s), $errorCount collection error(s), and $unansweredRequired unresolved required manual gate(s)."
+        $summary = $PassCriteria.Summary
         $exitCode = 2
     }
     elseif ($Stage -eq 'Pilot') {
@@ -2739,14 +2891,14 @@ function Get-A365PathToReady {
             [bool](Get-A365Property -InputObject $result -Name 'ManualAttestable' -Default $false) -and
             [bool](Get-A365Property -InputObject $result -Name 'AttestationRequired' -Default $false)
         )
-        if ($status -notin @('Blocker', 'NotAuthorized', 'Error', 'ActionRequired', 'Advisory') -and -not $manualUnresolved) {
+        if ($status -notin @('Blocker', 'NotAssessed', 'NotAuthorized', 'Error', 'ActionRequired', 'Advisory') -and -not $manualUnresolved) {
             continue
         }
 
         if ($status -eq 'Blocker') {
             $phase = 'blockers'; $priority = 1; $changeType = 'TenantChange'
         }
-        elseif ($status -in @('NotAuthorized', 'Error')) {
+        elseif ($status -in @('NotAssessed', 'NotAuthorized', 'Error')) {
             $phase = 'collection'; $priority = 2
             $changeType = if ($status -eq 'NotAuthorized') { 'ConsentOrRole' } else { 'TechnicalRetry' }
         }
@@ -2849,6 +3001,8 @@ function Get-A365ManuallyAttestableGates {
                     Observed = $_.Observed
                     IsSensitive = [bool](Get-A365Property -InputObject $_ -Name 'IsSensitive' -Default $false)
                     Guidance = $definition.Guidance
+                    Binding = Get-A365Property $definition Binding ''
+                    PreviousAnswer = Get-A365Property $_ Attestation
                 }
             }
     )
@@ -2864,6 +3018,7 @@ function Get-A365Actions {
     $priority = @{
         Blocker = 1
         NotAuthorized = 2
+        NotAssessed = 2
         Error = 2
         ActionRequired = 3
         ManualValidation = 4
@@ -2872,7 +3027,7 @@ function Get-A365Actions {
     return @(
         $Results |
             Where-Object {
-                $_.Status -in @('Blocker', 'NotAuthorized', 'Error', 'ActionRequired') -or
+                $_.Status -in @('Blocker', 'NotAssessed', 'NotAuthorized', 'Error', 'ActionRequired') -or
                 (
                     $_.Status -eq 'ManualValidation' -and
                     [bool](Get-A365Property -InputObject $_ -Name 'ManualAttestable' -Default $false) -and
@@ -2899,7 +3054,7 @@ function ConvertTo-A365PowerShellLiteral {
         [string]$Value
     )
 
-    return "'$(([string]$Value).Replace("'", "''"))'"
+    return "'" + [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent([string]$Value) + "'"
 }
 
 function New-A365RerunMetadata {
@@ -2938,7 +3093,9 @@ function New-A365RerunMetadata {
         [bool]$IncludeSanitizedCopy,
 
         [Parameter()]
-        [bool]$UseDeviceCode
+        [bool]$UseDeviceCode,
+
+        [object]$RunSpecification
     )
 
     $profileValue = $Profiles -join ','
@@ -2979,6 +3136,29 @@ function New-A365RerunMetadata {
     }
     $sanitizedArguments.Add("-OutputPath '<output-folder>'")
 
+    if ($RunSpecification) {
+        $fullArguments.Add("-RolePolicy $($RunSpecification.AssessmentScope.RolePolicy)")
+        if (@($RunSpecification.TargetSites).Count -gt 0) {
+            $targets = @($RunSpecification.TargetSites | ForEach-Object { ConvertTo-A365PowerShellLiteral $_ }) -join ','
+            $fullArguments.Add("-SharePointSiteUrl $targets")
+        }
+        if (@($RunSpecification.AssessmentScope.ExcludedRequirements).Count -gt 0) {
+            $fullArguments.Add("-ExcludeRequirement $($RunSpecification.AssessmentScope.ExcludedRequirements -join ',')")
+            $fullArguments.Add("-ScopeJustification $(ConvertTo-A365PowerShellLiteral $RunSpecification.AssessmentScope.Justification)")
+        }
+        if ($RunSpecification.FixtureMode) {
+            $fullArguments.Add("-FixturePath $(ConvertTo-A365PowerShellLiteral $RunSpecification.FixturePath)")
+            $sanitizedArguments.Add("-FixturePath '<synthetic-fixture.json>'")
+        }
+        if ($RunSpecification.AuthenticationMode -eq 'CertificateAppOnly') {
+            $fullArguments.Add("-ClientId $(ConvertTo-A365PowerShellLiteral $RunSpecification.ClientId)")
+            $fullArguments.Add("-CertificateThumbprint '<re-supply-certificate-thumbprint>'")
+        }
+        elseif ($RunSpecification.DelegatedClientId) {
+            $fullArguments.Add("-DelegatedClientId $(ConvertTo-A365PowerShellLiteral $RunSpecification.DelegatedClientId)")
+        }
+    }
+
     $formatCommand = {
         param(
             [System.Collections.Generic.List[string]]$Arguments,
@@ -3011,6 +3191,13 @@ function New-A365RerunMetadata {
 }
 
 function Get-A365DownloadsPath {
+    if ($env:AGENT365_DOWNLOADS) { return [IO.Path]::GetFullPath($env:AGENT365_DOWNLOADS) }
+    if ($IsWindows) {
+        $folderKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'
+        $folders = Get-ItemProperty -LiteralPath $folderKey -ErrorAction Stop
+        $downloadFolder = Get-A365Property $folders '{374DE290-123F-4565-9164-39C4925E467B}' ''
+        if ($downloadFolder) { return [Environment]::ExpandEnvironmentVariables($downloadFolder) }
+    }
     $profilePath = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
     if ([string]::IsNullOrWhiteSpace($profilePath)) {
         return $null
@@ -3070,7 +3257,7 @@ function Write-A365ResumeScript {
 
     $launcherLiteral = ConvertTo-A365PowerShellLiteral $LauncherPath
     $previousLiteral = ConvertTo-A365PowerShellLiteral $PreviousResultPath
-    $deviceLine = if ($UseDeviceCode) { '    UseDeviceCode = $true' } else { $null }
+    $deviceLine = if ($UseDeviceCode) { '$parameters.UseDeviceCode = $true' } else { $null }
     $lines = @(
         '#requires -Version 7.0'
         ''
@@ -3101,6 +3288,9 @@ function Write-A365ResumeScript {
         ''
         '    [Parameter()]'
         '    [string]$CertificateThumbprint'
+        '    ,'
+        '    [switch]$AutomatedOnly,'
+        '    [string]$DownloadsPath'
         ')'
         ''
         "`$launcherPath = $launcherLiteral"
@@ -3124,6 +3314,8 @@ function Write-A365ResumeScript {
         'if ($PassThru) { $parameters.PassThru = $true }'
         'if ($ClientId) { $parameters.ClientId = $ClientId }'
         'if ($CertificateThumbprint) { $parameters.CertificateThumbprint = $CertificateThumbprint }'
+        'if ($AutomatedOnly) { $parameters.AutomatedOnly = $true }'
+        'if ($DownloadsPath) { $parameters.DownloadsPath = $DownloadsPath }'
         ''
         '$result = & $launcherPath @parameters'
         'if ($PassThru) {'
@@ -3151,13 +3343,18 @@ function Compare-Agent365PreflightResult {
         [object]$Previous
     )
 
-    if ($null -eq $Previous) {
+    $compatibility = Get-A365ComparisonCompatibility -Current $Current -Previous $Previous
+    if ($compatibility -ne 'Comparable') {
         return [pscustomobject][ordered]@{
-            HasBaseline = $false
+            HasBaseline = $null -ne $Previous
+            Comparable = $false
+            ComparisonStatus = $compatibility
             BaselineGeneratedAtUtc = $null
             Regressions = @()
             ResolvedBlockers = @()
             ResolvedRequiredActions = @()
+            NotReassessed = @()
+            Resolved = @()
             Changed = @()
         }
     }
@@ -3169,6 +3366,7 @@ function Compare-Agent365PreflightResult {
         ManualValidation = 2
         ActionRequired = 3
         NotAuthorized = 4
+        NotAssessed = 4
         Error = 4
         Blocker = 5
     }
@@ -3181,6 +3379,7 @@ function Compare-Agent365PreflightResult {
     $resolved = [System.Collections.Generic.List[object]]::new()
     $resolvedRequiredActions = [System.Collections.Generic.List[object]]::new()
     $changed = [System.Collections.Generic.List[object]]::new()
+    $notReassessed = [System.Collections.Generic.List[object]]::new()
 
     foreach ($item in @(Get-A365Property -InputObject $Current -Name 'Results' -Default @())) {
         if (-not $previousById.ContainsKey([string]$item.Id)) {
@@ -3200,11 +3399,15 @@ function Compare-Agent365PreflightResult {
         }
         $changed.Add($entry)
 
-        if ($old.Status -eq 'Blocker' -and $item.Status -ne 'Blocker') {
+        if ($item.Status -in @('NotApplicable', 'NotAssessed', 'NotAuthorized', 'Error')) {
+            $notReassessed.Add($entry)
+            continue
+        }
+        if ($old.Status -eq 'Blocker' -and $item.Status -in @('Passed', 'Advisory')) {
             $resolved.Add($entry)
         }
         if ($old.Status -in @('ActionRequired', 'ManualValidation') -and
-            $item.Status -in @('Passed', 'Advisory', 'NotApplicable')) {
+            $item.Status -in @('Passed', 'Advisory')) {
             $resolvedRequiredActions.Add($entry)
         }
         elseif ($severity[[string]$item.Status] -gt $severity[[string]$old.Status]) {
@@ -3214,10 +3417,14 @@ function Compare-Agent365PreflightResult {
 
     return [pscustomobject][ordered]@{
         HasBaseline = $true
+        Comparable = $true
+        ComparisonStatus = 'Comparable'
         BaselineGeneratedAtUtc = Get-A365Property -InputObject $Previous -Name 'GeneratedAtUtc' -Default $null
         Regressions = $regressions.ToArray()
         ResolvedBlockers = $resolved.ToArray()
         ResolvedRequiredActions = $resolvedRequiredActions.ToArray()
+        NotReassessed = $notReassessed.ToArray()
+        Resolved = @($resolved.ToArray()) + @($resolvedRequiredActions.ToArray())
         Changed = $changed.ToArray()
     }
 }
@@ -3260,12 +3467,23 @@ function New-Agent365SanitizedReport {
     $sanitized.Authentication.Account = 'Redacted'
 
     foreach ($result in @($sanitized.Results)) {
+        $result.Details = $null
+        if ($result.Id -in @($sanitized.AssessmentScope.ExcludedRequirements)) {
+            $result.Applicability = 'Explicit assessment exclusion. Rationale is available only in the full local report.'
+            $result.Observed = $result.Applicability
+        }
         if ([bool](Get-A365Property -InputObject $result -Name 'IsSensitive' -Default $false)) {
             $result.Observed = 'Redacted in sanitized support copy.'
             $result.Details = $null
         }
         else {
             $result.Observed = ConvertTo-A365RedactedText $result.Observed
+        }
+        if ($result.EvidenceMethod -eq 'Collection issue classification') {
+            $result.Observed = 'Collection failed. Diagnostic text is available only in the full local report.'
+        }
+        if ($result.AttestationDefinition -and $result.AttestationDefinition.PSObject.Properties['Binding']) {
+            $result.AttestationDefinition.Binding = ''
         }
         $resultAttestation = Get-A365Property -InputObject $result -Name 'Attestation' -Default $null
         if ($null -ne $resultAttestation) {
@@ -3277,22 +3495,26 @@ function New-Agent365SanitizedReport {
                 'Redacted in sanitized support copy.'
             }
             else {
-                ConvertTo-A365RedactedText $resultAttestation.PreservedObserved
+                $result.Observed
             }
+            if ($resultAttestation.PSObject.Properties['Binding']) { $resultAttestation.Binding = $null }
         }
     }
 
     foreach ($gate in @($sanitized.ManuallyAttestableGates)) {
+        if ($gate.PSObject.Properties['PreviousAnswer']) { $gate.PreviousAnswer = $null }
+        if ($gate.PSObject.Properties['Binding']) { $gate.Binding = '' }
         if ([bool](Get-A365Property -InputObject $gate -Name 'IsSensitive' -Default $false)) {
             $gate.Observed = 'Redacted in sanitized support copy.'
         }
         else {
-            $gate.Observed = ConvertTo-A365RedactedText $gate.Observed
+            $safeResult = @($sanitized.Results | Where-Object Id -eq $gate.Id) | Select-Object -First 1
+            $gate.Observed = if ($safeResult) { $safeResult.Observed } else { 'Details omitted from sharing copy.' }
         }
     }
 
     foreach ($issue in @($sanitized.CollectionIssues)) {
-        $issue.Message = ConvertTo-A365RedactedText $issue.Message
+        $issue.Message = "Diagnostic omitted from sharing copy. Category: $($issue.Category)."
         if ($issue.PSObject.Properties['Operation']) {
             $issue.Operation = ConvertTo-A365RedactedText $issue.Operation
         }
@@ -3322,6 +3544,22 @@ function New-Agent365SanitizedReport {
 
     if ($sanitized.Runtime.PSObject.Properties['OutputFiles']) {
         $sanitized.Runtime.OutputFiles = @()
+    }
+    if ($sanitized.PSObject.Properties['RunSpecification']) { $sanitized.RunSpecification = $null }
+    if ($sanitized.PSObject.Properties['AnswerContext']) { $sanitized.AnswerContext = $null }
+    if ($sanitized.PSObject.Properties['AssessmentScope']) {
+        $sanitized.AssessmentScope.TargetSites = @()
+        $sanitized.AssessmentScope.Justification = 'Redacted'
+        $sanitized.AssessmentScope.Fingerprint = '0' * 64
+        foreach ($requirement in $sanitized.AssessmentScope.Requirements) {
+            if ($requirement.Id -in $sanitized.AssessmentScope.ExcludedRequirements) { $requirement.Reason = 'Explicit assessment exclusion; justification redacted' }
+        }
+    }
+    if ($sanitized.PSObject.Properties['TrustReceipt']) {
+        $sanitized.TrustReceipt.TenantTarget = 'Redacted'
+        $sanitized.TrustReceipt.Account = 'Redacted'
+        $sanitized.TrustReceipt.ClientId = 'Redacted'
+        $sanitized.TrustReceipt.ApplicationName = 'Redacted'
     }
 
     return $sanitized
@@ -3417,10 +3655,24 @@ function Invoke-Agent365Preflight {
         [string]$ClientId,
 
         [Parameter()]
-        [string]$CertificateThumbprint
+        [string]$CertificateThumbprint,
+
+        [ValidateSet('ActiveRoles', 'PIM')]
+        [string]$RolePolicy = 'ActiveRoles',
+
+        [string[]]$ExcludeRequirement = @(),
+
+        [string]$ScopeJustification,
+        [string]$DelegatedClientId,
+
+        [ValidateSet('Commercial', 'USGov', 'China')]
+        [string]$Cloud = 'Commercial'
     )
 
     $started = Get-Date
+    if ($Cloud -ne 'Commercial') { throw (New-A365SafeStartupException 'Only Commercial cloud is supported. No sign-in or tenant request was made.') }
+    if ($DelegatedClientId -and ($ClientId -or $CertificateThumbprint)) { throw (New-A365SafeStartupException 'DelegatedClientId cannot be combined with certificate app-only parameters.') }
+    if ($UseDeviceCode -and ($ClientId -or $CertificateThumbprint)) { throw (New-A365SafeStartupException 'UseDeviceCode cannot be combined with certificate app-only parameters.') }
     $profiles = @(
         @('ControlPlane') + @($Profile | Where-Object { $_ -ne 'ControlPlane' }) |
             Select-Object -Unique
@@ -3433,22 +3685,58 @@ function Invoke-Agent365Preflight {
     $guidance = Read-A365Json -Path $script:GuidancePath -Description 'Manual evidence guidance'
     $skuCatalog = Read-A365Json -Path $script:SkuCatalogPath -Description 'SKU catalog'
     $allowlist = Read-A365Json -Path $script:AllowlistPath -Description 'Operation allowlist'
+    $policy = Read-A365Json -Path (Join-Path $script:ModuleRoot 'config\assessment-policy.v2.json') -Description 'Assessment policy'
+    $configuration = Get-A365ConfigurationManifest
+    $provenance = Get-A365SourceProvenance
+    $assessmentScope = New-A365AssessmentScope -Rules $rules -Stage $Stage -Profiles $profiles -SharePointSiteUrl $SharePointSiteUrl -RolePolicy $RolePolicy -ExcludeRequirement $ExcludeRequirement -ScopeJustification $ScopeJustification
+    $profiles = @($assessmentScope.Profiles)
+    $SharePointSiteUrl = @($assessmentScope.TargetSites)
     $answers = if ($AnswersPath) { Read-A365Json -Path $AnswersPath -Description 'Answers file' } else { $null }
     $previous = if ($PreviousResultPath) { Read-A365Json -Path $PreviousResultPath -Description 'Previous result' } else { $null }
+    if ($previous -and (Get-A365Property $previous Sanitized $false)) { throw 'A sanitized report cannot be used as an evidence baseline.' }
+    if ($answers -and (Get-A365Property $answers schemaVersion '') -eq '2.0') {
+        Test-A365AnswerBundle -Bundle $answers -Previous $previous
+    }
+    if (-not $answers -and $previous -and $previous.SchemaVersion -eq '2.0') {
+        $answers = [pscustomobject]@{
+            schemaVersion = '2.0'
+            sourceReportId = $previous.ReportId
+            assessmentFingerprint = $previous.AssessmentScope.Fingerprint
+            answers = @(
+                foreach ($gate in @($previous.Results | Where-Object ManualAttestable)) {
+                    $att = $gate.Attestation
+                    if (-not $att.Submitted) { continue }
+                    [pscustomobject]@{
+                        id = $gate.Id; answer = $att.Answer; owner = $att.Owner
+                        evidenceReference = $att.EvidenceReference; notes = $att.Notes
+                        answeredAtUtc = $att.AnsweredAtUtc; modifiedAtUtc = $att.ModifiedAtUtc
+                        justification = $att.Justification; binding = $att.Binding
+                        reviewDecision = $att.ReviewDecision
+                    }
+                }
+            )
+        }
+    }
 
     Test-A365GuidanceContract -Rules $rules -Guidance $guidance
     [object[]]$attestationDefinitions = @(
-        Get-A365AttestationDefinitions -Rules $rules -Profiles $profiles -Guidance $guidance -IncludeAllProfiles
+        Get-A365AttestationDefinitions -Rules $rules -Profiles $profiles -Guidance $guidance -IncludeAllProfiles -AssessmentScope $assessmentScope
     )
     if ($answers) {
         Test-A365AnswersInput `
             -Answers $answers `
             -Definitions $attestationDefinitions `
             -Rules $rules
+        if ($AnswersPath) {
+            $answerSchema = [IO.File]::ReadAllText((Join-Path $script:ModuleRoot 'schema\agent365-preflight-answers.schema.json'))
+            if (-not ((Get-Content -LiteralPath $AnswersPath -Raw) | Test-Json -Schema $answerSchema -ErrorAction Stop)) {
+                throw 'Answers file does not match the versioned schema.'
+            }
+        }
     }
 
-    if ($previous -and (Get-A365Property -InputObject $previous -Name 'SchemaVersion' -Default '') -notin @('1.0', '1.1', '1.2', '1.3')) {
-        throw 'Previous result SchemaVersion must be 1.0, 1.1, 1.2, or 1.3.'
+    if ($previous -and (Get-A365Property -InputObject $previous -Name 'SchemaVersion' -Default '') -notin @('1.0', '1.1', '1.2', '1.3', '2.0')) {
+        throw 'Unsupported previous result SchemaVersion.'
     }
     if ($previous -and $null -eq $previous.PSObject.Properties['Results']) {
         throw 'Previous result must contain a Results array.'
@@ -3460,7 +3748,7 @@ function Invoke-Agent365Preflight {
     $resolvedOutputPath = (Resolve-Path -LiteralPath $OutputPath).Path
 
     [object[]]$scopes = @(
-        Get-Agent365RequiredScopes -Profile $profiles -Collector $collectors
+        Get-Agent365RequiredScopes -Profile $profiles -Collector $collectors -RolePolicy $RolePolicy
     )
     Write-Host 'Microsoft Graph permissions requested by this run:'
     foreach ($scope in $scopes) {
@@ -3469,18 +3757,23 @@ function Invoke-Agent365Preflight {
     if ($FixturePath) {
         Write-Host 'Fixture mode: no authentication or tenant request will occur.'
     }
+    $trustReceipt = New-A365TrustReceipt -Scopes $scopes -TenantTarget $TenantId -ClientId $ClientId -DelegatedClientId $DelegatedClientId -FixtureMode ([bool]$FixturePath) -Policy $policy -Allowlist $allowlist
+    if (-not $FixturePath) { Write-A365TrustReceipt -Receipt $trustReceipt }
 
     $issues = [System.Collections.Generic.List[object]]::new()
     $evidence = if ($FixturePath) {
         Read-A365Json -Path $FixturePath -Description 'Fixture file'
     }
     else {
-        Get-A365LiveEvidence -Profiles $profiles -Collectors $collectors -Scopes $scopes -SkuCatalog $skuCatalog -Allowlist $allowlist -Issues $issues -InstallDependencies:$InstallDependencies -SharePointSiteUrl $SharePointSiteUrl -AuditWindowDays $AuditWindowDays -AuditQueryTimeoutSeconds $AuditQueryTimeoutSeconds -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint -UseDeviceCode:$UseDeviceCode
+        Get-A365LiveEvidence -Profiles $profiles -Collectors $collectors -Scopes $scopes -SkuCatalog $skuCatalog -Allowlist $allowlist -Issues $issues -InstallDependencies:$InstallDependencies -SharePointSiteUrl $SharePointSiteUrl -AuditWindowDays $AuditWindowDays -AuditQueryTimeoutSeconds $AuditQueryTimeoutSeconds -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint -UseDeviceCode:$UseDeviceCode -DelegatedClientId $DelegatedClientId -RolePolicy $RolePolicy
     }
 
     $fixtureIssues = @(Get-A365Property -InputObject $evidence -Name 'collectionIssues' -Default @())
-    $evaluation = Get-A365Evaluation -Evidence $evidence -Rules $rules -Guidance $guidance -SkuCatalog $skuCatalog -Profiles $profiles -Collectors $collectors -Answers $answers
+    $evidenceContext = New-A365EvidenceContext -Scope $assessmentScope -Evidence $evidence -Configuration $configuration -Policy $policy
+    $evaluation = Get-A365Evaluation -Evidence $evidence -Rules $rules -Guidance $guidance -SkuCatalog $skuCatalog -Profiles $profiles -Collectors $collectors -Answers $answers -AssessmentScope $assessmentScope -EvidenceContext $evidenceContext
     $results = @($evaluation.Results)
+    $staleRule = Get-A365RuleFreshnessResult -Policy $policy -Stage $Stage
+    if ($staleRule) { $results += $staleRule }
     $manualAttestations = @($evaluation.ManualAttestations)
     $passCriteria = Get-A365PassCriteria -Results $results
     $coverage = Get-A365Coverage -Results $results
@@ -3488,6 +3781,12 @@ function Invoke-Agent365Preflight {
     $pathToReady = Get-A365PathToReady -Results $results -PassCriteria $passCriteria
     $manuallyAttestableGates = @(Get-A365ManuallyAttestableGates -Results $results)
     $authenticationEvidence = Get-A365Property -InputObject $evidence -Name 'authentication' -Default ([pscustomobject]@{})
+    $effectiveDelegatedClient = if ($DelegatedClientId) { $DelegatedClientId } elseif (-not $ClientId) { Get-A365Property $authenticationEvidence clientId '' } else { '' }
+    $trustReceipt.Account = Get-A365Property $authenticationEvidence account
+    $trustReceipt.ClientId = Get-A365Property $authenticationEvidence clientId $trustReceipt.ClientId
+    $trustReceipt.ApplicationName = Get-A365Property $authenticationEvidence appName $trustReceipt.ApplicationName
+    $trustReceipt.ContextScope = Get-A365Property $authenticationEvidence contextScope 'Process'
+    $trustReceipt.ReusedContext = [bool](Get-A365Property $authenticationEvidence reusedExistingContext $false)
     $grantedScopes = @(Get-A365Property -InputObject $authenticationEvidence -Name 'grantedScopes' -Default @())
     $missingScopes = @($scopes | Where-Object { $_ -notin $grantedScopes })
     $authMode = [string](Get-A365Property -InputObject $authenticationEvidence -Name 'mode' -Default 'Unavailable')
@@ -3511,12 +3810,13 @@ function Invoke-Agent365Preflight {
         matchedVerifiedDomain = $null
     })
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $reportId = "Agent365Preflight-$stamp"
+    $reportId = "Agent365Preflight-$stamp-$([Guid]::NewGuid().ToString('N').Substring(0,8))"
     $jsonPath = Join-Path $resolvedOutputPath "$reportId.json"
     $htmlPath = Join-Path $resolvedOutputPath "$reportId.html"
     $sanitizedJsonPath = if ($IncludeSanitizedCopy) { Join-Path $resolvedOutputPath "$reportId-sanitized.json" } else { $null }
     $sanitizedHtmlPath = if ($IncludeSanitizedCopy) { Join-Path $resolvedOutputPath "$reportId-sanitized.html" } else { $null }
-    $resumeScriptPath = Join-Path $resolvedOutputPath 'Resume-Agent365Preflight.ps1'
+    $resumeScriptPath = Join-Path $resolvedOutputPath "Resume-$reportId.ps1"
+    $latestResumeScriptPath = Join-Path $resolvedOutputPath 'Resume-Agent365Preflight.ps1'
     $answerFileName = "$reportId-answers.json"
     $downloadsPath = Get-A365DownloadsPath
     $answerPath = if ($downloadsPath) {
@@ -3533,7 +3833,7 @@ function Invoke-Agent365Preflight {
         -AnswerFileName $answerFileName `
         -OutputPath $resolvedOutputPath
     $report = [pscustomobject][ordered]@{
-        SchemaVersion = '1.3'
+        SchemaVersion = '2.0'
         ReportId = $reportId
         ToolVersion = $script:ToolVersion
         GeneratedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
@@ -3544,6 +3844,42 @@ function Invoke-Agent365Preflight {
         Stage = $Stage
         Profiles = $profiles
         Collectors = $collectors
+        AssessmentScope = $assessmentScope
+        CollectionScope = [pscustomobject]@{
+            Version = '2.0'
+            Requested = $collectors
+            Mode = if ($FixturePath) { 'Synthetic fixture' } else { 'Live adapters' }
+            Ran = if ($FixturePath) { @() } else { @(Get-A365Property $evidence collectorsRan @()) }
+            Simulated = if ($FixturePath) { @($collectors) } else { @() }
+        }
+        ConfigurationManifest = $configuration
+        TrustReceipt = $trustReceipt
+        SourceProvenance = $provenance
+        RuleFreshness = [pscustomobject]@{
+            Owner = $policy.owner; ValidThrough = $policy.validThrough
+            ReviewCadenceDays = $policy.reviewCadenceDays
+            State = if ($staleRule.Status -ne 'Passed') { 'Expired' } else { 'Current' }
+        }
+        AnswerContext = [pscustomobject]@{
+            SchemaVersion = '2.0'; SourceReportId = $reportId
+            AssessmentFingerprint = $assessmentScope.Fingerprint
+        }
+        RunSpecification = [pscustomobject][ordered]@{
+            Version = '2.0'; ResourceVersion = $script:ToolVersion
+            SourceProvenance = $provenance
+            Stage = $Stage; Profiles = $profiles; AssessmentScope = $assessmentScope
+            Collectors = $collectors; TargetSites = @($SharePointSiteUrl)
+            TenantTarget = if ($TenantId) { $TenantId } else { Get-A365Property $tenantEvidence tenantId }
+            AuthenticationMode = if ($ClientId -or $CertificateThumbprint) { 'CertificateAppOnly' } else { 'InteractiveDelegated' }
+            ClientId = $ClientId; UseDeviceCode = [bool]$UseDeviceCode
+            DelegatedClientId = $effectiveDelegatedClient
+            Cloud = $Cloud
+            AuditWindowDays = $AuditWindowDays; AuditQueryTimeoutSeconds = $AuditQueryTimeoutSeconds
+            ConfigurationManifest = $configuration
+            FixtureMode = [bool]$FixturePath
+            FixturePath = if ($FixturePath) { (Resolve-Path -LiteralPath $FixturePath).Path } else { $null }
+            IncludeSanitizedCopy = [bool]$IncludeSanitizedCopy
+        }
         Sanitized = $false
         BetaEnabled = [bool]$IncludeBeta
         FixtureMode = [bool]$FixturePath
@@ -3628,7 +3964,7 @@ function Invoke-Agent365Preflight {
 
     $report.Drift = Compare-Agent365PreflightResult -Current $report -Previous $previous
 
-    $outputFiles = @($htmlPath, $jsonPath, $resumeScriptPath)
+    $outputFiles = @($htmlPath, $jsonPath, $resumeScriptPath, $latestResumeScriptPath)
     if ($IncludeSanitizedCopy) {
         $outputFiles += @($sanitizedHtmlPath, $sanitizedJsonPath)
     }
@@ -3638,13 +3974,14 @@ function Invoke-Agent365Preflight {
         -Collectors $collectors `
         -AuditWindowDays $AuditWindowDays `
         -AuditQueryTimeoutSeconds $AuditQueryTimeoutSeconds `
-        -TenantId $TenantId `
+        -TenantId $report.RunSpecification.TenantTarget `
         -CurrentJsonPath $jsonPath `
         -EntryScriptPath $entryScriptPath `
         -AnswerPath $answerPath `
         -OutputPath $resolvedOutputPath `
         -IncludeSanitizedCopy ([bool]$IncludeSanitizedCopy) `
-        -UseDeviceCode ([bool]$UseDeviceCode)
+        -UseDeviceCode ([bool]$UseDeviceCode) `
+        -RunSpecification $report.RunSpecification
     $report.Runtime.OutputFiles = $outputFiles
     $report.Runtime.DurationSeconds = [Math]::Round(((Get-Date) - $started).TotalSeconds, 2)
 
@@ -3653,6 +3990,7 @@ function Invoke-Agent365Preflight {
         -LauncherPath $launcherPath `
         -PreviousResultPath $jsonPath `
         -UseDeviceCode ([bool]$UseDeviceCode)
+    $null = Write-A365ResumeScript -Path $latestResumeScriptPath -LauncherPath $launcherPath -PreviousResultPath $jsonPath -UseDeviceCode ([bool]$UseDeviceCode)
     $jsonPath = Write-A365JsonFile -InputObject $report -Path $jsonPath
     $htmlPath = New-Agent365PreflightHtml -Report $report -Path $htmlPath
 

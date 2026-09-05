@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "locale": "en",
+  "contract": "Named primary journey strings. Machine statuses, IDs and UTC timestamps are invariant. Rule and guidance prose remains in its versioned JSON contracts.",
+  "strings": {
+    "artifactWorking": "Full working report - Private",
+    "artifactSharing": "Sanitized sharing copy - Read-only",
+    "evidenceWorkspace": "Evidence workspace",
+    "workspaceIntro": "Work one gate at a time. Evidence text stays in memory until you export it. Only the last gate ID is saved locally.",
+    "fixCollection": "Fix collection",
+    "resolveBlockers": "Resolve blockers",
+    "startRemediation": "Start remediation",
+    "reviewAdvisories": "Review advisories",
+    "viewEvidenceSummary": "View evidence summary",
+    "emptyGates": "No gates match this filter.",
+    "exportDraft": "Export draft",
+    "downloadAnswers": "Download answers JSON",
+    "importEvidence": "Import draft or owner bundle",
+    "draftExported": "Draft exported locally. Import it to continue; it is not approved evidence.",
+    "answersExported": "Answers exported. Run the report-linked resume helper and choose the intended revision if several downloads exist.",
+    "bundleImported": "Context-bound bundle imported into memory. Review and export before resuming.",
+    "unansweredGuidance": "Unanswered. Review the guidance before approving."
+  }
+}

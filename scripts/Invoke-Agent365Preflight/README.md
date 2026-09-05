@@ -5,9 +5,9 @@ category: "PowerShell"
 summary: "Run a read-only Agent 365 technical pre-flight and generate self-contained HTML and JSON reports."
 author:
   - "Microsoft FastTrack"
-version: 1.4.1
+version: 2.0.0
 published: 2026-09-01
-updated: 2026-09-04
+updated: 2026-09-05
 tags:
   - agent-365
   - readiness
@@ -40,6 +40,19 @@ prerequisites:
 # Microsoft FastTrack Open Source - Invoke-Agent365Preflight
 
 ## START HERE
+
+**Commercial cloud only. Community/as-is software, not a certification or a support entitlement.**
+Arrange consent, roles, target scope and evidence owners before download; organizational approvals
+can take days. Running the tool normally takes minutes and depends on tenant size and throttling.
+
+Read [START-HERE.txt](START-HERE.txt) before launching. Verify the ZIP SHA256 against an independently
+published approved release checksum. This release is unsigned; a hash alone does not establish
+publisher identity. When policy permits, unblock the downloaded ZIP through Windows Properties
+before extraction. Do not use a blanket execution-policy bypass.
+
+`Test-Agent365Runtime.ps1` works in Windows PowerShell 5.1 and detects PowerShell 7 without downloading
+or executing an installer. In PowerShell 7, run `Test-Agent365Package.ps1` in the extracted package
+to validate the file manifest. `-RequireSigned` intentionally rejects this unsigned release.
 
 Choose the acquisition path available to you:
 
@@ -85,8 +98,10 @@ reports, browser artifacts, and customer evidence.
 
 `Invoke-Agent365Preflight` is a read-only Microsoft Agent 365 technical pre-flight checker. It
 collects evidence, applies versioned public rules, and creates a self-contained HTML report plus a
-JSON sidecar. It never configures the tenant, grants consent, assigns licenses, changes policies,
-or deploys agents.
+JSON sidecar. It never performs tenant configuration remediation, assigns licenses, changes policies,
+or deploys agents. Interactive consent can establish persistent application grants. Defender hunting
+and Purview Audit Search use the disclosed query POST operations; Audit Search creates a retained
+server-side query job. See [OFFBOARDING.md](OFFBOARDING.md).
 
 > This output is a technical pre-flight, not a security or compliance certification. A passed
 > result means the documented evidence was collected and met that rule. It does not prove that a
@@ -125,8 +140,9 @@ that auditing is disabled.
 
 1. **Load inputs.** The script validates PowerShell, versioned rules, SKU mappings, the operation
    allowlist, optional manual answers, and an optional previous report.
-2. **Build the collection plan.** `TenantFoundation` is always included. The script adds the selected
-   collectors and derives the exact Microsoft Graph scopes required for that run.
+2. **Separate assessment from collection.** Versioned `AssessmentScope` records stage, profiles,
+   targets, role policy and applicable requirements. `CollectionScope` records selected adapters.
+   `TenantFoundation` is always included; scope omission never means that a requirement passed.
 3. **Show permissions before sign-in.** The complete scope list is written to the console before
    interactive authentication. Fixture mode stops here and makes no tenant request.
 4. **Collect read-only evidence.** Microsoft Graph requests and optional workload commands must match
@@ -190,16 +206,34 @@ no-JavaScript output. Microsoft Learn links support the in-report steps rather t
 
 Guidance helps the accountable customer reviewer make and document a defensible decision. It does
 not approve the control, infer an answer, replace customer policy, or change the current verdict.
-Only a valid answers file supplied on a rerun can apply manual evidence.
+Only a current, context-bound answers file supplied on a rerun can apply new manual evidence.
+Automated-only recollection can carry previously accepted answers with their original approval dates;
+it never invents a new approval.
 
 Each downloaded answers file uses the report-linked name
-`Agent365Preflight-<run-id>-answers.json`. The report and generated resume helper look for that
-exact name, so the customer does not need to move the browser download or edit a command.
+`Agent365Preflight-<run-id>-answers.json`. Resume checks the embedded source report ID, assessment
+fingerprint and content hash, including browser suffixes such as `(1)`. Multiple matching revisions
+require an explicit choice; the exact-name file does not win over a corrected download.
 
-Answers schema `1.1` adds rule and profile gates, timestamps, and N/A justification while accepting
-legacy `1.0` files. The sample includes every static gate and every supported stable profile ID.
-Remove unselected profile entries or leave them in the template; only selected, applicable gates are
-evaluated.
+Answers schema `2.0` binds each gate to the source report, tenant, assessment, rule/guidance semantics
+and stable relevant automated observations. Legacy `1.0`/`1.1` files are unbound drafts and cannot
+satisfy a positive gate. The sample is an illustrative legacy template, not an approval artifact.
+Use the Evidence workspace for bound exports. Choose retain, revalidate or edit explicitly.
+Future or out-of-order timestamps are rejected. Approval expires after 30 days by default, or 14 days
+for hybrid security/data gates, as configured in `config/assessment-policy.v2.json`.
+Blueprint permission metadata and Conditional Access policy ID/state have aggregate fingerprints,
+so same-count changes in those collected fields also require revalidation. Configuration that the
+tool does not collect cannot be change-detected; owners must revalidate after those changes even
+when the displayed counts are unchanged.
+
+Draft export/import supports local multi-owner work. Bundles are bound to one report and assessment;
+conflicting concurrent edits stop the entire merge instead of overwriting another owner's evidence.
+Text is kept in memory, never automatically saved. Only navigation, theme and local task marks use
+browser storage.
+
+Bundle SHA256 detects corruption and distinguishes revisions; it is **not an owner signature**.
+Treat local answers and previous reports as operator-controlled evidence, not independently
+authenticated approvals. Retain cannot edit prior approval fields or renew their dates.
 
 ## Safety and data handling
 
@@ -270,7 +304,7 @@ tenant and enforce the commercial-cloud availability gate.
 | --- | --- |
 | `TenantFoundation` | `Organization.Read.All` |
 | `Licensing` | `Organization.Read.All`, `User.Read.All` |
-| `Roles` | `RoleManagement.Read.Directory`, `RoleEligibilitySchedule.Read.Directory` |
+| `Roles` | `RoleManagement.Read.Directory`; adds `RoleEligibilitySchedule.Read.Directory` only with `-RolePolicy PIM` |
 | `ServiceHealth` | `ServiceHealth.Read.All` |
 | `Registry` | `CopilotPackages.Read.All` |
 | `AgentIdentity` | `AgentIdentityBlueprint.Read.All`, plus `Application.Read.All` only for sponsors |
@@ -280,8 +314,8 @@ tenant and enforce the commercial-cloud availability gate.
 | `SharePoint` | No Microsoft Graph scope; uses the optional first-party module |
 
 All collectors are selected by default for backward-compatible complete coverage. Use `-Collector`
-to request only the adapters needed for the run. Checks owned by an unselected collector are
-reported as `NotApplicable`, not as passed.
+to request only the adapters needed for the run. Checks owned by an unselected collector remain applicable and become `NotAssessed`, never passed or
+`NotApplicable`. Manual-only gates remain applicable even when the owning collector is omitted.
 
 The report separates a missing delegated scope from tenant consent, user role, license, workload
 availability, HTTP errors, and schema errors where the service response allows that distinction.
@@ -289,8 +323,28 @@ Use the least-privileged supported role for each check. See each result's requir
 role.
 
 If the current process already has a delegated Graph context for an actual tenant and contains every
-requested scope, the script reuses it. A context with missing scopes, the wrong requested tenant
+requested scope, the script reuses it only when it is process-scoped, Commercial, and matches the
+selected custom client when supplied. A context with missing scopes, the wrong requested tenant
 GUID, or app-only authentication is never reused for a delegated run.
+
+Use `-DelegatedClientId <customer-app-id>` for a customer-owned delegated client configured using
+[public Graph PowerShell custom-client guidance](https://learn.microsoft.com/powershell/microsoftgraph/authentication-commands).
+This parameter never selects app-only mode. `-ClientId` retains its certificate app-only meaning.
+Existing grants versus newly created grants are reported as unknown unless independently verified;
+token scopes are not a consent inventory. The trust receipt describes the maximum grant boundary,
+which is broader than the aggregate data retained by this script.
+
+### Assessment scope is not collection scope
+
+Recommended mode assesses the complete ControlPlane baseline. Advanced mode can explicitly exclude
+non-foundation requirement IDs using `-ExcludeRequirement` and a required `-ScopeJustification`.
+That creates a different assessment fingerprint and cannot be presented as an improvement on the
+previous scope. Foundation/licensing gates cannot be excluded.
+
+Removing a collector never increases satisfied requirements or evidence coverage. Unknown evidence
+is not a known blocker, but also is not improvement or a pass. `NotAssessed` stays in the denominator.
+SharePoint becomes applicable when either SharePointAgents or any target site is selected; it cannot
+then be attested not applicable. Active-role policy is the default; PIM is assessed only when chosen.
 
 ### Certificate app-only mode
 
@@ -403,7 +457,7 @@ After reviewing and fixing the full report, download the guided answers file and
 & "C:\Temp\Agent365Preflight\Resume-Agent365Preflight.ps1"
 ```
 
-The helper contains no secrets. It locates the exact report-linked answers file in Downloads or the
+The helper contains no secrets. It locates context-bound report-linked answer revisions in Downloads or the
 output folder, validates it, reuses the report's stage, profiles, collectors, audit settings, and
 tenant target, and opens the new full report after the rerun.
 
@@ -446,7 +500,7 @@ Fixture mode never authenticates or calls a tenant. It is suitable for demos and
 | `-Mode` | `Guided`, `Sample`, `Recommended`, `Resume`, or `Advanced`. No argument starts the wizard. |
 | `-Authentication` | `Auto`, `Interactive`, or `DeviceCode`. Auto favors normal interactive WAM in a native Windows terminal. |
 | `-PreviousResultPath` | Full report JSON used by Resume mode. Sanitized reports are rejected. |
-| `-AnswersPath` | Optional explicit answers path. Otherwise Resume finds the exact report-linked filename. |
+| `-AnswersPath` | Explicit bound answers revision. Otherwise Resume discovers matching embedded report/scope IDs, including browser suffixes. |
 | `-OpenReport` | `Ask`, `Always`, or `Never`. Only the full local report is opened. |
 | `-NonInteractive` | Uses supplied parameters without prompts. Intended for repeatable tests and automation. |
 | `-InstallDependencies` | Explicit opt-in to install Microsoft.Graph.Authentication for CurrentUser. |
@@ -532,7 +586,8 @@ Passing Pilot remains `Ready for pilot`; passing Production remains
 | `ActionRequired` | The finding must be resolved before passing. Until then, the overall verdict is `Incomplete`. |
 | `Advisory` | Review the observation and decide whether it affects the pilot. |
 | `ManualValidation` | A person must validate a condition that the supported read interfaces cannot prove. |
-| `NotApplicable` | The collector, profile, cloud, or scenario does not apply to this run. It is not a pass. |
+| `NotApplicable` | The versioned assessment excludes the profile/scenario, or a documented contextual predicate makes it inapplicable. Collector omission is never N/A. |
+| `NotAssessed` | An applicable requirement was not collected. It prevents passing and does not count as collected or satisfied. |
 | `NotAuthorized` | The collector could not read evidence because scope, consent, or role access was insufficient. |
 | `Error` | Collection failed because of an API, schema, timeout, throttling, or other technical error. |
 
@@ -548,9 +603,9 @@ Passing Pilot remains `Ready for pilot`; passing Production remains
 
 | Exit code | Meaning |
 | --- | --- |
-| `0` | All pass gates are clear: zero Blocker, ActionRequired, NotAuthorized, Error, and unresolved required manual gates. |
+| `0` | All pass gates are clear: zero Blocker, ActionRequired, NotAssessed, NotAuthorized, Error, and unresolved required manual gates. |
 | `1` | One or more blockers were found. |
-| `2` | One or more ActionRequired, NotAuthorized, Error, unresolved required manual gates, or other collection gaps prevent passing. |
+| `2` | One or more ActionRequired, NotAssessed, NotAuthorized, Error, unresolved required manual gates, or other collection gaps prevent passing. |
 | `3` | Invalid execution, input, or unrecoverable startup failure. |
 
 ## Interactive report experience
@@ -560,7 +615,8 @@ progressive disclosure for detailed findings:
 
 - Use the Readiness Command Center and **Open Path to Ready** to see exactly what prevents passing.
 - Use the local-only checklist to plan work without changing the official verdict.
-- Build and download a validated answers JSON file in memory; no evidence is sent over a network.
+- Use **Evidence workspace** to work one gate at a time, filter unanswered/answered/revalidation/expired
+  evidence, retain original approval dates, and export/import drafts. No evidence is sent over a network.
 - Open **Review guidance** beside any answer to use the acceptance criteria, evidence checklist, and
   verification steps without leaving the report.
 - Copy the safe rerun command or download the remediation checklist for offline planning.
@@ -572,8 +628,8 @@ progressive disclosure for detailed findings:
   mobile bottom sheet.
 - Use keyboard navigation, the close button, backdrop, or `Escape` to close details. Focus returns
   to the finding that opened the blade.
-- Print or save as PDF with all finding evidence expanded inline. Interactive controls and the blade
-  are omitted from print.
+- Print or save as PDF with all findings expanded, regardless of active search or filters.
+  The previous screen state is restored after printing. Interactive controls are omitted.
 
 The report requires no remote fonts, styles, scripts, images, or libraries. Without JavaScript, all
 verdict, Path to Ready, rerun, finding, remediation, and evidence content remains visible and
@@ -607,14 +663,54 @@ Pass a previous full JSON result with `-PreviousResultPath`. The report compares
 shows:
 
 - **Regressions:** the current status is more severe than the previous status.
-- **Resolved blockers:** a previous blocker is no longer a blocker.
-- **Resolved required actions:** a previous ActionRequired or ManualValidation gate is now passed,
-  advisory, or explicitly permitted as not applicable.
+- **Resolved blockers:** a previous blocker is now Passed or Advisory.
+- **Resolved required actions:** a previous ActionRequired or ManualValidation gate is now Passed or Advisory.
+- **Not reassessed:** evidence became NotAssessed, NotAuthorized, Error or NotApplicable. This is never resolution.
 - **Other changes:** the status changed without meeting either condition above.
 
-The current report schema is `1.3`. Baseline comparison accepts report schema `1.0` through `1.3`
-so earlier results can be carried forward. It detects status drift; it does not prove that
-configuration changes caused the drift.
+The report and answer contracts are `2.0`. Comparison requires compatible full reports: tenant/cloud,
+fixture/live mode, assessment fingerprint (including targets), collector intent, configuration
+semantics and major schema must match. Otherwise the report says ComparisonUnavailable and makes no
+resolution claim. Legacy reports can be inspected but cannot support faithful resume or scored drift.
+Status drift does not prove that configuration changes caused the result.
+
+`RunSpecification` persists stage, profiles, assessment, collectors, target sites, tenant, auth mode,
+audit settings and configuration hashes. App-only resume requires the original client and a newly
+supplied certificate thumbprint; no certificate material is stored. Use `-AutomatedOnly` for
+recollection without new answers, `-DownloadsPath` for a redirected folder, or `-AnswersPath` to
+choose a revision explicitly. `AGENT365_DOWNLOADS` is an optional local discovery override.
+
+Each report's copyable command targets its immutable `Resume-<report-id>.ps1` helper.
+`Resume-Agent365Preflight.ps1` is a convenience entry for the latest run only; older reports keep
+their original source binding even after later runs write a new latest helper.
+
+## Rule validity and updates
+
+Rules, guidance, SKU catalog, allowlist and assessment policy are SHA256-manifested in full reports
+and packages. `config/assessment-policy.v2.json` names the owner, 30-day review cadence, validity and
+manual gate expiry policy. Expired critical rules make Pilot Incomplete and Production Blocked.
+No telemetry, silent update check, download or remote execution occurs. Release owners review current
+public sources and publish a new version; see [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md).
+For an explicit, opt-in update check, open the upstream
+[VERSION file](https://github.com/microsoft/FastTrack/blob/master/scripts/Invoke-Agent365Preflight/VERSION)
+and compare it with your local `VERSION`. Source availability is not proof of a published package;
+obtain any replacement through your approved release channel. No update check runs inside collection.
+
+## Supported environment and limitations
+
+| Surface | Supported boundary |
+| --- | --- |
+| Runtime | PowerShell 7.0+ on a currently supported OS/runtime. Windows PowerShell 5.1 supports only the runtime readiness script. Use a supported PowerShell release for live use. |
+| Windows | ARM64 and x64 PowerShell; native Windows Terminal preferred for WAM. Graph SDK 2.20.0+ is required for live collection. |
+| macOS/Linux | PowerShell 7 Graph-only collection; device code where interactive authentication is unavailable. Optional Windows-only SharePoint module evidence remains manual. |
+| Browsers | Current Chromium/Edge, Firefox and WebKit/Safari-compatible engines. JavaScript enables the editor; complete report/guidance remain readable without it. Actual native Safari/OS coverage must be recorded by the release owner. |
+| Cloud | Commercial only; USGov/China selections stop before sign-in or tenant requests. |
+| Files and language | Local paths with spaces/non-English characters and redirected Downloads supported. Machine timestamps stay UTC; browser display follows local locale. English UI resource contract is the localization foundation, not a claim of translated support. |
+| Support | Community/as-is via the resource repository. No SLA or certification. Follow the API-break response in the release checklist. |
+
+Authentication can prompt for admin consent and persistent grants; process-scoped auth does not erase
+broker/browser sign-in state. See [OFFBOARDING.md](OFFBOARDING.md) for separate local-data, session,
+dependency and administrator grant-review steps. Never automatically revoke shared Graph SDK grants.
 
 ## Troubleshooting
 

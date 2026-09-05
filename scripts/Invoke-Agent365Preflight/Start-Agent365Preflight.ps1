@@ -112,7 +112,15 @@ param(
     [switch]$NonInteractive,
 
     [Parameter()]
-    [switch]$PassThru
+    [switch]$PassThru,
+
+    [string]$DelegatedClientId,
+    [ValidateSet('ActiveRoles', 'PIM')][string]$RolePolicy = 'ActiveRoles',
+    [string[]]$ExcludeRequirement = @(),
+    [string]$ScopeJustification,
+    [ValidateSet('Commercial', 'USGov', 'China')][string]$Cloud = 'Commercial',
+    [switch]$AutomatedOnly,
+    [string]$DownloadsPath
 )
 
 $script:A365LauncherRoot = $PSScriptRoot
@@ -248,7 +256,7 @@ function Test-A365LauncherGraphReachability {
 }
 
 function Get-A365LauncherEnvironment {
-    param([Parameter(Mandatory)][string]$OutputPath)
+    param([Parameter(Mandatory)][string]$OutputPath, [switch]$Offline)
 
     $graphModule = Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
         Sort-Object Version -Descending |
@@ -274,7 +282,7 @@ function Get-A365LauncherEnvironment {
         GraphModuleReady = $null -ne $graphModule -and $graphModule.Version -ge $script:A365MinimumGraphVersion
         GraphModuleVersion = if ($graphModule) { $graphModule.Version.ToString() } else { $null }
         GraphModule = $graphModule
-        GraphReachable = Test-A365LauncherGraphReachability
+        GraphReachable = if ($Offline) { $null } else { Test-A365LauncherGraphReachability }
         OutputWritable = $null -eq $writeError
         OutputPath = $resolvedOutput
         OutputError = $writeError
@@ -295,10 +303,13 @@ function Test-A365LauncherReusableContext {
     param(
         [AllowNull()][object]$Context,
         [Parameter(Mandatory)][string[]]$Scopes,
-        [AllowNull()][string]$TenantId
+        [AllowNull()][string]$TenantId,
+        [string]$DelegatedClientId
     )
 
     if ($null -eq $Context -or [string]::IsNullOrWhiteSpace([string]$Context.TenantId)) { return $false }
+    if ($Context.ContextScope -ne 'Process' -or $Context.Environment -notin @('Global', 'GlobalV2')) { return $false }
+    if ($DelegatedClientId -and $Context.ClientId -ne $DelegatedClientId) { return $false }
     if ([string]$Context.AuthType -match '(?i)appOnly|clientCredential') { return $false }
     if ([string]::IsNullOrWhiteSpace([string]$Context.Account)) { return $false }
     foreach ($scope in $Scopes) {
@@ -356,18 +367,22 @@ function Invoke-A365LauncherAuthentication {
         [Parameter(Mandatory)][string[]]$Scopes,
         [Parameter(Mandatory)][string]$TenantId,
         [Parameter(Mandatory)][ValidateSet('Interactive', 'DeviceCode')][string]$Method,
-        [switch]$NonInteractive
+        [switch]$NonInteractive,
+        [string]$DelegatedClientId
     )
 
     Import-Module Microsoft.Graph.Authentication -MinimumVersion $script:A365MinimumGraphVersion -Force -ErrorAction Stop
     $existing = Get-MgContext -ErrorAction SilentlyContinue
-    if (Test-A365LauncherReusableContext -Context $existing -Scopes $Scopes -TenantId $TenantId) {
+    if (Test-A365LauncherReusableContext -Context $existing -Scopes $Scopes -TenantId $TenantId -DelegatedClientId $DelegatedClientId) {
         Write-Host "Reusing the delegated Microsoft Graph context for $($existing.Account)." -ForegroundColor Green
         return [pscustomobject]@{ Reused = $true; Method = 'ExistingContext'; Context = $existing }
     }
 
     $currentMethod = $Method
+    $attempt = 0
     while ($true) {
+        $attempt++
+        if ($attempt -gt 5) { throw 'Authentication did not complete after five attempts. Restart the launcher after resolving the sign-in problem.' }
         if ($currentMethod -eq 'DeviceCode') {
             Write-Warning 'Device-code sign-in can provide about 120 seconds in recent Microsoft.Graph.Authentication versions.'
             Write-Host 'Be ready to open https://microsoft.com/devicelogin, enter the displayed code, and finish consent immediately.'
@@ -386,11 +401,12 @@ function Invoke-A365LauncherAuthentication {
         if ($currentMethod -eq 'DeviceCode') {
             $parameters.UseDeviceCode = $true
         }
+        if ($DelegatedClientId) { $parameters.ClientId = $DelegatedClientId }
 
         try {
             $null = Connect-MgGraph @parameters
             $context = Get-MgContext -ErrorAction Stop
-            if (-not (Test-A365LauncherReusableContext -Context $context -Scopes $Scopes -TenantId $TenantId)) {
+            if (-not (Test-A365LauncherReusableContext -Context $context -Scopes $Scopes -TenantId $TenantId -DelegatedClientId $DelegatedClientId)) {
                 throw 'Microsoft Graph sign-in completed, but the resulting delegated context does not contain the requested tenant and scopes.'
             }
             return [pscustomobject]@{ Reused = $false; Method = $currentMethod; Context = $context }
@@ -430,15 +446,20 @@ function Invoke-A365LauncherAuthentication {
 }
 
 function Test-A365AnswerFile {
-    param([Parameter(Mandatory)][string]$Path)
+    param([Parameter(Mandatory)][string]$Path, [object]$Previous)
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         throw "Answers file was not found: $Path"
     }
+    if ((Get-Item -LiteralPath $Path).Length -gt 2MB) { throw 'Answer bundle exceeds the 2 MB local safety limit.' }
     $raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
     $schema = Get-Content -LiteralPath $script:A365AnswerSchemaPath -Raw -ErrorAction Stop
     if (-not ($raw | Test-Json -Schema $schema -ErrorAction Stop)) {
         throw "Answers file does not match the public schema: $Path"
+    }
+    if ($Previous) {
+        Import-Module $script:A365ModulePath -ErrorAction Stop
+        & (Get-A365LauncherModule) { param($Path, $Report) Test-A365AnswerBundle -Bundle (Read-A365Json $Path Answers) -Previous $Report } $Path $Previous
     }
     return (Resolve-Path -LiteralPath $Path).Path
 }
@@ -453,12 +474,13 @@ function Read-A365FullReport {
     if ([IO.Path]::GetExtension($resolved) -ne '.json') {
         throw 'Resume requires the previous full JSON report.'
     }
-    $report = Get-Content -LiteralPath $resolved -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 100
+    Import-Module $script:A365ModulePath -ErrorAction Stop
+    $report = & (Get-A365LauncherModule) { param($Path) Read-A365Json $Path Report } $resolved
     if ([bool]$report.Sanitized -or [IO.Path]::GetFileName($resolved) -match '(?i)-sanitized\.json$') {
         throw 'Resume requires the full local report JSON, not the sanitized sharing copy.'
     }
-    if ([string]$report.SchemaVersion -notin @('1.0', '1.1', '1.2', '1.3')) {
-        throw "Unsupported previous report schema: $($report.SchemaVersion)"
+    if ([string]$report.SchemaVersion -ne '2.0' -or -not $report.RunSpecification) {
+        throw 'Faithful resume requires a full v2 report with RunSpecification. Start a new assessment for a legacy report.'
     }
     if ([string]$report.Stage -notin @('Pilot', 'Production')) {
         throw 'Previous report contains an invalid stage.'
@@ -476,6 +498,13 @@ function Read-A365FullReport {
     if ($auditWindow -lt 1 -or $auditWindow -gt 90 -or $auditTimeout -lt 30 -or $auditTimeout -gt 900) {
         throw 'Previous report contains unsupported audit settings.'
     }
+    $spec = $report.RunSpecification
+    if ($spec.Version -ne '2.0' -or $spec.AuthenticationMode -notin @('InteractiveDelegated', 'CertificateAppOnly') -or $spec.Cloud -ne 'Commercial') {
+        throw 'Previous RunSpecification has unsupported version, authentication, or cloud.'
+    }
+    if ($spec.Stage -ne $report.Stage -or ($spec.Profiles -join ',') -ne ($report.Profiles -join ',') -or
+        ($spec.Collectors -join ',') -ne ($report.Collectors -join ',')) { throw 'Report scope and RunSpecification disagree.' }
+    if ([int]$spec.AuditWindowDays -ne $auditWindow -or [int]$spec.AuditQueryTimeoutSeconds -ne $auditTimeout) { throw 'Report audit settings and RunSpecification disagree.' }
 
     return [pscustomobject]@{
         Path = $resolved
@@ -488,12 +517,13 @@ function Read-A365FullReport {
 function Get-A365AnswerCandidates {
     param(
         [Parameter(Mandatory)][object]$Previous,
-        [AllowNull()][string]$ExplicitAnswersPath
+        [AllowNull()][string]$ExplicitAnswersPath,
+        [string]$DownloadsPath
     )
 
     if ($ExplicitAnswersPath) {
         return @([pscustomobject]@{
-            Path = Test-A365AnswerFile -Path $ExplicitAnswersPath
+            Path = Test-A365AnswerFile -Path $ExplicitAnswersPath -Previous $Previous.Report
             LastWriteTime = (Get-Item -LiteralPath $ExplicitAnswersPath).LastWriteTime
             Source = 'Explicit'
         })
@@ -505,27 +535,34 @@ function Get-A365AnswerCandidates {
         $reportId = if ($report.ReportId) { [string]$report.ReportId } else { [IO.Path]::GetFileNameWithoutExtension($Previous.Path) }
         $answerFileName = "$reportId-answers.json"
     }
-    if ($answerFileName -notmatch '^Agent365Preflight-[0-9]{8}-[0-9]{6}-answers\.json$') {
+    if ($answerFileName -notmatch '^Agent365Preflight-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}-answers\.json$') {
         throw 'Previous report contains an invalid report-linked answers filename.'
     }
 
-    $candidatePaths = [System.Collections.Generic.List[string]]::new()
-    $candidatePaths.Add((Join-Path $Previous.Directory $answerFileName))
-    $profilePath = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
-    $downloads = if ($profilePath) { Join-Path $profilePath 'Downloads' } else { $null }
-    if ($downloads) {
-        $candidatePaths.Add((Join-Path $downloads $answerFileName))
-    }
+    Import-Module $script:A365ModulePath -ErrorAction Stop
+    $downloads = if ($DownloadsPath) { $DownloadsPath } else { & (Get-A365LauncherModule) { Get-A365DownloadsPath } }
+    $candidatePaths = @(
+        foreach ($directory in @($Previous.Directory, $downloads) | Where-Object { $_ } | Select-Object -Unique) {
+            if (Test-Path -LiteralPath $directory -PathType Container) {
+                Get-ChildItem -LiteralPath $directory -Filter '*-answers*.json' -File |
+                    Where-Object { $_.Length -le 2MB } | Select-Object -ExpandProperty FullName
+            }
+        }
+    )
 
     $candidates = [System.Collections.Generic.List[object]]::new()
     foreach ($candidatePath in @($candidatePaths | Select-Object -Unique)) {
         if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) { continue }
         try {
-            $validPath = Test-A365AnswerFile -Path $candidatePath
+            $header = & (Get-A365LauncherModule) { param($Path) Read-A365Json $Path Answers } $candidatePath
+            if (-not $header.PSObject.Properties['sourceReportId'] -or $header.sourceReportId -cne $report.ReportId) { continue }
+            $validPath = Test-A365AnswerFile -Path $candidatePath -Previous $report
             $item = Get-Item -LiteralPath $validPath
             $candidates.Add([pscustomobject]@{
                 Path = $validPath
                 LastWriteTime = $item.LastWriteTime
+                ModifiedAtUtc = $header.modifiedAtUtc
+                ContentHash = $header.contentHash
                 Source = if ($item.DirectoryName -eq $Previous.Directory) { 'OutputFolder' } else { 'Downloads' }
             })
         }
@@ -548,7 +585,7 @@ function Select-A365AnswerCandidate {
         throw 'Multiple matching answers files were found. Supply -AnswersPath to choose one.'
     }
     $labels = @($Candidates | ForEach-Object {
-        "$($_.Path) (modified $($_.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')))"
+        "$($_.Path) (file modified $($_.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')); bundle modified $($_.ModifiedAtUtc); SHA256 $($_.ContentHash))"
     })
     $choice = Read-A365JourneyChoice -Prompt 'Choose the answers file' -Choices $labels
     return $Candidates[$choice - 1].Path
@@ -558,13 +595,15 @@ function Get-A365ResumePlan {
     param(
         [Parameter(Mandatory)][string]$PreviousResultPath,
         [AllowNull()][string]$AnswersPath,
-        [switch]$NonInteractive
+        [switch]$NonInteractive,
+        [switch]$AutomatedOnly,
+        [string]$DownloadsPath
     )
 
     $previous = Read-A365FullReport -Path $PreviousResultPath
-    $candidates = @(Get-A365AnswerCandidates -Previous $previous -ExplicitAnswersPath $AnswersPath)
+    [object[]]$candidates = @(if (-not $AutomatedOnly) { Get-A365AnswerCandidates -Previous $previous -ExplicitAnswersPath $AnswersPath -DownloadsPath $DownloadsPath })
     $selectedAnswers = Select-A365AnswerCandidate -Candidates $candidates -NonInteractive:$NonInteractive
-    if (-not $selectedAnswers) {
+    if (-not $selectedAnswers -and -not $AutomatedOnly) {
         $expected = [string]$previous.Report.Resume.AnswerFileName
         if ($NonInteractive) {
             throw "No matching answers file was found. Download $expected from the full report or supply -AnswersPath."
@@ -575,37 +614,43 @@ function Get-A365ResumePlan {
             (Read-A365JourneyYesNo -Prompt 'Open the previous full working report now?' -Default $true)) {
             Open-A365FullReport -Path $previous.HtmlPath
         }
-        if (-not (Read-A365JourneyYesNo -Prompt 'Search again now?' -Default $true)) {
-            throw 'Resume stopped until the report-linked answers file is available.'
-        }
-        $candidates = @(Get-A365AnswerCandidates -Previous $previous)
-        $selectedAnswers = Select-A365AnswerCandidate -Candidates $candidates
+        $manualPath = Read-Host 'Paste the answers JSON path (redirected Downloads or another folder), or leave blank to search again'
+        $candidates = @(Get-A365AnswerCandidates -Previous $previous -ExplicitAnswersPath $manualPath -DownloadsPath $DownloadsPath)
+        $selectedAnswers = Select-A365AnswerCandidate -Candidates $candidates -NonInteractive:$NonInteractive
         if (-not $selectedAnswers) {
             throw "The report-linked answers file is still not available: $expected"
         }
     }
 
     $report = $previous.Report
-    $tenantTarget = [string]$report.Rerun.TenantTarget
+    $spec = $report.RunSpecification
+    $tenantTarget = [string]$spec.TenantTarget
     if (-not $report.FixtureMode -and -not (Test-A365TenantTargetFormat -Value $tenantTarget)) {
         throw 'Previous report does not contain a valid tenant target for a live resume.'
     }
     return [pscustomobject]@{
         Mode = 'Resume'
-        FixturePath = if ($report.FixtureMode) { Join-Path $script:A365LauncherRoot 'fixtures\commercial-ready.json' } else { $null }
+        FixturePath = if ($report.FixtureMode) { $spec.FixturePath } else { $null }
         TenantId = $tenantTarget
         Stage = [string]$report.Stage
         Profiles = @($report.Profiles)
         Collectors = @($report.Collectors)
-        AuditWindowDays = [int]$report.Runtime.AuditWindowDays
-        AuditQueryTimeoutSeconds = [int]$report.Runtime.AuditQueryTimeoutSeconds
-        IncludeSanitizedCopy = [bool]$report.Rerun.IncludeSanitizedCopy
-        UseDeviceCode = [bool]$report.Rerun.UseDeviceCode
+        AuditWindowDays = [int]$spec.AuditWindowDays
+        AuditQueryTimeoutSeconds = [int]$spec.AuditQueryTimeoutSeconds
+        IncludeSanitizedCopy = [bool]$spec.IncludeSanitizedCopy
+        UseDeviceCode = [bool]$spec.UseDeviceCode
         AnswersPath = $selectedAnswers
         PreviousResultPath = $previous.Path
         OutputPath = $previous.Directory
         PreviousHtmlPath = $previous.HtmlPath
         IsFirstRun = $false
+        TargetSites = @($spec.TargetSites)
+        AuthenticationMode = $spec.AuthenticationMode
+        ClientId = $spec.ClientId
+        DelegatedClientId = $spec.DelegatedClientId
+        RolePolicy = $spec.AssessmentScope.RolePolicy
+        ExcludeRequirement = @($spec.AssessmentScope.ExcludedRequirements)
+        ScopeJustification = $spec.AssessmentScope.Justification
     }
 }
 
@@ -619,6 +664,13 @@ function Invoke-A365JourneyEngine {
     param([Parameter(Mandatory)][hashtable]$Parameters)
 
     return Invoke-Agent365Preflight @Parameters
+}
+
+function Get-A365LauncherModule {
+    $expectedPath = Join-Path $script:A365LauncherRoot 'Agent365Preflight.psm1'
+    $module = Get-Module Agent365Preflight | Where-Object Path -eq $expectedPath | Select-Object -First 1
+    if (-not $module) { throw "The module belonging to this launcher is not loaded: $expectedPath" }
+    return $module
 }
 
 function Invoke-A365CustomerJourney {
@@ -642,14 +694,26 @@ function Invoke-A365CustomerJourney {
         [string]$ClientId,
         [string]$CertificateThumbprint,
         [ValidateSet('Ask', 'Always', 'Never')][string]$OpenReport = 'Ask',
-        [switch]$NonInteractive
+        [switch]$NonInteractive,
+        [string]$DelegatedClientId,
+        [ValidateSet('ActiveRoles', 'PIM')][string]$RolePolicy = 'ActiveRoles',
+        [string[]]$ExcludeRequirement = @(),
+        [string]$ScopeJustification,
+        [ValidateSet('Commercial', 'USGov', 'China')][string]$Cloud = 'Commercial',
+        [switch]$AutomatedOnly,
+        [string]$DownloadsPath
     )
 
     Write-Host ''
     Write-Host 'Microsoft Agent 365 pre-flight' -ForegroundColor Cyan
-    Write-Host 'Read-only evidence collection. No tenant configuration, consent grant, license assignment, policy change, or agent deployment is performed.'
+    if ($Cloud -ne 'Commercial') { throw 'Commercial cloud only. Unsupported cloud selected; no tenant request or sign-in was made.' }
+    if ($DelegatedClientId -and ($ClientId -or $CertificateThumbprint)) { throw 'DelegatedClientId cannot be combined with certificate app-only parameters.' }
+    if ($ExcludeRequirement.Count -gt 0 -and $Mode -notin @('Advanced', 'Resume')) { throw 'Only Advanced mode can explicitly narrow the assessment scope.' }
+    Write-Host 'Commercial cloud only. Community/as-is tool; not a certification or a Microsoft support entitlement.'
+    Write-Host 'Read operations plus disclosed query-job POSTs. No tenant configuration remediation. Interactive consent may establish persistent grants.'
     Write-Host 'The full report stays local and is the remediation workspace. The sanitized copy is only for sharing.'
-    Write-Host 'Plan for 10-20 minutes for preparation, sign-in, and collection. Purview may wait up to the configured audit timeout.'
+    Write-Host 'Arrange roles, admin consent, target scope and evidence owners before running; organizational approval can take days.'
+    Write-Host 'Execution is usually minutes, but tenant size, throttling and audit timeout affect duration.'
 
     if ($Mode -eq 'Guided') {
         if ($NonInteractive) { throw 'NonInteractive runs must choose Sample, Recommended, Resume, or Advanced.' }
@@ -667,8 +731,24 @@ function Invoke-A365CustomerJourney {
             if ($NonInteractive) { throw 'Resume mode requires -PreviousResultPath.' }
             $PreviousResultPath = Read-Host 'Path to the previous full report JSON'
         }
-        $plan = Get-A365ResumePlan -PreviousResultPath $PreviousResultPath -AnswersPath $AnswersPath -NonInteractive:$NonInteractive
+        $plan = Get-A365ResumePlan -PreviousResultPath $PreviousResultPath -AnswersPath $AnswersPath -NonInteractive:$NonInteractive -AutomatedOnly:$AutomatedOnly -DownloadsPath $DownloadsPath
         $OutputPath = $plan.OutputPath
+        $SharePointSiteUrl = @($plan.TargetSites)
+        $RolePolicy = $plan.RolePolicy
+        $ExcludeRequirement = @($plan.ExcludeRequirement)
+        $ScopeJustification = $plan.ScopeJustification
+        if ($plan.AuthenticationMode -eq 'CertificateAppOnly') {
+            if ($DelegatedClientId -or $UseDeviceCode -or $Authentication -ne 'Auto') { throw 'App-only resume cannot switch to delegated authentication.' }
+            if (-not $ClientId) { $ClientId = $plan.ClientId }
+            if (-not $ClientId -or -not $CertificateThumbprint -or $ClientId -ne $plan.ClientId) {
+                throw 'App-only resume requires the original ClientId and a securely re-supplied -CertificateThumbprint. No delegated fallback is allowed.'
+            }
+        }
+        else {
+            if ($ClientId -or $CertificateThumbprint) { throw 'Delegated resume cannot switch to app-only authentication.' }
+            if ($DelegatedClientId -and $DelegatedClientId -ne $plan.DelegatedClientId) { throw 'Delegated resume must retain its original client identity.' }
+            $DelegatedClientId = $plan.DelegatedClientId
+        }
     }
     else {
         if ($Mode -eq 'Sample') {
@@ -739,14 +819,18 @@ function Invoke-A365CustomerJourney {
     }
 
     Write-A365JourneyHeading 'Environment check'
-    $environment = Get-A365LauncherEnvironment -OutputPath $plan.OutputPath
+    $environment = Get-A365LauncherEnvironment -OutputPath $plan.OutputPath -Offline:([bool]$plan.FixturePath)
     Write-Host "PowerShell $($environment.PowerShellVersion): $(if ($environment.PowerShellReady) { 'Ready' } else { 'PowerShell 7 is required' })"
-    Write-Host "Microsoft.Graph.Authentication: $(if ($environment.GraphModuleReady) { "Ready ($($environment.GraphModuleVersion))" } else { 'Missing or older than 2.20.0' })"
-    Write-Host "Microsoft Graph endpoint: $(if ($environment.GraphReachable) { 'Reachable' } else { 'Not reachable' })"
+    if ($plan.FixturePath) {
+        Write-Host 'Graph dependencies, sign-in and endpoint checks: not needed for offline sample mode.'
+    } else {
+        Write-Host "Microsoft.Graph.Authentication: $(if ($environment.GraphModuleReady) { "Ready ($($environment.GraphModuleVersion))" } else { 'Missing or older than 2.20.0' })"
+        Write-Host "Microsoft Graph endpoint: $(if ($environment.GraphReachable) { 'Reachable' } else { 'Not reachable' })"
+    }
     Write-Host "Output folder: $(if ($environment.OutputWritable) { $environment.OutputPath } else { "Not writable: $($environment.OutputError)" })"
     if (-not $environment.PowerShellReady) { throw 'PowerShell 7 or later is required.' }
     if (-not $environment.OutputWritable) { throw "Output folder is not writable: $($environment.OutputError)" }
-    if (-not $environment.GraphModuleReady) {
+    if (-not $plan.FixturePath -and -not $environment.GraphModuleReady) {
         $install = [bool]$InstallDependencies
         if (-not $install -and -not $NonInteractive) {
             $install = Read-A365JourneyYesNo -Prompt "Install Microsoft.Graph.Authentication $($script:A365MinimumGraphVersion) or later for CurrentUser?" -Default $true
@@ -768,13 +852,21 @@ function Invoke-A365CustomerJourney {
     }
 
     Import-Module $script:A365ModulePath -Force -ErrorAction Stop
-    [object[]]$scopes = @(Get-Agent365RequiredScopes -Profile $plan.Profiles -Collector $plan.Collectors)
+    [object[]]$scopes = @(Get-Agent365RequiredScopes -Profile $plan.Profiles -Collector $plan.Collectors -RolePolicy $RolePolicy)
+    $reviewedScope = & (Get-A365LauncherModule) {
+        param($Stage, $Profiles, $Targets, $RolePolicy, $Exclusions, $Justification)
+        New-A365AssessmentScope -Rules (Read-A365Json $script:RulesPath Rules) -Stage $Stage -Profiles $Profiles -SharePointSiteUrl $Targets -RolePolicy $RolePolicy -ExcludeRequirement $Exclusions -ScopeJustification $Justification
+    } $plan.Stage $plan.Profiles $SharePointSiteUrl $RolePolicy $ExcludeRequirement $ScopeJustification
+    $plan.Profiles = @($reviewedScope.Profiles)
 
     Write-A365JourneyHeading 'Planned run'
     Write-Host "Mode:       $($plan.Mode)"
     Write-Host "Stage:      $($plan.Stage)"
     Write-Host "Profiles:   $($plan.Profiles -join ', ')"
     Write-Host "Collectors: $($plan.Collectors -join ', ')"
+    Write-Host "Assessment: $(@($reviewedScope.Requirements | Where-Object Applicable).Count) applicable requirements; fingerprint $($reviewedScope.Fingerprint)"
+    Write-Host 'Omitting a collector does not remove its requirements. Uncollected requirements prevent passing.'
+    if ($ExcludeRequirement.Count -gt 0) { Write-Warning "Explicitly excluded: $($ExcludeRequirement -join ', '). Justification: $ScopeJustification" }
     if ($plan.TenantId) { Write-Host "Tenant:     $($plan.TenantId)" }
     if ($plan.PreviousResultPath) { Write-Host "Baseline:   $($plan.PreviousResultPath)" }
     if ($plan.PSObject.Properties['PreviousHtmlPath'] -and $plan.PreviousHtmlPath) { Write-Host "Working report: $($plan.PreviousHtmlPath)" }
@@ -791,6 +883,11 @@ function Invoke-A365CustomerJourney {
         Write-Host ''
         Write-Host 'Tenant consent permits the application scope. Your directory and workload roles separately determine which evidence you can read.'
         Write-Host 'No custom app registration is required for normal interactive first use.'
+        & (Get-A365LauncherModule) {
+            param($Scopes, $Tenant, $DelegatedClient)
+            $receipt = New-A365TrustReceipt -Scopes $Scopes -TenantTarget $Tenant -DelegatedClientId $DelegatedClient -Policy (Read-A365Json (Join-Path $script:ModuleRoot 'config\assessment-policy.v2.json') Policy) -Allowlist (Read-A365Json $script:AllowlistPath Allowlist)
+            Write-A365TrustReceipt $receipt
+        } $scopes $plan.TenantId $DelegatedClientId
 
         $hostAssessment = Get-A365LauncherHostAssessment
         $method = if ($UseDeviceCode -or $plan.UseDeviceCode -or $Authentication -eq 'DeviceCode') {
@@ -817,7 +914,7 @@ function Invoke-A365CustomerJourney {
                 throw 'Sign-in was cancelled before authentication.'
             }
         }
-        $authResult = Invoke-A365LauncherAuthentication -Scopes $scopes -TenantId $plan.TenantId -Method $method -NonInteractive:$NonInteractive
+        $authResult = Invoke-A365LauncherAuthentication -Scopes $scopes -TenantId $plan.TenantId -Method $method -NonInteractive:$NonInteractive -DelegatedClientId $DelegatedClientId
         $plan.UseDeviceCode = $authResult.Method -eq 'DeviceCode'
     }
 
@@ -834,6 +931,9 @@ function Invoke-A365CustomerJourney {
         AuditWindowDays = $plan.AuditWindowDays
         AuditQueryTimeoutSeconds = $plan.AuditQueryTimeoutSeconds
         IncludeSanitizedCopy = [bool]$plan.IncludeSanitizedCopy
+        RolePolicy = $RolePolicy
+        ExcludeRequirement = @($ExcludeRequirement)
+        ScopeJustification = $ScopeJustification
     }
     if ($plan.FixturePath) { $engineParameters.FixturePath = $plan.FixturePath }
     if ($plan.TenantId) { $engineParameters.TenantId = $plan.TenantId }
@@ -843,6 +943,7 @@ function Invoke-A365CustomerJourney {
     if ($SharePointSiteUrl.Count -gt 0) { $engineParameters.SharePointSiteUrl = $SharePointSiteUrl }
     if ($ClientId) { $engineParameters.ClientId = $ClientId }
     if ($CertificateThumbprint) { $engineParameters.CertificateThumbprint = $CertificateThumbprint }
+    if ($DelegatedClientId) { $engineParameters.DelegatedClientId = $DelegatedClientId }
 
     $outcome = Invoke-A365JourneyEngine -Parameters $engineParameters
     Write-A365JourneyHeading 'Result'

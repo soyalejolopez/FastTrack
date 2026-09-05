@@ -201,6 +201,7 @@ function Get-A365StatusMeta {
         'ManualValidation' { return @{ Label = 'Manual validation'; Class = 's-manual';   Glyph = '?' } }
         'NotApplicable'    { return @{ Label = 'Not applicable';    Class = 's-na';       Glyph = [char]0x2013 } }
         'NotAuthorized'    { return @{ Label = 'Not authorized';    Class = 's-noauth';   Glyph = [char]0x00D8 } }
+        'NotAssessed'      { return @{ Label = 'Not assessed';      Class = 's-noauth';   Glyph = '?' } }
         'Error'            { return @{ Label = 'Error';             Class = 's-error';    Glyph = '!' } }
         default {
             if ([string]::IsNullOrWhiteSpace($Status)) { $label = 'Unknown' } else { $label = $Status }
@@ -305,6 +306,7 @@ function Get-A365SeverityRank {
     switch ($Status) {
         'Blocker'          { return 1 }
         'NotAuthorized'    { return 2 }
+        'NotAssessed'      { return 2 }
         'Error'            { return 2 }
         'ActionRequired'   { return 3 }
         'ManualValidation' { return 4 }
@@ -456,7 +458,7 @@ function Get-A365PathModel {
         }
     }
 
-    $statuses = @('Blocker', 'NotAuthorized', 'Error', 'ActionRequired', 'ManualValidation', 'Advisory')
+    $statuses = @('Blocker', 'NotAssessed', 'NotAuthorized', 'Error', 'ActionRequired', 'ManualValidation', 'Advisory')
     $actionable = @($Results | Where-Object { $statuses -contains [string](Get-A365Member $_ 'Status' '') })
     $norm = @()
     foreach ($r in $actionable) { $norm += (New-A365PathItem -Source $r -SlugById $SlugById -Explicit $false) }
@@ -1081,33 +1083,6 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: clamp(16px, 3vw, 26px);
 }
 
-.hero {
-  position: relative; overflow: hidden;
-  --verdict-color: var(--neutral);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-md);
-  background: var(--bg-elevated); padding: clamp(20px, 4vw, 34px);
-  display: grid; grid-template-columns: auto 1fr; gap: clamp(18px, 4vw, 34px); align-items: center;
-}
-.hero::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--verdict-color) 12%, transparent) 0%, transparent 55%);
-}
-.hero-badge {
-  width: clamp(84px, 16vw, 116px); height: clamp(84px, 16vw, 116px); border-radius: 50%;
-  display: grid; place-items: center; flex: none; position: relative; z-index: 1;
-  background: color-mix(in srgb, var(--verdict-color) 16%, var(--bg-elevated));
-  border: 3px solid var(--verdict-color); color: var(--verdict-color);
-  font-size: clamp(2.4rem, 8vw, 3.4rem); font-weight: 700;
-}
-.hero-body { position: relative; z-index: 1; }
-.hero-body .verdict-label { font-family: var(--font-display); font-size: clamp(1.5rem, 1rem + 2.6vw, 2.3rem); font-weight: 700; letter-spacing: -.01em; color: var(--verdict-color); }
-.hero.v-ready { --verdict-color: var(--pass); }
-.hero.v-blocked { --verdict-color: var(--block); }
-.hero.v-incomplete { --verdict-color: var(--action); }
-.hero.v-complete { --verdict-color: var(--brand); }
-.hero.v-neutral { --verdict-color: var(--neutral); }
-.hero-summary { color: var(--text-secondary); max-width: 66ch; margin-top: 6px; }
 .verdict-counts { display: flex; flex-wrap: wrap; gap: 10px 12px; margin-top: 16px; }
 .count-chip {
   display: inline-flex; gap: 8px; align-items: center; padding: 8px 14px; border-radius: 999px;
@@ -1993,7 +1968,7 @@ function Get-A365Script {
 
     function statusMatches(cardStatus) {
       if (activeStatus === "all") { return true; }
-      if (activeStatus === "autherror") { return cardStatus === "NotAuthorized" || cardStatus === "Error"; }
+      if (activeStatus === "autherror") { return cardStatus === "NotAssessed" || cardStatus === "NotAuthorized" || cardStatus === "Error"; }
       return cardStatus === activeStatus;
     }
 
@@ -2371,7 +2346,7 @@ function Get-A365Script {
 
   // ---- Answers builder: in-memory + offline JSON download ----
   var answersRoot = document.getElementById("answersBuilder");
-  if (answersRoot) {
+  if (answersRoot && !answersRoot.hasAttribute("data-v2")) {
     answersRoot.hidden = false;
     var downloadAnswers = document.getElementById("downloadAnswers");
     var answersFeedback = document.getElementById("answersFeedback");
@@ -2775,6 +2750,9 @@ function New-Agent365PreflightHtml {
     )
 
     $enc = { param($v) ConvertTo-A365Html $v }
+    $uiResource = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\config\strings.en.json')) | ConvertFrom-Json
+    if ($uiResource.version -ne '2.0.0' -or $uiResource.locale -ne 'en') { throw 'Unsupported UI string resource contract.' }
+    $uiText = $uiResource.strings
 
     # --- Metadata (may be nested under .Metadata or flattened on the report) ---
     $metadata = Get-A365Member $Report 'Metadata'
@@ -2871,9 +2849,10 @@ function New-Agent365PreflightHtml {
     Line ('<title>' + (ConvertTo-A365Html $docTitle) + '</title>')
     Line '<style>'
     Line (Get-A365Css)
+    Line ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'ReportExperience.css')))
     Line '</style>'
     Line '</head>'
-    Line '<body>'
+    Line ('<body data-artifact="' + $(if ($isSanitized) { 'sharing' } else { 'working' }) + '">')
     Line '<a class="skip-link" href="#main">Skip to report content</a>'
 
     # --- Header ---
@@ -2905,7 +2884,8 @@ function New-Agent365PreflightHtml {
 
     Line '<div class="wrap">'
 
-    # --- Prominent scope disclaimer ---
+    function local:Write-ReportContext {
+    # Details follow the decision surface rather than delaying the verdict.
     Line '<div class="disclaimer-banner" role="note">'
     Line '<span class="db-icon" aria-hidden="true">&#x2139;</span>'
     Line '<div><strong>This is a technical pre-flight, not a security or compliance certification.</strong> It reports whether the technical prerequisites for a Microsoft Agent 365 pilot appear to be in place at the time of collection. It does not assess, audit, or certify the security or regulatory compliance of your tenant.</div>'
@@ -2950,6 +2930,7 @@ function New-Agent365PreflightHtml {
         Line '</div>'
     }
 
+    }
     Line '<main id="main" role="main" tabindex="-1">'
         # --- Readiness Command Center (first-viewport decision surface) ---
     $ccPassSummary = [string]$passModel.Summary
@@ -2965,7 +2946,8 @@ function New-Agent365PreflightHtml {
     $ccCovPct   = Get-A365Member $coverage 'Percentage' $null
 
     Line ('<section id="commandCenter" class="section" aria-labelledby="verdict-h"><div class="command-center ' + $verdictMeta.Class + '">')
-    Line ('<span class="cc-badge"><span class="cc-glyph" aria-hidden="true">' + (ConvertTo-A365Html $verdictMeta.Glyph) + '</span>' + $(if ([string]::IsNullOrWhiteSpace($verdictLabel)) { 'Verdict' } else { (ConvertTo-A365Html $verdictLabel) }) + '</span>')
+    $artifactLabel = $(if ($isSanitized) { $uiText.artifactSharing } else { $uiText.artifactWorking }) + $(if ($fixtureMode) { ' | Synthetic example' } else { '' })
+    Line ('<span class="cc-badge">' + (ConvertTo-A365Html $artifactLabel) + '</span>')
     Line '<div class="cc-body">'
     Line '<p class="kicker muted" style="margin:0;">Pre-flight verdict</p>'
     if ([string]::IsNullOrWhiteSpace($verdictLabel)) {
@@ -2973,8 +2955,16 @@ function New-Agent365PreflightHtml {
     } else {
         Line ('<h1 id="verdict-h" class="cc-heading">' + (ConvertTo-A365Html $verdictLabel) + '</h1>')
     }
+    $scopeSummary = (Join-A365List $profiles) + ' | ' + $stage + ' | ' + $ccCovTotal + ' requirements'
+    $assessment = Get-A365Member $Report 'AssessmentScope'
+    if ($assessment -and @($assessment.ExcludedRequirements).Count -gt 0) {
+        $scopeSummary += ' | ' + @($assessment.ExcludedRequirements).Count + ' explicit exclusions'
+    }
+    $evidenceDate = @($results | Where-Object EvidenceTimeUtc | Sort-Object EvidenceTimeUtc | Select-Object -First 1).EvidenceTimeUtc
+    Line ('<p class="cc-scope">' + (ConvertTo-A365Html $scopeSummary) + '<br><span class="muted">Evidence as of <time data-evidence-time datetime="' + (ConvertTo-A365Html $evidenceDate) + '">' + (ConvertTo-A365Html (Format-A365Date $evidenceDate)) + '</time></span></p>')
     if (-not [string]::IsNullOrWhiteSpace($verdictSummary)) {
-        Line ('<p class="cc-summary">' + (ConvertTo-A365Html $verdictSummary) + '</p>')
+        $editorialSummary = if ($ccSatisfied) { 'Required gates are clear for this assessment. Keep evidence current and review any advisories.' } else { 'The requirements below still need evidence or action. Unknown requirements are not evidence of improvement.' }
+        Line ('<p class="cc-summary">' + (ConvertTo-A365Html $editorialSummary) + '</p>')
     }
 
     # What prevents a technical pass
@@ -2987,12 +2977,11 @@ function New-Agent365PreflightHtml {
         if ($ccBlock -gt 0)  { Line ('<span class="pass-chip s-block"><span class="pc-count">' + $ccBlock + '</span> blocker' + $(if($ccBlock -eq 1){''}else{'s'}) + '</span>') }
         if ($ccAuth -gt 0)   { Line ('<span class="pass-chip s-noauth"><span class="pc-count">' + $ccAuth + '</span> authorization gap' + $(if($ccAuth -eq 1){''}else{'s'}) + '</span>') }
         if ($ccErr -gt 0)    { Line ('<span class="pass-chip s-error"><span class="pc-count">' + $ccErr + '</span> error' + $(if($ccErr -eq 1){''}else{'s'}) + '</span>') }
+        $ccUnknown = Get-A365Int (Get-A365Member $coverage 'NotAssessed' 0)
+        if ($ccUnknown -gt 0) { Line ('<span class="pass-chip s-noauth">' + $ccUnknown + ' not assessed</span>') }
         if ($ccAction -gt 0) { Line ('<span class="pass-chip s-action"><span class="pc-count">' + $ccAction + '</span> action' + $(if($ccAction -eq 1){''}else{'s'}) + ' required</span>') }
         if ($ccManual -gt 0) { Line ('<span class="pass-chip s-manual"><span class="pc-count">' + $ccManual + '</span> manual validation' + $(if($ccManual -eq 1){''}else{'s'}) + '</span>') }
         Line '</div>'
-        if (-not [string]::IsNullOrWhiteSpace($ccPassSummary)) {
-            Line ('<p class="small muted" style="margin:2px 0 0;">' + (ConvertTo-A365Html $ccPassSummary) + '</p>')
-        }
     }
     Line '</div>'
 
@@ -3002,26 +2991,37 @@ function New-Agent365PreflightHtml {
         $ccCovWidth = [math]::Round((($ccCovColl / $ccCovTotal) * 100), 1)
         if ($ccCovWidth -lt 0) { $ccCovWidth = 0 } elseif ($ccCovWidth -gt 100) { $ccCovWidth = 100 }
         $ccCovPctText = if ($null -ne $ccCovPct) { (ConvertTo-A365Html $ccCovPct) + '% collected' } else { (ConvertTo-A365Html $ccCovColl) + ' of ' + (ConvertTo-A365Html $ccCovTotal) + ' collected' }
-        Line ('<div class="cc-coverage-top"><span>Coverage &middot; <b>' + (ConvertTo-A365Html $ccCovPass) + '</b> passed</span><span>' + $ccCovPctText + '</span></div>')
+        Line ('<div class="cc-coverage-top"><span>Requirements satisfied <b>' + $ccCovPass + '/' + $ccCovTotal + '</b></span><span>' + $ccCovPctText + '</span></div>')
         Line ('<div class="cc-meter" role="img" aria-label="' + (ConvertTo-A365Html ($ccCovColl.ToString() + ' of ' + $ccCovTotal.ToString() + ' checks collected')) + '"><span style="width:' + $ccCovWidth + '%"></span></div>')
     } else {
         Line '<p class="muted small" style="margin:0;">No coverage reported.</p>'
     }
-    Line '<p class="cc-note">Coverage is not the verdict and not a compliance score.</p>'
+    $axes = Get-A365Member $coverage 'CollectionCompleteness'
+    $customerAxis = Get-A365Member $coverage 'CustomerAssertions'
+    if ($axes -and $customerAxis) {
+        Line ('<div class="status-axes"><div>Collection completeness<b>' + $axes.Collected + '/' + $axes.Required + '</b></div><div>Requirements satisfied<b>' + $ccCovPass + '/' + $ccCovTotal + '</b></div><div>Customer assertions accepted<b>' + $customerAxis.Accepted + '/' + $customerAxis.Required + '</b></div></div>')
+    }
+    Line '<p class="cc-note">These are separate evidence axes, not a compliance score. Unknown evidence is not improvement.</p>'
     Line '</div>'
 
     # Primary CTA (state-driven decision surface)
     Line '<div class="cc-actions">'
     if ($ccSatisfied) {
-        Line '<a class="cta-primary" id="reviewAdvisories" href="#checks">Review advisories</a>'
+        if ((Get-A365Int (Get-A365Member $coverage 'Advisory' 0)) -gt 0) {
+            Line '<a class="cta-primary" id="reviewAdvisories" data-findings-filter="Advisory" href="#checks">Review advisories</a>'
+        } else {
+            Line '<a class="cta-primary" href="#evidence">View evidence summary</a>'
+        }
         if ($pathItemTotal -gt 0) {
             Line '<a class="cta-secondary" id="openPathToReady" href="#pathToReady">Open Path to Ready</a>'
         } else {
             Line '<a class="cta-secondary" id="openPathToReady" href="#pathToReady">View Path to Ready</a>'
         }
     } else {
-        if ($pathItemTotal -gt 0) {
-            Line ('<a class="cta-primary" id="openPathToReady" href="#pathToReady">Start remediation <span aria-hidden="true">(' + $pathItemTotal + ')</span></a>')
+        if ($ccBlock -gt 0) {
+            Line '<a class="cta-primary" id="openPathToReady" data-findings-filter="Blocker" href="#checks">Resolve blockers</a>'
+        } elseif ($ccAuth -gt 0 -or $ccErr -gt 0 -or (Get-A365Int (Get-A365Member $coverage 'NotAssessed' 0)) -gt 0) {
+            Line '<a class="cta-primary" id="openPathToReady" data-findings-filter="autherror" href="#checks">Fix collection</a>'
         } else {
             Line '<a class="cta-primary" id="openPathToReady" href="#pathToReady">Start remediation</a>'
         }
@@ -3030,6 +3030,7 @@ function New-Agent365PreflightHtml {
     Line '</div>'
     Line '</div>'
     Line '</div></section>'
+    Write-ReportContext
 
     # --- What happens next (Fix -> Document -> Rerun editorial sequence) ---
     if ($ccSatisfied) {
@@ -3038,14 +3039,14 @@ function New-Agent365PreflightHtml {
         $nsRun = 'Re-run the pre-flight with the one-command launcher before pilot to reconfirm this pass.'
     } else {
         $nsFix = 'Work through Path to Ready to clear every blocker and required action in your tenant.'
-        $nsDoc = 'Record manual attestations in the Answers Builder to capture the evidence you have gathered.'
+        $nsDoc = 'Use the Evidence workspace to record the owner-approved evidence you have gathered.'
         $nsRun = 'Re-run with the one-command Resume launcher &mdash; only a fresh run confirms a real technical pass.'
     }
     Line '<section id="whatNext" class="section" aria-labelledby="whatNext-h">'
     Line '<div class="next-steps">'
     Line '<h2 id="whatNext-h" class="next-steps-title">What happens next</h2>'
     Line '<ol class="next-steps-list">'
-    Line ('<li class="next-step"><span class="ns-num" aria-hidden="true">1</span><div class="ns-body"><span class="ns-name">Fix</span><span class="ns-desc">' + $nsFix + '</span></div></li>')
+    Line ('<li class="next-step"><span class="ns-num" aria-hidden="true">1</span><div class="ns-body"><span class="ns-name">' + $(if ($ccSatisfied) { 'Review' } else { 'Fix' }) + '</span><span class="ns-desc">' + $nsFix + '</span></div></li>')
     Line ('<li class="next-step"><span class="ns-num" aria-hidden="true">2</span><div class="ns-body"><span class="ns-name">Document</span><span class="ns-desc">' + $nsDoc + '</span></div></li>')
     Line ('<li class="next-step"><span class="ns-num" aria-hidden="true">3</span><div class="ns-body"><span class="ns-name">Rerun</span><span class="ns-desc">' + $nsRun + '</span></div></li>')
     Line '</ol>'
@@ -3068,7 +3069,8 @@ function New-Agent365PreflightHtml {
     Line '<li><a class="wsn-link" href="#scope">Overview</a></li>'
     Line '<li><a class="wsn-link" href="#pathToReady">Path to Ready</a></li>'
     Line '<li><a class="wsn-link" href="#checks">Findings</a></li>'
-    Line '<li><a class="wsn-link" href="#evidence">Evidence &amp; rerun</a></li>'
+    if (-not $isSanitized) { Line '<li><a class="wsn-link" href="#evidenceWorkspace">Evidence workspace</a></li>' }
+    Line '<li><a class="wsn-link" href="#evidence">Run summary &amp; resume</a></li>'
     Line '<li><a class="wsn-link" href="#sources">Sources</a></li>'
     Line '</ul>'
     Line '</nav>'
@@ -3147,6 +3149,11 @@ function New-Agent365PreflightHtml {
     Line '</dl>'
     Line '</div>'
     Line '</div>'
+    if ($assessment) {
+        Line '<details class="card"><summary>Review assessment requirements, targets and exclusions</summary>'
+        Line (Format-A365Details $assessment)
+        Line '</details>'
+    }
     Line '</section>'
         # --- Path to Ready (progressive remediation stepper) ---
     Line ('<section id="pathToReady" class="section" aria-labelledby="pathToReady-h" data-report-key="' + (ConvertTo-A365Html $reportKey) + '">')
@@ -3155,7 +3162,7 @@ function New-Agent365PreflightHtml {
     if ($pathItemTotal -eq 0) {
         Line '<div class="path-ready-banner" role="note"><span class="prb-mark" aria-hidden="true">&#10003;</span><div><strong>No outstanding actions.</strong> Every collected check that could block a pilot is already passing. Manual validations and advisories, if any, are listed in the findings below.</div></div>'
     } else {
-        Line '<div id="localProgressNotice" class="local-progress-notice" role="note"><span class="lpn-icon" aria-hidden="true">&#8505;</span><div>Tick items as you complete them to track progress locally in this browser. <strong>Local check marks never change the verdict</strong> &mdash; re-run the checker to confirm a real pass.</div></div>'
+        if (-not $isSanitized) { Line '<div id="localProgressNotice" class="local-progress-notice" role="note">Local check marks track tasks only. They never change this snapshot or the next evaluated verdict.</div>' }
 
         Line '<ol class="path-phases">'
         $phaseNum = 0
@@ -3197,9 +3204,12 @@ function New-Agent365PreflightHtml {
                 if ($piDoc) { Line ('<div class="pi-meta"><span>' + $piDoc + '</span></div>') }
                 Line '</div>'
                 Line '<div class="pi-side">'
-                Line '<label class="pi-check js-only" hidden>'
-                Line ('<input type="checkbox" data-local-complete data-item-id="' + (ConvertTo-A365Html $piId) + '"><span>Done</span><span class="sr-only"> &mdash; mark "' + (ConvertTo-A365Html $piTitle) + '" complete locally</span>')
-                Line '</label>'
+                if (-not $isSanitized) {
+                    Line '<label class="pi-check js-only" hidden>'
+                    Line ('<input type="checkbox" data-local-complete data-item-id="' + (ConvertTo-A365Html $piId) + '"><span>Task done</span><span class="sr-only"> ' + (ConvertTo-A365Html $piTitle) + '</span>')
+                    Line '</label>'
+                    if ($piId -in @($gateModel.Id)) { Line ('<a class="pi-open" data-record-evidence="' + (ConvertTo-A365Html $piId) + '" href="#evidenceWorkspace">Record evidence</a>') }
+                }
                 if ($it.HasCard) {
                     Line ('<a class="pi-open pi-jump" href="#' + (ConvertTo-A365Html ([string]$it.CardId)) + '">View finding</a>')
                     Line ('<button type="button" class="pi-open js-only" data-open-finding="' + (ConvertTo-A365Html ([string]$it.CardId)) + '" hidden>Open details</button>')
@@ -3213,7 +3223,7 @@ function New-Agent365PreflightHtml {
         Line '</ol>'
 
         Line '<div class="path-foot">'
-        Line '<button type="button" id="resetLocalProgress" class="act-btn js-only" hidden>Reset local progress</button>'
+        if (-not $isSanitized) { Line '<button type="button" id="resetLocalProgress" class="act-btn js-only" hidden>Reset local progress</button>' }
         Line '</div>'
     }
     Line '</section>'
@@ -3338,6 +3348,8 @@ function New-Agent365PreflightHtml {
         Line '</div>'
         Line '</div>'
     }
+    Line '</div>'
+    Line '<p id="answersFeedback" class="tool-feedback" role="status" aria-live="polite"></p>'
     Line '</div>'
     Line '</section>'
 
@@ -3601,7 +3613,7 @@ function New-Agent365PreflightHtml {
         # --- Manual attestations & answers builder ---
     if ($attest.Count -gt 0 -or $gateModel.Count -gt 0) {
         Line '<section id="attestations" class="section" aria-labelledby="attestations-h">'
-        Line '<div class="section-head"><h2 id="attestations-h">Manual attestations</h2><span class="section-sub">Checks that require human confirmation &mdash; recorded answers never change the verdict</span></div>'
+        Line '<div class="section-head"><h2 id="attestations-h">Customer assertions</h2><span class="section-sub">Accepted answers affect the next evaluated report, not this snapshot.</span></div>'
         if ($attest.Count -gt 0) {
             Line '<div class="table-scroll"><table class="data"><caption>Attestation questions and recorded answers</caption>'
             Line '<thead><tr><th scope="col">Question</th><th scope="col">Required</th><th scope="col">Answer</th><th scope="col">Owner</th><th scope="col">Evidence</th><th scope="col">Status</th></tr></thead><tbody>'
@@ -3625,6 +3637,7 @@ function New-Agent365PreflightHtml {
 
         # Answers builder (JS enhancement; values stay in memory, offline JSON export only)
         if ($gateModel.Count -gt 0) {
+            if (-not $isSanitized) {
             $answersDownloadName = 'agent365-answers.json'
             if ($resumeModel.HasCommand -and -not [string]::IsNullOrWhiteSpace([string]$resumeModel.AnswerFileName)) {
                 $answersDownloadName = [string]$resumeModel.AnswerFileName
@@ -3633,8 +3646,12 @@ function New-Agent365PreflightHtml {
             if ($resumeModel.HasCommand) {
                 $abAttrs += ' data-resume-command="' + (ConvertTo-A365Html ([string]$resumeModel.Command)) + '"'
             }
-            Line ('<div id="answersBuilder" class="answers-builder js-only"' + $abAttrs + ' hidden>')
-            Line '<h3>Answers builder</h3>'
+            Line '<section id="evidenceWorkspace" aria-labelledby="workspace-h">'
+            Line ('<h3 id="workspace-h">' + (ConvertTo-A365Html $uiText.evidenceWorkspace) + '</h3>')
+            Line ('<p class="small muted">' + (ConvertTo-A365Html $uiText.workspaceIntro) + '</p>')
+            Line ('<div id="answersBuilder" data-v2 class="answers-builder js-only"' + $abAttrs + ' hidden>')
+            Line '<div class="evidence-toolbar"><label>Show <select id="evidenceFilter"><option value="All">All gates</option><option>Unanswered</option><option>Answered</option><option>Needs revalidation</option><option>Expired</option></select></label><span id="evidenceCounter" role="status"></span></div>'
+            Line '<div class="evidence-layout"><nav id="evidenceGateList" aria-label="Evidence gates"></nav><div class="evidence-editor">'
             Line '<p class="small muted" style="margin:0 0 4px;">Record manual answers to attestable gates, then download an answers file. Values stay in this browser and are never uploaded. <strong>Recording an answer here does not change the verdict</strong> &mdash; re-run the checker with the downloaded file to apply them.</p>'
             if ($isSanitized) {
                 Line '<p class="small muted" style="margin:0 0 8px;">This is the sanitized sharing copy. <strong>Complete remediation in the full local report</strong> and re-run with its launcher; the resume command shown here is placeholder-safe and cannot run remediation.</p>'
@@ -3656,6 +3673,8 @@ function New-Agent365PreflightHtml {
                 Line ('<span class="r-id mono">' + (ConvertTo-A365Html $gId) + '</span>')
                 Line ('<button type="button" class="review-guidance-btn" data-guidance-open="guidance-' + (ConvertTo-A365Html $gSlug) + '" data-guidance-gate="' + (ConvertTo-A365Html $gId) + '"><span class="rg-glyph" aria-hidden="true">&#9432;</span>Review guidance</button>')
                 Line '</div>'
+                Line '<label class="review-choice">Review decision<select data-review-decision><option value="">Choose explicitly</option><option value="Retain">Retain original approval and date</option><option value="Revalidate">Revalidate against this assessment</option><option value="Edit">Edit and approve revised evidence</option></select></label>'
+                Line '<p class="small muted" data-evidence-freshness></p>'
                 if ($gEvidence) { Line ('<p class="answer-gate-evidence">Evidence needed: ' + (ConvertTo-A365Html $gEvidence) + '</p>') }
                 Line ('<div class="answer-values" role="radiogroup" aria-label="' + (ConvertTo-A365Html ('Answer for ' + $gTitle)) + '">')
                 Line ('<label><input type="radio" name="ans-' + (ConvertTo-A365Html $gSlug) + '" value="Yes" data-answer-value="Yes"><span>Yes</span></label>')
@@ -3672,14 +3691,25 @@ function New-Agent365PreflightHtml {
                 Line '</div>'
                 Line '</div>'
             }
+            Line '</div></div>'
             Line '<div class="tool-actions">'
             Line '<button type="button" id="downloadAnswers" class="act-btn is-brand">Download answers JSON</button>'
+            Line '<button type="button" id="exportDraft" class="act-btn">Export draft</button>'
+            Line '<label class="act-btn">Import draft or owner bundle<input type="file" id="importEvidence" accept=".json,application/json"></label>'
             if ($resumeModel.HasCommand) {
                 Line '<button type="button" id="copyResumeAnswers" class="act-btn js-only" hidden>Copy resume command</button>'
             }
             Line '</div>'
-            Line '<p id="answersFeedback" class="tool-feedback" role="status" aria-live="polite"></p>'
-            Line '</div>'
+            Line '</section>'
+            $bundleState = [ordered]@{
+                reportId = $reportId
+                assessmentFingerprint = $Report.AssessmentScope.Fingerprint
+                gates = @($Report.ManuallyAttestableGates)
+                strings = $uiText
+            }
+            $bundleJson = ($bundleState | ConvertTo-Json -Depth 50 -Compress).Replace('<', '\u003c').Replace('>', '\u003e').Replace('&', '\u0026')
+            Line ('<script id="evidenceBootstrap" type="application/json">' + $bundleJson + '</script>')
+            }
 
             # Always-visible guidance appendix: single source of truth for the guidance
             # dialog (cloned by JS), for print, and for the no-JS experience. Lives OUTSIDE
@@ -3727,6 +3757,8 @@ function New-Agent365PreflightHtml {
         $hasBaseline = Get-A365Bool (Get-A365Member $drift 'HasBaseline')
         if (-not $hasBaseline) {
             Line '<div class="callout empty">No baseline is available, so drift could not be calculated.</div>'
+        } elseif (-not (Get-A365Bool (Get-A365Member $drift 'Comparable' $false))) {
+            Line ('<div class="callout">' + (ConvertTo-A365Html (Get-A365Member $drift 'ComparisonStatus' 'Comparison unavailable.')) + ' No resolution or improvement is claimed.</div>')
         } else {
             $baselineTime = Get-A365Member $drift 'BaselineGeneratedAtUtc'
             if ($baselineTime) {
@@ -3767,6 +3799,7 @@ function New-Agent365PreflightHtml {
             DriftBlock 'Regressions' @($regressions) 's-block'
             DriftBlock 'Resolved blockers' @($resolved) 's-pass'
             DriftBlock 'Resolved required actions' @($resolvedRequired) 's-pass'
+            DriftBlock 'Not reassessed' @(Get-A365Member $drift 'NotReassessed' @()) 's-noauth'
             DriftBlock 'Other changes' @($otherChanges) 's-advisory'
             if ($regressions.Count -eq 0 -and $resolved.Count -eq 0 -and $resolvedRequired.Count -eq 0 -and $changed.Count -eq 0) {
                 Line '<div class="callout empty">No changes were detected since the baseline.</div>'
@@ -3776,10 +3809,20 @@ function New-Agent365PreflightHtml {
     }
         # --- Evidence timestamps ---
     Line '<section id="evidence" class="section" aria-labelledby="evidence-h">'
-    Line '<div class="section-head"><h2 id="evidence-h">Evidence &amp; rerun</h2><span class="section-sub">When observations were collected, and how to reproduce this pre-flight</span></div>'
+    Line '<div class="section-head"><h2 id="evidence-h">Run summary &amp; resume</h2><span class="section-sub">Collected evidence, trust receipt, provenance and the next run</span></div>'
+    $trustReceipt = Get-A365Member $Report 'TrustReceipt'
+    if ($trustReceipt) {
+        Line '<details class="card"><summary>Trust receipt, permissions and provenance</summary>'
+        Line (Format-A365Details $trustReceipt)
+        Line '<h3>Versioned rule files</h3>'
+        Line (Format-A365Details (Get-A365Member $Report 'ConfigurationManifest'))
+        Line (Format-A365Details (Get-A365Member $Report 'RuleFreshness'))
+        Line (Format-A365Details (Get-A365Member $Report 'SourceProvenance'))
+        Line '</details>'
+    }
 
     # Resume launcher (primary) + advanced rerun disclosure. JS enhancements are offline-only.
-    if ($resumeModel.HasCommand -or $rerunModel.HasCommand -or $pathItemTotal -gt 0) {
+    if (-not $isSanitized -and ($resumeModel.HasCommand -or $rerunModel.HasCommand -or $pathItemTotal -gt 0)) {
         Line '<div id="evidenceRerun" class="rerun-tool">'
 
         # Primary: the one-command Resume launcher
@@ -3980,6 +4023,7 @@ function New-Agent365PreflightHtml {
     Line '</aside>'
 
     # --- Guidance dialog / full-height bottom sheet (semantically distinct from the finding blade) ---
+    if (-not $isSanitized) {
     Line '<div id="guidanceBackdrop" class="guidance-backdrop js-only" hidden></div>'
     Line '<aside id="guidanceDialog" class="guidance-dialog js-only" role="dialog" aria-modal="true" aria-labelledby="guidanceTitle" aria-describedby="guidanceBody" aria-hidden="true" hidden>'
     Line '<div class="guidance-dialog-head">'
@@ -3997,9 +4041,11 @@ function New-Agent365PreflightHtml {
     Line '<span id="guidanceCopyFeedback" class="guidance-copy-feedback" role="status" aria-live="polite"></span>'
     Line '</div>'
     Line '</aside>'
+    }
 
     Line '<script>'
     Line (Get-A365Script)
+    Line ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'EvidenceWorkspace.js')))
     Line '</script>'
     Line '</body>'
     Line '</html>'

@@ -1,37 +1,73 @@
 MICROSOFT AGENT 365 PRE-FLIGHT - START HERE
-================================================
+========================================
 
-1. Use Windows Terminal with PowerShell 7.
-2. Extract this ZIP, then right-click this folder and choose
-   "Open in Terminal" (or open Windows Terminal and change to this folder).
-3. Run:
+Commercial cloud only. Customer-run, local-first, community/as-is software.
+This is not a certification or a Microsoft support entitlement.
 
-   .\Start-Agent365Preflight.ps1
+BEFORE DOWNLOADING OR SIGNING IN
+Agree the assessment stage, target sites, role policy and evidence owners.
+Arrange tenant admin consent and the directory/workload roles in README.md.
+Approval and preparation can take days; execution is usually minutes.
+No live run is needed to try the sample.
 
-The launcher:
-- checks PowerShell, the Microsoft Graph authentication module, network access,
-  and the output folder;
-- offers a safe sample run or a guided live Control Plane pre-flight;
-- explains the read-only permissions before sign-in;
-- opens the full local working report for remediation; and
-- creates Resume-Agent365Preflight.ps1 for the next run.
+VERIFY THE DOWNLOAD BEFORE LAUNCHING
+This release is unsigned. A checksum detects changes but does not authenticate
+the publisher. Obtain the ZIP and SHA256 from your approved release source.
+In Windows PowerShell 5.1 or PowerShell 7, compare the result with that checksum:
 
-The tool only collects evidence. It does not configure the tenant, grant
-consent, assign licenses, change policies, or deploy agents.
+  Get-FileHash -LiteralPath '.\Agent365Preflight-2.0.0.zip' -Algorithm SHA256
 
-An Incomplete verdict is expected on the first run. Use the FULL local report
-to review findings and download guided answers. The SANITIZED report is only a
-reduced sharing copy. After downloading answers, run the Resume script in the
-output folder. You do not need to move the downloaded file.
+Windows may mark an internet download with Mark-of-the-Web. If organization
+policy permits, right-click the ZIP, choose Properties, select Unblock, and
+apply BEFORE extraction. Otherwise use your organization's approved extraction
+and execution process. Do not use a blanket execution-policy bypass.
 
-Minimum prerequisites:
-- PowerShell 7
-- Microsoft.Graph.Authentication 2.20.0 or later (the launcher asks before
-  any CurrentUser installation)
-- HTTPS access to graph.microsoft.com for a live run
+EXTRACT, CHECK RUNTIME, THEN START
+Extract the ZIP. Open the Agent365Preflight-2.0.0 folder.
+PowerShell 7 is required for the main launcher. If you only have Windows
+PowerShell 5.1, this local readiness check works there:
 
-Sign in only through the Microsoft prompt opened by the launcher. Do not share
-your password, device code, token, certificate, or other credentials with
-anyone.
+  .\Test-Agent365Runtime.ps1
 
-See README.md for permissions, privacy, troubleshooting, and advanced use.
+It detects PowerShell 7 or points to the official installation instructions.
+It does not download or execute an installer.
+
+Use Windows Terminal with PowerShell 7 in the extracted folder:
+
+  .\Test-Agent365Package.ps1
+  .\Start-Agent365Preflight.ps1
+
+If your organization requires signed scripts, use:
+
+  .\Test-Agent365Package.ps1 -RequireSigned
+
+That check intentionally fails for this unsigned release.
+
+Choose Sample for an offline walkthrough. Sample mode makes no Graph requests
+and does not ask to install Graph. Live mode asks before CurrentUser dependency
+installation and displays a trust receipt before consent. Review the client,
+tenant, scopes and their maximum permission boundaries in the consent dialog.
+
+The tool makes read requests and disclosed Defender hunting / Purview Audit
+query-job POSTs. It performs no tenant configuration remediation. Interactive
+consent can create persistent application grants. Query jobs and broker login
+state can remain after this process ends.
+
+An Incomplete verdict is expected on the first run. Use the FULL local report's
+Evidence workspace to review guidance and record owner-approved answers.
+The SANITIZED report is a read-only sharing copy, not a remediation workspace.
+
+Download answers, then run Resume-Agent365Preflight.ps1 in the output folder.
+Resume preserves the assessment, targets and authentication mode. It identifies
+answer revisions by report ID, scope and content hash, including browser "(1)"
+filenames. Multiple valid revisions require your explicit choice.
+For redirected Downloads, pass -DownloadsPath or an explicit -AnswersPath.
+For automated-only recollection, pass -AutomatedOnly. Existing evidence keeps
+its original approval date and may require revalidation or expire.
+App-only resume requires you to re-supply certificate details; it never silently
+switches to delegated sign-in.
+
+Do not share passwords, device codes, tokens, certificates, or other credentials.
+Keep full reports and answers under your local retention policy.
+See README.md for the support matrix, permissions and limitations.
+See OFFBOARDING.md for cleanup; never automatically revoke shared client grants.

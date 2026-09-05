@@ -2,6 +2,19 @@
 
 All notable changes to this resource are documented in this file.
 
+## 2.0.0 - 2026-09-05
+
+- Separated versioned assessment scope from collection intent. Omitted applicable collectors are NotAssessed and cannot improve satisfied requirements or coverage.
+- Added strict raw response contracts, safe Graph pagination and verdict-relevant malformed/service failures.
+- Made SharePoint applicability contextual and PIM an explicit assessment policy.
+- Added context-bound evidence revisions, stable observation binding, approval expiry and faithful target/authentication-preserving resume.
+- Added comparability guards and NotReassessed drift classification rather than false resolution.
+- Added pre-consent trust receipts, customer-owned delegated-client support, offboarding guidance and a PowerShell 5.1-compatible runtime check.
+- Added a dedicated Evidence workspace, local draft exchange, original approval retention and complete-report printing.
+- Removed editing and resume controls from sharing copies.
+- Added standalone package license notices, a source/hash/dependency manifest, explicit unsigned provenance and release-owner gates.
+- Breaking change: old reports cannot be resumed faithfully, and legacy positive answers require revalidation under the v2 contract.
+
 ## 1.4.1 - 2026-09-04
 
 - Added `START-HERE.txt` for immediate use from an extracted customer folder.
