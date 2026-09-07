@@ -4,11 +4,11 @@ type: strategy
 category: Interactive
 summary: >-
   Compare Microsoft Copilot agent platforms with capability views, decision guidance, support
-  indicators, and scenarios.
+  indicators, and adjacent experiences.
 author: Microsoft FastTrack
-version: 3.6.0
+version: 3.7.0
 published: "2025-10-28"
-updated: "2026-08-31"
+updated: "2026-09-07"
 tags:
   - guide
   - decision
@@ -25,7 +25,7 @@ whyUseIt:
 howToUse: >-
   Open `index.html` directly in a modern browser. To host locally, run `python -m http.server 8000`
   from the resource folder and browse to `http://localhost:8000/index.html`. Use the Overview,
-  Capabilities, Comparison, and Guidance tabs.
+  Guidance, Capabilities, Comparison, Labs, and Message Center tabs.
 prerequisites:
   - Modern web browser
 ---
@@ -48,7 +48,7 @@ The **Copilot Agents Guide** is a comprehensive, interactive web-based tool that
 - **Visual cards** with key metrics and capabilities
 - **Responsive design** works on desktop, tablet, and mobile
 
-### 🧭 Four Comprehensive Views
+### 🧭 Six Comprehensive Views
 
 #### 1. Overview Tab
 - Detailed agent descriptions
@@ -75,6 +75,13 @@ The **Copilot Agents Guide** is a comprehensive, interactive web-based tool that
 - Time and cost breakdowns
 - Key takeaways
 
+#### 5. Labs Tab
+- Hands-on Copilot Studio lab walkthroughs
+- Practice scenarios for building and testing agents
+
+#### 6. Message Center Tab
+- Recent Microsoft 365 Copilot and agent service updates relevant to planning
+
 ### ⚡ FastTrack Support Indicators
 - Subtle badges showing which agents qualify for Microsoft FastTrack remote guidance
 - Link to official FastTrack service description
@@ -82,12 +89,14 @@ The **Copilot Agents Guide** is a comprehensive, interactive web-based tool that
 
 ## 🤖 Agent Types Covered
 
-### 1. **Researcher & Analyst Agents** 
-Built-in reasoning agents for research and data analysis
-- **Researcher:** Complex multi-step research across work data and the web. You can choose the model and mode from the model picker when working in the Researcher agent; the picker is disabled and defaults to auto when you add @Researcher to a Copilot chat
+### 1. **First-Party Agents**
+Built-in agents included with Microsoft 365 Copilot
+- **Researcher:** Complex multi-step research across work data and the web. Supported models and modes can be selected in the Researcher agent, and when you add @Researcher in Copilot Chat on Windows and web
 - **Analyst:** Data analysis with Python execution
+- **Viva Engage Community Agent:** Answers community questions grounded in community conversations and SharePoint (Preview)
+- **Workflows Agent:** Natural language task automation built on Power Automate templates
 - **Availability:** Immediate (pre-pinned in M365 Copilot)
-- **Cost:** Included with M365 Copilot license (25 queries/month)
+- **Cost:** Included with M365 Copilot license (Researcher: 25 queries per user per month)
 
 ### 2. **Agent Builder**
 Low-code agents built within Microsoft 365 Copilot
@@ -119,6 +128,25 @@ Pro-code development with full control
 - Visual Studio Code
 - CI/CD support
 - **Note:** Self-service only (no FastTrack support)
+
+## 🧩 Adjacent Experiences Covered
+
+These are not agent-building platforms, so they are not counted among the six agent types. The guide covers them because they affect planning, licensing, and governance decisions.
+
+### **Copilot Cowork**
+Delegated, multi-step knowledge work across Microsoft 365
+- Generally available to Microsoft 365 Copilot tenants in tier-1 languages, with use and access currently limited to Anthropic-supported regions
+- Access is granted through a spending policy that selects Cowork; consumption is billed in Copilot Credits
+- Supports scheduled prompts and event-driven tasks that run when a matching email or Teams message arrives
+- FastTrack publishes a **separate Cowork scope** covering fundamentals, consumption guidance, configuring Cowork and billing policies, and validating usage-based billing, spending policies, and monitoring
+
+### **Microsoft Agent 365**
+Control plane for observing, securing, and governing agents at scale
+
+### **Microsoft Scout** (Preview)
+Desktop AI application available only through the Frontier preview program
+- Requires both a Microsoft 365 Copilot license and a GitHub Copilot Business or Enterprise seat
+- Not available in US Government, sovereign, or national clouds
 
 ## 🚀 How to Use
 
@@ -213,7 +241,7 @@ All agent information verified from official Microsoft sources:
 - FastTrack for Microsoft 365 service descriptions
 - Official Microsoft 365 Blog announcements
 
-**Last Verified:** August 2026
+**Last Verified:** September 2026
 
 ## 🔄 Updates & Maintenance
 
@@ -262,6 +290,7 @@ We're always looking to enhance the guide with:
 - [Microsoft 365 Agents Toolkit](https://github.com/officedev/microsoft-365-agents-toolkit)
 - [FastTrack for Microsoft 365](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/)
 - [FastTrack scope — Microsoft 365 Copilot](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-copilot-agents)
+- [FastTrack scope — Microsoft Copilot Cowork](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-copilot-cowork)
 - [FastTrack scope — Microsoft Agent 365](https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-agent-365)
 - [Microsoft Agent 365 overview](https://learn.microsoft.com/en-us/microsoft-agent-365/overview)
 - [Compare Microsoft 365 E3, E5, and E7 license features](https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-license-feature-overview)
@@ -272,6 +301,12 @@ We're always looking to enhance the guide with:
 - [Copilot Cowork FAQ](https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/cowork-faq)
 - [What's new in Copilot Cowork](https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/whats-new)
 - [Use the local browser in Copilot Cowork](https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/cowork-local-browser)
+- [Manage Copilot Cowork for your organization](https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/cowork-admin-governance)
+- [Use Copilot Cowork](https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/use-cowork)
+- [Get started with Microsoft Scout](https://learn.microsoft.com/en-us/microsoft-scout/get-started)
+- [Admin access overview for Microsoft Scout](https://learn.microsoft.com/en-us/microsoft-scout/admin-access-overview)
+- [Responsible AI FAQ for Microsoft Scout](https://learn.microsoft.com/en-us/microsoft-scout/microsoft-scout-responsible-ai-faq)
+- [What's new in Microsoft Scout](https://learn.microsoft.com/en-us/microsoft-scout/whats-new)
 - [Researcher agent FAQ](https://learn.microsoft.com/en-us/microsoft-365/copilot/faq-researcher)
 - [Cost considerations for agents](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/cost-considerations)
 - [Researcher & Analyst Announcement](https://www.microsoft.com/en-us/microsoft-365/blog/2025/03/25/introducing-researcher-and-analyst-in-microsoft-365-copilot/)
@@ -284,8 +319,8 @@ This guide is provided as-is for informational and planning purposes. Microsoft,
 
 ---
 
-**Version:** 3.6 (August 2026)  
-**Includes:** Copilot Cowork availability corrected to tier-1 languages within Anthropic-supported regions with Anthropic models as an optional admin choice, Cowork local browser use updated from Frontier to general availability with its admin enablement requirement, Copilot Studio Entra Agent ID environment-level opt-out removal corrected to May 2026, agent cost guidance aligned to published cost considerations, and Researcher described from its current documented capabilities  
+**Version:** 3.7 (September 2026)  
+**Includes:** Copilot Cowork access corrected to a spending policy that selects Cowork (the deprecated agent-level enablement wording is removed), the separate FastTrack Cowork scope and the Request for Assistance fallback documented, Cowork event-driven tasks added, the stale Researcher model picker limitation removed now that model and mode selection is available when adding @Researcher in Copilot Chat, the disputed Entra Agent ID rollout date removed with the standard-harness qualifier and optional manual migration added, and Microsoft Scout added as a preview adjacent experience  
 **Format:** Single-file HTML application  
 
 *Built to help you navigate the Microsoft Copilot agent ecosystem with confidence.*

@@ -333,7 +333,7 @@
                 'Workflows: Natural language task automation and approvals (English only)',
                 'All: Pre-built into Microsoft 365 Copilot — no custom development',
                 'All: Immediate or same-day deployment',
-                'Researcher: Model and mode selection from the model picker in the Researcher agent',
+                'Researcher: Model and mode selection in the Researcher agent, and when you add @Researcher in Copilot Chat on Windows and web',
                 'Researcher: Over 30 languages supported',
                 'Viva Engage: Grounded in community conversations and SharePoint',
                 'Workflows: Integration with Power Automate templates'
@@ -341,7 +341,6 @@
               limitations: [
                 'Requires Microsoft 365 Copilot license',
                 'Researcher: 25 queries per user per month',
-                'Researcher: The model picker is disabled and defaults to auto when you add @Researcher to a Copilot chat instead of using the Researcher agent',
                 'Workflows: English only',
                 'No support for external deployment channels',
                 'Viva Engage: Requires active communities with conversation history for best results',
@@ -953,7 +952,7 @@
                             </div>
                             <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
                               <Clock className="w-4 h-4 text-green-600" />
-                              <span>Copilot Cowork: Available after tenant enablement and usage-based billing configuration <span className="text-xs text-green-600 font-medium">(Generally available)</span></span>
+                              <span>Copilot Cowork: Available to Microsoft 365 Copilot licensed users who are included in a spending policy that selects Cowork <span className="text-xs text-green-600 font-medium">(Generally available)</span></span>
                             </div>
                             <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
                               <Clock className="w-4 h-4 text-green-600" />
@@ -1008,6 +1007,8 @@
                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">Start with Copilot Cowork and first-party agents like Researcher, Analyst, Viva Engage Community Agent, or SharePoint agents — these are the fastest way to demonstrate personal productivity value. Prove adoption with Agent Builder, then scale to Copilot Studio or the Toolkit when you need repeatable multi-user processes, compliance guardrails, governance, or external channels.</p>
                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">FastTrack provides remote guidance within its published scope — agent fundamentals, adoption guidance, and an overview of Microsoft prebuilt agents; agent management and governance, including premium capabilities in Agent 365 subscriptions; declarative and SharePoint agent deployment; custom engine agents on Teams, Microsoft 365 Copilot, or SharePoint channels; Cowork and consumption controls; enabling People Skills; Microsoft-published Copilot connectors; Application Lifecycle Management; data protection, management controls, and cost controls; agent usage reporting; and Copilot Control System setup.</p>
                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-2">Out of scope: hands-on implementation and project management; creating custom agents with Teams Toolkit, Azure AI Foundry, Semantic Kernel, the Agents SDK, or Fabric data agents; Azure DevOps or Git for ALM; non-Microsoft-published or custom connectors; People Skills agents; Dynamics 365 agent creation; consumption licensing setup; data governance assessment; custom reports, scenarios, or content; end-user training; and creating and implementing an adoption and change management strategy or plan. <a href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-copilot-agents" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600 dark:hover:text-blue-400">See the FastTrack service description.</a></p>
+                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-2">FastTrack publishes a separate Cowork scope: Cowork fundamentals and value guidance; guidance on consumption; configuring Cowork; configuring billing policies; and validating usage-based billing, spending policies, and monitoring. Setting up Azure subscriptions is out of scope for Cowork. <a href="https://learn.microsoft.com/en-us/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-copilot-cowork" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600 dark:hover:text-blue-400">See the Cowork scope.</a></p>
+                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-2">If deployment guidance for a product is not listed in the FastTrack service, complete the Request for Assistance form so the request is reviewed and routed to a resource who can support your deployment goals.</p>
                       </div>
                     </div>
                   </div>
@@ -1047,6 +1048,10 @@
                       <div className="flex items-start gap-2">
                         <ArrowRight className="w-4 h-4 text-purple-500 mt-0.5 flex-shrink-0" />
                         <span className="text-gray-600 dark:text-gray-300">Users set the goal; Cowork determines the plan and steps</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <ArrowRight className="w-4 h-4 text-purple-500 mt-0.5 flex-shrink-0" />
+                        <span className="text-gray-600 dark:text-gray-300">Scheduled prompts and event-driven tasks that run when a matching email or Teams message arrives, including @mentions; actions default to draft-and-approve</span>
                       </div>
                     </div>
                   </div>
@@ -1149,7 +1154,7 @@
                       </div>
                       <div className="p-3 bg-purple-50 dark:bg-purple-950/30 rounded">
                         <p className="font-semibold text-purple-800 mb-1"><a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/cowork-faq" target="_blank" rel="noopener noreferrer" className="underline hover:text-purple-600">Copilot Cowork</a>:</p>
-                        <p className="text-gray-700 dark:text-gray-200 text-xs">Generally available to Microsoft 365 Copilot tenants in tier-1 languages, with use and access currently limited to Anthropic-supported regions. Requires a Microsoft 365 Copilot license, a supported browser, and an admin to enable Cowork and usage-based billing; consumption is billed in Copilot Credits. Anthropic models are optional and enabled separately by an admin. Local browser use in Microsoft Edge is now generally available, but an admin must enable it before users can use it.</p>
+                        <p className="text-gray-700 dark:text-gray-200 text-xs">Generally available to Microsoft 365 Copilot tenants in tier-1 languages, with use and access currently limited to Anthropic-supported regions. Requires a Microsoft 365 Copilot license, a supported browser, and a spending policy that selects Cowork. The spending policy is the access control, not just a budget, so any user in its scope can use Cowork regardless of the credit limit; consumption is billed in Copilot Credits. Anthropic models are optional and enabled separately by an admin. Local browser use in Microsoft Edge is now generally available, but an admin must enable it before users can use it.</p>
                       </div>
                       <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded">
                         <p className="font-semibold text-blue-800 mb-1"><a href="https://learn.microsoft.com/en-us/microsoft-agent-365/overview" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600">Agent 365</a> — enterprise agent governance:</p>
@@ -1157,7 +1162,7 @@
                       </div>
                       <div className="p-3 bg-cyan-50 dark:bg-cyan-950/30 rounded">
                         <p className="font-semibold text-cyan-800 mb-1"><a href="https://learn.microsoft.com/en-us/microsoft-copilot-studio/admin-use-entra-agent-identities" target="_blank" rel="noopener noreferrer" className="underline hover:text-cyan-600">Copilot Studio agent identity</a> — Microsoft Entra Agent ID:</p>
-                        <p className="text-gray-700 dark:text-gray-200 text-xs">Copilot Studio automatically creates a Microsoft Entra Agent ID for each new agent. Since May 2026, automatic agent identity creation can no longer be turned off at the environment level. Agents created before the rollout continue to use app registrations until Microsoft migrates them, and Microsoft documents governance capabilities as working for both during the transition. Connector permissions are attached as API permissions on the agent identity, so admins can target them with Microsoft Entra Conditional Access policies.</p>
+                        <p className="text-gray-700 dark:text-gray-200 text-xs">Copilot Studio automatically creates a Microsoft Entra Agent ID for each new standard-harness agent, and automatic agent identity creation can no longer be turned off at the environment level. Agents created before the rollout continue to use app registrations until Microsoft migrates them, or an admin migrates them manually through the Power Platform admin center, PowerShell, or Power Platform APIs. Microsoft documents governance capabilities as working for both during the transition. Connector permissions are attached as API permissions on the agent identity, so admins can target them with Microsoft Entra Conditional Access policies.</p>
                       </div>
                       <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded">
                         <p className="font-semibold text-indigo-800 mb-1"><a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-license-feature-overview#whats-in-each-license" target="_blank" rel="noopener noreferrer" className="underline hover:text-indigo-600">Microsoft 365 E7 Frontier Suite</a>:</p>
@@ -1166,6 +1171,10 @@
                       <div className="p-3 bg-cyan-50 dark:bg-cyan-950/30 rounded">
                         <p className="font-semibold text-cyan-800 mb-1"><a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/people-skills-overview" target="_blank" rel="noopener noreferrer" className="underline hover:text-cyan-600">People Skills</a>:</p>
                         <p className="text-gray-700 dark:text-gray-200 text-xs">No separate licence is required, but available capabilities vary by service plan: Foundation excludes AI inferencing and Copilot capabilities, Advanced adds AI inferencing, and Microsoft 365 Copilot in Productivity Apps adds the related Copilot experiences. AI inferencing is not on by default for Microsoft 365 commercial users. FastTrack remote guidance covers enabling People Skills; People Skills agents are listed as out of scope.</p>
+                      </div>
+                      <div className="p-3 bg-teal-50 dark:bg-teal-950/30 rounded">
+                        <p className="font-semibold text-teal-800 mb-1"><a href="https://learn.microsoft.com/en-us/microsoft-scout/admin-access-overview" target="_blank" rel="noopener noreferrer" className="underline hover:text-teal-600">Microsoft Scout</a> (Preview):</p>
+                        <p className="text-gray-700 dark:text-gray-200 text-xs">Preview desktop app for Windows 11 or macOS 12 and later, available only through the Frontier preview program and not available in US Government, sovereign, or national clouds. Budget two paid seats per user, a Microsoft 365 Copilot license plus a GitHub Copilot Business or Enterprise seat, because token billing runs through the user's GitHub account. Model processing runs through GitHub Copilot, where Microsoft 365 data residency, retention, sensitivity labeling, and eDiscovery protections do not apply.</p>
                       </div>
                       <div className="p-3 bg-yellow-50 dark:bg-yellow-950/30 rounded">
                         <p className="font-semibold text-yellow-800 mb-1">Additional licensing or consumption may apply:</p>
@@ -1489,7 +1498,7 @@
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400 text-xs px-2.5 py-1 rounded-full border border-transparent dark:border-white/[0.08]">
                       <Clock className="w-3 h-3" />
-                      <span>Updated August 2026</span>
+                      <span>Updated September 2026</span>
                     </div>
                     <button
                       onClick={() => setIsDark(!isDark)}
