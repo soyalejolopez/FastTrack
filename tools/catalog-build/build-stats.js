@@ -1,14 +1,18 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { replaceClarityDays, unchangedStatsPayload } from './stats-state.js';
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = join(toolDirectory, '..', '..');
 const checkOnly = process.argv.includes('--check');
+const requireClarity = process.argv.includes('--require-clarity');
+const renderOnly = process.argv.includes('--render-only');
 const trafficDirectory = join(repositoryRoot, 'traffic-data');
 const clarityStatePath = join(trafficDirectory, 'clarity-views.json');
 const catalogPath = join(repositoryRoot, 'catalog.json');
 const discussionsPath = join(repositoryRoot, 'resource-discussions.json');
+const statsPath = join(repositoryRoot, 'resource-stats.json');
 const githubToken = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
 const clarityToken = process.env.CLARITY_API_TOKEN;
 const dayMilliseconds = 24 * 60 * 60 * 1000;
@@ -139,10 +143,13 @@ function parseClarityTraffic(data, knownSlugs) {
   const traffic = Array.isArray(data)
     ? data.find(metric => metric?.metricName === 'Traffic')
     : undefined;
+  if (!traffic || !Array.isArray(traffic.information)) {
+    throw new Error('Clarity response did not include the Traffic metric');
+  }
   const totals = new Map();
   const dated = new Map();
 
-  for (const row of Array.isArray(traffic?.information) ? traffic.information : []) {
+  for (const row of traffic.information) {
     const slug = slugFromClarityUrl(row.URL ?? row.Url ?? row.url, knownSlugs);
     if (!slug) continue;
     const metrics = metricsFromClarityRow(row);
@@ -195,20 +202,26 @@ function subtractClarityTotals(larger, smaller) {
   return result;
 }
 
-function mapToObject(map) {
-  return Object.fromEntries([...map].sort(([left], [right]) => left.localeCompare(right)));
+function setActionOutput(name, value) {
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
+  }
 }
 
 async function updateClarityState(state, knownSlugs) {
+  if (renderOnly) {
+    console.log('Render-only mode; using persisted Clarity views without collecting.');
+    return { available: false, changed: false };
+  }
   if (!clarityToken) {
     console.log('CLARITY_API_TOKEN is not set; preserving accumulated Clarity views.');
-    return false;
+    return { available: false, changed: false };
   }
 
   try {
     const threeDays = await fetchClarity(3, knownSlugs);
     if (threeDays.dated.size > 0) {
-      for (const [date, bucket] of threeDays.dated) state.days[date] = mapToObject(bucket);
+      replaceClarityDays(state, threeDays.dated, runDate);
     } else {
       // The API normally returns rolling aggregates rather than dates. Cumulative 1/2/3-day
       // windows are differenced so each run persists overlap-safe daily buckets.
@@ -220,15 +233,16 @@ async function updateClarityState(state, knownSlugs) {
         new Date(Date.parse(`${runDate}T00:00:00Z`) - offset * dayMilliseconds)
           .toISOString().slice(0, 10)
       );
-      state.days[dates[0]] = mapToObject(oneDay.totals);
-      state.days[dates[1]] = mapToObject(subtractClarityTotals(twoDays.totals, oneDay.totals));
-      state.days[dates[2]] = mapToObject(subtractClarityTotals(threeDays.totals, twoDays.totals));
+      replaceClarityDays(state, new Map([
+        [dates[0], oneDay.totals],
+        [dates[1], subtractClarityTotals(twoDays.totals, oneDay.totals)],
+        [dates[2], subtractClarityTotals(threeDays.totals, twoDays.totals)]
+      ]), runDate);
     }
-    state.lastRun = runDate;
-    return true;
+    return { available: true, changed: true };
   } catch (error) {
     console.warn(`Warning: could not collect Clarity views: ${error.message}`);
-    return false;
+    return { available: false, changed: false };
   }
 }
 
@@ -269,9 +283,13 @@ async function githubGraphql(query, variables) {
 
 async function collectDiscussions() {
   const discussions = [];
+  if (renderOnly) {
+    console.log('Render-only mode; using persisted discussion stats without collecting.');
+    return { available: false, discussions };
+  }
   if (!githubToken) {
     console.log('GITHUB_TOKEN or GH_TOKEN is not set; skipping discussion upvotes.');
-    return discussions;
+    return { available: false, discussions };
   }
 
   const query = `query($owner:String!,$name:String!,$after:String) {
@@ -301,9 +319,9 @@ async function collectDiscussions() {
     } while (after);
   } catch (error) {
     console.warn(`Warning: could not collect GitHub Discussions: ${error.message}`);
-    return [];
+    return { available: false, discussions: [] };
   }
-  return discussions;
+  return { available: true, discussions };
 }
 
 function mapDiscussions(discussions, knownSlugs, explicitMap) {
@@ -337,6 +355,20 @@ function mapDiscussions(discussions, knownSlugs, explicitMap) {
   return result;
 }
 
+function previousUpvotes(previousStats, knownSlugs) {
+  const result = new Map();
+  for (const [slug, stats] of Object.entries(previousStats?.resources ?? {})) {
+    if (!knownSlugs.has(slug) || !stats || typeof stats !== 'object') continue;
+    const upvotes = numberFrom(stats.upvotes);
+    if (upvotes === undefined) continue;
+    result.set(slug, {
+      upvotes: Math.round(upvotes),
+      ...(stats.discussion ? { discussion: stats.discussion } : {})
+    });
+  }
+  return result;
+}
+
 const catalog = readJson(catalogPath);
 const knownSlugs = new Set(catalog.resources.map(resource => resource.slug));
 const resourceFolders = catalog.resources
@@ -355,14 +387,17 @@ const discussionConfig = readOptionalJson(discussionsPath, {
   note: 'Maps gallery resource slug -> GitHub Discussion number in the Resource Votes category.',
   map: {}
 });
+const previousStats = readOptionalJson(statsPath, {});
 const clarityState = readOptionalJson(clarityStatePath, { lastRun: '', days: {} });
 if (!clarityState.days || typeof clarityState.days !== 'object') clarityState.days = {};
 
-const clarityChanged = await updateClarityState(clarityState, knownSlugs);
+const clarityResult = await updateClarityState(clarityState, knownSlugs);
 const clarityViews = collectClarityViews(clarityState, knownSlugs);
 const fallbackViews = collectFallbackViews(resourceFolders);
-const discussions = await collectDiscussions();
-const upvoteTotals = mapDiscussions(discussions, knownSlugs, discussionConfig.map ?? {});
+const discussionResult = await collectDiscussions();
+const upvoteTotals = discussionResult.available
+  ? mapDiscussions(discussionResult.discussions, knownSlugs, discussionConfig.map ?? {})
+  : previousUpvotes(previousStats, knownSlugs);
 const resources = {};
 let viewCount = 0;
 let upvoteCount = 0;
@@ -389,24 +424,35 @@ for (const resource of catalog.resources) {
   if (Object.keys(stats).length > 0) resources[resource.slug] = stats;
 }
 
-const output = `${JSON.stringify({
-  generatedAt: new Date().toISOString(),
+const payload = {
   sources: {
     views: 'clarity',
     upvotes: 'github-discussions'
   },
   resources
-}, null, 2)}\n`;
+};
+const generatedAt = unchangedStatsPayload(previousStats, payload) && previousStats.generatedAt
+  ? previousStats.generatedAt
+  : new Date().toISOString();
+const output = `${JSON.stringify({ generatedAt, ...payload }, null, 2)}\n`;
 
 if (!checkOnly) {
   mkdirSync(trafficDirectory, { recursive: true });
-  writeFileSync(join(repositoryRoot, 'resource-stats.json'), output);
+  writeFileSync(statsPath, output);
   if (!existsSync(discussionsPath)) {
     writeFileSync(discussionsPath, `${JSON.stringify(discussionConfig, null, 2)}\n`);
   }
-  if (clarityChanged || !existsSync(clarityStatePath)) {
+  if (clarityResult.changed || !existsSync(clarityStatePath)) {
     writeFileSync(clarityStatePath, `${JSON.stringify(clarityState, null, 2)}\n`);
   }
 }
 
 console.log(`${checkOnly ? 'Checked' : 'Wrote'} real stats for ${viewCount} resource${viewCount === 1 ? '' : 's'} with views and ${upvoteCount} resource${upvoteCount === 1 ? '' : 's'} with upvotes.`);
+
+setActionOutput('generated', 'true');
+setActionOutput('clarity_available', String(clarityResult.available));
+
+if (requireClarity && !clarityResult.available) {
+  console.error('Clarity collection is required but unavailable; accumulated values were preserved and no missing metrics were replaced with zero.');
+  process.exitCode = 1;
+}
