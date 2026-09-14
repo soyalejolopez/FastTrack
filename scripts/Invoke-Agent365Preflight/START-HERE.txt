@@ -5,6 +5,10 @@ Commercial cloud only. Customer-run, local-first, community/as-is software.
 This is not a certification or a Microsoft support entitlement.
 
 BEFORE DOWNLOADING OR SIGNING IN
+Read PERMISSIONS-AND-CONSENT.md in this folder before approving consent.
+The complete permission set is broad: formally review its maximum boundaries,
+persistent grants, default client, isolation options and cleanup with your
+identity/security teams. The guide includes a customer FAQ and an SME response.
 Agree the assessment stage, target sites, role policy and evidence owners.
 Arrange tenant admin consent and the directory/workload roles in README.md.
 Approval and preparation can take days; execution is usually minutes.
@@ -15,7 +19,7 @@ This release is unsigned. A checksum detects changes but does not authenticate
 the publisher. Obtain the ZIP and SHA256 from your approved release source.
 In Windows PowerShell 5.1 or PowerShell 7, compare the result with that checksum:
 
-  Get-FileHash -LiteralPath '.\Agent365Preflight-2.0.0.zip' -Algorithm SHA256
+  Get-FileHash -LiteralPath '.\Agent365Preflight-2.0.1.zip' -Algorithm SHA256
 
 Windows may mark an internet download with Mark-of-the-Web. If organization
 policy permits, right-click the ZIP, choose Properties, select Unblock, and
@@ -23,7 +27,7 @@ apply BEFORE extraction. Otherwise use your organization's approved extraction
 and execution process. Do not use a blanket execution-policy bypass.
 
 EXTRACT, CHECK RUNTIME, THEN START
-Extract the ZIP. Open the Agent365Preflight-2.0.0 folder.
+Extract the ZIP. Open the Agent365Preflight-2.0.1 folder.
 PowerShell 7 is required for the main launcher. If you only have Windows
 PowerShell 5.1, this local readiness check works there:
 

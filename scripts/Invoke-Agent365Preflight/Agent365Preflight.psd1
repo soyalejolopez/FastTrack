@@ -1,6 +1,6 @@
 @{
     RootModule = 'Agent365Preflight.psm1'
-    ModuleVersion = '2.0.0'
+    ModuleVersion = '2.0.1'
     GUID = '87c4af68-5403-4cf6-8aca-0d649c9e5ca5'
     Author = 'Microsoft FastTrack'
     CompanyName = 'Microsoft'
@@ -23,7 +23,7 @@
             Tags = @('Agent365', 'Microsoft365', 'Readiness', 'Preflight')
             ProjectUri = 'https://github.com/microsoft/FastTrack'
             LicenseUri = 'https://github.com/microsoft/FastTrack/blob/master/LICENSE-CODE'
-            ReleaseNotes = 'Introduces separate assessment scope, validated raw evidence, context-bound manual evidence, faithful resume, and release provenance.'
+            ReleaseNotes = 'Adds the packaged public-source permissions and consent guide, customer FAQ, and pre-consent references without changing collection behavior.'
         }
     }
 }

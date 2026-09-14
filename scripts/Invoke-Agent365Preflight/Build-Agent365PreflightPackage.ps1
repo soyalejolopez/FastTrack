@@ -61,6 +61,7 @@ $relativeFiles = @(
     'Test-Agent365Runtime.ps1'
     'Test-Agent365Package.ps1'
     'OFFBOARDING.md'
+    'PERMISSIONS-AND-CONSENT.md'
     'RELEASE-CHECKLIST.md'
     'config\assessment-policy.v2.json'
     'config\strings.en.json'

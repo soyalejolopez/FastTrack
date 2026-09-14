@@ -2,6 +2,14 @@
 
 All notable changes to this resource are documented in this file.
 
+## 2.0.1 - 2026-09-14
+
+- Added `PERMISSIONS-AND-CONSENT.md`, a customer-safe guide and FAQ with public Microsoft Learn sources and a copy-ready SME response.
+- Documented broad scope boundaries, the default delegated client, persistent consent versus process/broker state, custom-client isolation, and deliberate offboarding.
+- Linked the guide before consent and from the entry-point documentation; included it in the deterministic ZIP and file-hash manifest.
+- Added permissions-guide, public-link, package-integrity and pre-consent notice checks. Collection behavior, scope selection and report schemas are unchanged.
+- Existing v2 version/hash binding remains in effect: a new resource version requires manual evidence revalidation and is not a comparable baseline for a different engine version.
+
 ## 2.0.0 - 2026-09-05
 
 - Separated versioned assessment scope from collection intent. Omitted applicable collectors are NotAssessed and cannot improve satisfied requirements or coverage.

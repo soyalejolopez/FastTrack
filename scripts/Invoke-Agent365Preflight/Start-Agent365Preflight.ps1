@@ -710,7 +710,7 @@ function Invoke-A365CustomerJourney {
     if ($DelegatedClientId -and ($ClientId -or $CertificateThumbprint)) { throw 'DelegatedClientId cannot be combined with certificate app-only parameters.' }
     if ($ExcludeRequirement.Count -gt 0 -and $Mode -notin @('Advanced', 'Resume')) { throw 'Only Advanced mode can explicitly narrow the assessment scope.' }
     Write-Host 'Commercial cloud only. Community/as-is tool; not a certification or a Microsoft support entitlement.'
-    Write-Host 'Read operations plus disclosed query-job POSTs. No tenant configuration remediation. Interactive consent may establish persistent grants.'
+    Write-Host 'Read operations plus disclosed Defender hunting and Purview Audit query-job POSTs. No tenant configuration remediation. Interactive consent may establish persistent grants.'
     Write-Host 'The full report stays local and is the remediation workspace. The sanitized copy is only for sharing.'
     Write-Host 'Arrange roles, admin consent, target scope and evidence owners before running; organizational approval can take days.'
     Write-Host 'Execution is usually minutes, but tenant size, throttling and audit timeout affect duration.'
@@ -882,7 +882,7 @@ function Invoke-A365CustomerJourney {
         Write-A365ScopeExplanation -Scopes $scopes
         Write-Host ''
         Write-Host 'Tenant consent permits the application scope. Your directory and workload roles separately determine which evidence you can read.'
-        Write-Host 'No custom app registration is required for normal interactive first use.'
+        Write-Host 'The default delegated path uses the existing Microsoft Graph PowerShell client; no new app registration is required. Read PERMISSIONS-AND-CONSENT.md in the package root before consenting.'
         & (Get-A365LauncherModule) {
             param($Scopes, $Tenant, $DelegatedClient)
             $receipt = New-A365TrustReceipt -Scopes $Scopes -TenantTarget $Tenant -DelegatedClientId $DelegatedClient -Policy (Read-A365Json (Join-Path $script:ModuleRoot 'config\assessment-policy.v2.json') Policy) -Allowlist (Read-A365Json $script:AllowlistPath Allowlist)

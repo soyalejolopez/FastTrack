@@ -28,7 +28,7 @@ from the source checkout. `A365_PLAYWRIGHT_PATH` may point to a session-local Pl
 The second argument must be an extracted standalone package, not the source resource:
 
 ```powershell
-node .\tests\BrowserJourney.cjs C:\ReleaseCandidate\Agent365Preflight-2.0.0 C:\ReleaseCandidate\BrowserResults
+node .\tests\BrowserJourney.cjs C:\ReleaseCandidate\Agent365Preflight-2.0.1 C:\ReleaseCandidate\BrowserResults
 ```
 
 The normal gate runs Chromium, Firefox and WebKit across full/sharing, blocked, malformed,

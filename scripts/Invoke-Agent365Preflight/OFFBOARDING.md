@@ -2,9 +2,12 @@
 
 The checker has no telemetry, hosted storage or automatic remediation. It does not revoke access or remove dependencies for you.
 
+Read [Permissions and consent: customer guide and FAQ](PERMISSIONS-AND-CONSENT.md) for the distinction
+between the local session, persistent tenant consent and broker sign-in state, and for dedicated-client isolation.
+
 ## End the session
 
-Run `Disconnect-MgGraph` or end the PowerShell process. This ends the SDK connection. It does **not** revoke tenant consent or guarantee removal of Windows Authentication Manager (WAM), broker, browser or operating-system sign-in state. Follow organizational identity-session policy for those systems.
+Run `Disconnect-MgGraph` or end the PowerShell process. This ends the SDK connection. It does **not** revoke tenant consent or guarantee removal of Web Account Manager (WAM), broker, browser or operating-system sign-in state. Follow organizational identity-session policy for those systems.
 
 ## Handle local artifacts
 
@@ -15,6 +18,12 @@ Evidence text is held in browser memory until an explicit export. Browser storag
 ## Review grants separately
 
 Interactive consent may establish persistent delegated grants. App-only permissions and certificates are managed separately on the customer application. An authorized administrator should review the client identity recorded in the full report and the organization's approved permissions.
+
+Follow the public [enterprise application permission review/revocation instructions](https://learn.microsoft.com/entra/identity/enterprise-apps/manage-application-permissions).
+Review both Admin consent and User consent for the actual client ID. Revoking admin-consented
+permissions in the portal and removing user-consented grants through the documented API/PowerShell
+path are distinct actions. [Existing access tokens can remain valid after delegated grant deletion](https://learn.microsoft.com/graph/api/oauth2permissiongrant-delete?view=graph-rest-1.0),
+and users may be able to consent again; review session and consent policy too.
 
 Never automatically revoke grants for the shared Microsoft Graph PowerShell client. Other workflows may use them. A customer-owned delegated client (`-DelegatedClientId`) provides a separate consent boundary when configured using [Microsoft's custom application guidance](https://learn.microsoft.com/powershell/microsoftgraph/authentication-commands#use-delegated-access-with-a-custom-application-for-microsoft-graph-powershell). `-ClientId` remains certificate app-only and must not be substituted for `-DelegatedClientId`.
 

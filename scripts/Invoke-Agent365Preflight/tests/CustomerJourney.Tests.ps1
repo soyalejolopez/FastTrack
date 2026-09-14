@@ -481,6 +481,7 @@ Describe 'Clean package self-service journey' {
                 'Test-Agent365Runtime.ps1',
                 'Test-Agent365Package.ps1',
                 'OFFBOARDING.md',
+                'PERMISSIONS-AND-CONSENT.md',
                 'RELEASE-CHECKLIST.md',
                 'config/assessment-policy.v2.json',
                 'config/strings.en.json',
@@ -530,8 +531,40 @@ Describe 'Clean package self-service journey' {
 
         It 'builds the same ordered bytes from unchanged source files' {
             $packageA.SHA256 | Should -Be $packageB.SHA256
-            $packageA.FileName | Should -Be 'Agent365Preflight-2.0.0.zip'
-            $packageA.RootFolder | Should -Be 'Agent365Preflight-2.0.0'
+            $packageA.FileName | Should -Be 'Agent365Preflight-2.0.1.zip'
+            $packageA.RootFolder | Should -Be 'Agent365Preflight-2.0.1'
+        }
+
+        It 'manifests the exact permissions guide and repository license bytes with source provenance' {
+            $manifest = Get-Content -LiteralPath (Join-Path $extractedRoot 'release-manifest.json') -Raw | ConvertFrom-Json -Depth 30
+            $manifest.version | Should -Be '2.0.1'
+            $manifest.sourceCommit | Should -Be $packageA.SourceCommit
+            ([DateTimeOffset]$manifest.builtAtUtc) | Should -Be ([DateTimeOffset]$packageA.BuiltAtUtc)
+            $manifest.provenance | Should -Match 'Unsigned'
+            @($manifest.files).Count | Should -Be ($packageA.FileCount - 1)
+            $repositoryRoot = Split-Path -Parent (Split-Path -Parent $resourceRoot)
+            foreach ($name in @('PERMISSIONS-AND-CONSENT.md', 'LICENSE', 'LICENSE-CODE')) {
+                $source = Join-Path $(if ($name -eq 'PERMISSIONS-AND-CONSENT.md') { $resourceRoot } else { $repositoryRoot }) $name
+                $entry = @($manifest.files | Where-Object path -eq $name)
+                $entry.Count | Should -Be 1
+                $actualHash = (Get-FileHash -LiteralPath (Join-Path $extractedRoot $name) -Algorithm SHA256).Hash
+                $actualHash | Should -Be (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+                $actualHash | Should -Be $entry[0].sha256
+            }
+            $verified = & (Join-Path $extractedRoot 'Test-Agent365Package.ps1') -WarningAction SilentlyContinue
+            $verified.FilesVerified | Should -Be @($manifest.files).Count
+        }
+
+        It 'detects altered packaged consent guidance through its manifest hash' {
+            $guidePath = Join-Path $extractedRoot 'PERMISSIONS-AND-CONSENT.md'
+            $original = [IO.File]::ReadAllBytes($guidePath)
+            try {
+                [IO.File]::AppendAllText($guidePath, "`nSynthetic unapproved change.")
+                { & (Join-Path $extractedRoot 'Test-Agent365Package.ps1') } | Should -Throw '*Package hash mismatch: PERMISSIONS-AND-CONSENT.md*'
+            }
+            finally {
+                [IO.File]::WriteAllBytes($guidePath, $original)
+            }
         }
 
         It 'puts the immediate customer instructions beside the launcher' {
@@ -544,6 +577,7 @@ Describe 'Clean package self-service journey' {
             $startHere | Should -Match 'SANITIZED report'
             $startHere | Should -Match 'Resume-Agent365Preflight\.ps1'
             $startHere | Should -Match '(?s)Do not share.*credentials'
+            $startHere | Should -Match 'PERMISSIONS-AND-CONSENT\.md'
             $startHere | Should -Not -Match 'soyalejolopez|alejanl|claw-skills'
         }
 
@@ -582,7 +616,7 @@ Describe 'Clean package self-service journey' {
         It 'documents native WAM, device retry, full-report remediation, and report-linked resume' {
             $readme = Get-Content -LiteralPath (Join-Path $resourceRoot 'README.md') -Raw
 
-            $readme | Should -Match '2\.34 and later uses Windows Authentication Manager \(WAM\)'
+            $readme | Should -Match '2\.34 and later uses Web Account Manager \(WAM\)'
             $readme | Should -Match 'about 120 seconds'
             $readme | Should -Match 'Try again now'
             $readme | Should -Match 'Do not use `Set-MgGraphOption -DisableLoginByWAM`'

@@ -5,9 +5,9 @@ category: "PowerShell"
 summary: "Run a read-only Agent 365 technical pre-flight and generate self-contained HTML and JSON reports."
 author:
   - "Microsoft FastTrack"
-version: 2.0.0
+version: 2.0.1
 published: 2026-09-01
-updated: 2026-09-05
+updated: 2026-09-14
 tags:
   - agent-365
   - readiness
@@ -44,6 +44,10 @@ prerequisites:
 **Commercial cloud only. Community/as-is software, not a certification or a support entitlement.**
 Arrange consent, roles, target scope and evidence owners before download; organizational approvals
 can take days. Running the tool normally takes minutes and depends on tenant size and throttling.
+
+**Before consent, read [Permissions and consent: customer guide and FAQ](PERMISSIONS-AND-CONSENT.md).**
+It explains the broad permission boundaries, the default Graph PowerShell client, repeat use,
+persistent consent, dedicated-client isolation and cleanup. It includes a copy-ready SME response.
 
 Read [START-HERE.txt](START-HERE.txt) before launching. Verify the ZIP SHA256 against an independently
 published approved release checksum. This release is unsigned; a hash alone does not establish
@@ -258,6 +262,9 @@ evidence.
 
 ## Prerequisites
 
+Review the [permissions and consent guide](PERMISSIONS-AND-CONSENT.md) with your identity and
+security teams before approving a live run.
+
 ### PowerShell and modules
 
 PowerShell 7 is required. The only required external module is
@@ -273,6 +280,10 @@ Optional evidence is collected only when the supported first-party workload comm
 available. Establish any workload session outside this script before running it.
 
 ### Prepare consent and roles
+
+The full permission set is broad. Use the
+[customer guide and FAQ](PERMISSIONS-AND-CONSENT.md) to review purpose versus maximum access,
+what persists after sign-in, and how to remove access safely.
 
 Microsoft Graph permission consent and Microsoft Entra or workload roles are separate requirements.
 Granting a scope does not assign an administrator role, and assigning a role does not grant Graph
@@ -409,7 +420,7 @@ Graph collectors and explains every derived scope before authentication.
 
 On Windows, normal interactive authentication is the recommended path because the same process keeps
 the delegated Graph context for collection and later resume runs. Microsoft.Graph.Authentication
-2.34 and later uses Windows Authentication Manager (WAM) for normal Windows interactive sign-in.
+2.34 and later uses Web Account Manager (WAM) for normal Windows interactive sign-in.
 Run it directly in Windows Terminal or PowerShell so the broker has a parent window. Embedded or
 background terminals can fail with a window-handle error; the launcher detects common embedded
 hosts, explains the problem, and offers device code.

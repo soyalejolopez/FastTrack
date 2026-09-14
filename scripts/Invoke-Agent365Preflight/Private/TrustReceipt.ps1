@@ -50,7 +50,7 @@ function New-A365TrustReceipt {
         AllowedQueryPostPaths = @($Allowlist.graph.POST)
         AllowedWorkloadCommands = $Allowlist.modules
         QueryPersistence = 'Defender hunting uses POST to execute aggregate queries. Purview Audit Search POST creates a server-side query job, which may continue after timeout and is retained by the service. This tool does not delete query jobs.'
-        Consent = 'No tenant configuration remediation. Interactive consent can establish persistent application grants. Read permissions are broader than the data this tool retains.'
+        Consent = 'No tenant configuration remediation. Interactive consent can establish persistent application grants. Read permissions are broader than the data this tool retains. Before consent, read PERMISSIONS-AND-CONSENT.md (customer guide and FAQ) in the extracted package root.'
         LocalArtifacts = 'Full HTML/JSON, optional sharing copies, a resume helper and operator-exported answer bundles. No raw prompts, messages, files, audit records or hunting rows are persisted.'
         TokenCaveat = 'Process context limits SDK session reuse. WAM, browser and broker sign-in state can outlive this process. Ending the process does not revoke tenant consent.'
         Offboarding = 'Disconnect-MgGraph or end the process; handle local reports and answers under your retention policy; clear this report site storage; optionally remove unused modules; ask an admin to review grants. Never automatically revoke shared Graph SDK client grants.'
