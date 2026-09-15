@@ -140,7 +140,8 @@ These are the *capabilities* your agent has, not what it does in a single conver
 | **Text & generative AI tools tier** | Quality level of the AI model used in prompts | Basic, Standard, or Premium |
 | **Agent flows** | Automated multi-step task sequences | 7 credits base + 13 credits per 100 steps |
 | **Actions per flow run** | Average number of steps in one flow execution | Used to calculate the per-run flow cost |
-| **Uses reasoning model** | Whether the agent uses an advanced reasoning model | +10 credits on every generative answer and agent action |
+| **Uses reasoning model** | Whether the agent uses an advanced reasoning model | Text and generative AI tools (premium): 10 credits per 1,000 reasoning tokens, estimated once per conversation |
+| **Avg reasoning tokens per conversation** | Average reasoning tokens the model generates per conversation (only when reasoning is on) | 10 credits per 1,000 reasoning tokens (planning estimate — actual token use varies) |
 
 **Content Processing** (optional step below components): If your agent reads or processes documents or images, enter how many pages it handles per conversation. Each page costs **8 credits**.
 
@@ -177,7 +178,7 @@ This is where you describe what actually happens during a conversation — not w
 | **Iterations per scenario** | How many times you run each script (for consistency testing) |
 | **Monthly prepaid credits** | Your tenant's monthly credit allowance (0 = not using prepaid) |
 | **Pricing model** | Pay-as-you-go, Copilot Credit pack, Copilot Credit P3, or Microsoft Agent P3 (see below) |
-| **% users with M365 Copilot license** | If some users have M365 Copilot licenses, their interactions cost **zero credits** |
+| **% users with M365 Copilot license** | Share of users with M365 Copilot licenses; their eligible employee-facing authenticated interactions are not charged Copilot Credits (subject to fair use; Computer-Using Agents excluded and not modeled) |
 
 **Total test conversations** = Scenarios × Iterations.
 
@@ -192,7 +193,7 @@ This is where you describe what actually happens during a conversation — not w
 
 Source: [Microsoft Copilot Studio Licensing Guide — May 2026 (PDF)](https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/microsoft/bade/documents/products-and-services/en-us/bizapps/Microsoft-Copilot-Studio-Licensing-Guide-May-2026-PUB.pdf).
 
-**M365 Copilot license impact**: If 50% of your users have M365 Copilot licenses, half of all interactions are free. The "% users with M365 Copilot license" field accounts for this in the estimate.
+**M365 Copilot license impact**: If 50% of your users have M365 Copilot licenses, their eligible employee-facing authenticated interactions are not charged for the features this tool models. The "% users with M365 Copilot license" field accounts for this in the estimate (subject to fair use; Computer-Using Agents are excluded and not modeled).
 
 **Capacity overage**: If prepaid credits are configured, the tool shows a capacity bar. At **125% of prepaid**, custom agents are disabled by the platform.
 
@@ -240,7 +241,7 @@ Pick a template that is closest to your use case, check whether the turn counts 
 That is a *Tool / Connector call* turn. In Step 3, set "Tool / Connector calls" to the number of times the agent calls external systems per conversation. Each call costs 7 credits.
 
 ### "Some of our users have M365 Copilot licenses and some don't"
-Use the "% users with M365 Copilot license" field in Step 4. Users with those licenses consume zero credits for all features.
+Use the "% users with M365 Copilot license" field in Step 4. Users with those licenses are not charged for the eligible features this tool models in employee-facing authenticated scenarios (subject to fair use; Computer-Using Agents excluded and not modeled).
 
 ### "We haven't decided on a pricing model yet"
 Try all four. Change the "Pricing model" in Step 4 between Pay-as-you-go, Copilot Credit pack, Copilot Credit P3 (9 tiers), and Microsoft Agent P3 (3 tiers, NEW May 2026 — covers Copilot Studio + Foundry). The credit count stays the same; only the dollar total changes.
@@ -271,7 +272,7 @@ Select **Foundry Agent** as the agent type. The rest of the form changes to the 
 | **Agent action** | A tool or connector call (e.g., create ticket, send email). Costs 5 credits. |
 | **Tenant graph grounding** | Using Microsoft Graph semantic search for knowledge retrieval. Adds 10 credits per query. |
 | **Agent flow** | An automated workflow defined in Copilot Studio. Costs 7 credits per run + steps. |
-| **Reasoning model** | An advanced AI model that thinks through complex problems. Adds 10 credits per response. |
+| **Reasoning model** | An advanced AI model that thinks through complex problems. Adds a Text and generative AI tools (premium) meter of 10 credits per 1,000 reasoning tokens, estimated once per conversation (planning estimate). |
 | **Token** | The unit of billing for Foundry agents. 1 token ≈ 4 characters in English. |
 | **PAYG** | Pay-as-you-go pricing. You pay per credit consumed with no upfront commitment. |
 | **Prepaid pack** | Purchase 25 000 credits for $200 upfront — 20% cheaper than PAYG. |
@@ -296,8 +297,8 @@ Select **Foundry Agent** as the agent type. The rest of the form changes to the 
 
 This tool is provided for **planning and estimation purposes only**. It does not constitute a contract, quote, invoice, or billing commitment of any kind. Microsoft's actual pricing, licensing terms, and billing behavior are governed solely by the applicable Microsoft Customer Agreement, Product Terms, and the Azure pricing pages in effect at the time of use.
 
-Pricing rates used in this calculator were sourced from Microsoft Learn documentation and Azure pricing pages, last verified in **March 2026**. Rates are subject to change without notice. Always verify current rates at:
+Pricing rates used in this calculator were sourced from Microsoft Learn documentation and Azure pricing pages, last verified on **September 15, 2026**. Rates are subject to change without notice. Always verify current rates at:
 - [Copilot Credits billing rates](https://learn.microsoft.com/en-us/microsoft-copilot-studio/requirements-messages-management#copilot-credits-billing-rates)
 - [Azure OpenAI pricing](https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/)
 
-*Last updated: March 2026 — aligned with calculator v1.3.0*
+*Last updated: September 2026 — aligned with calculator v1.7.0*

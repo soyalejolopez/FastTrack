@@ -6,9 +6,9 @@ summary: >-
   Estimate test and production costs for Copilot Studio, Agent Builder, SharePoint, and Foundry
   agents.
 author: Microsoft FastTrack
-version: 1.0.0
+version: 1.1.0
 published: "2026-04-01"
-updated: "2026-07-16"
+updated: "2026-09-15"
 tags:
   - cost
   - roi
@@ -103,7 +103,7 @@ Source: [Copilot Credits billing rates (Microsoft Learn)](https://learn.microsof
 | AI tools — standard | 15 | per 10 responses |
 | AI tools — premium | 100 | per 10 responses |
 | Content processing | 8 | per page |
-| Reasoning model surcharge | +10 | per generative answer and agent action |
+| Reasoning (Text and generative AI tools, premium) | 10 | per 1,000 reasoning tokens |
 
 **Pricing options** (all bill in Copilot Credits):
 
@@ -116,7 +116,7 @@ Source: [Copilot Credits billing rates (Microsoft Learn)](https://learn.microsof
 
 Source: [Microsoft Copilot Studio Licensing Guide (May 2026)](https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/microsoft/bade/documents/products-and-services/en-us/bizapps/Microsoft-Copilot-Studio-Licensing-Guide-May-2026-PUB.pdf).
 
-**M365 Copilot licensed users** consume zero credits for all features when operating under their authenticated M365 Copilot identity (subject to fair-use limits).
+**M365 Copilot licensed users** are not charged Copilot Credits for the eligible features this tool models — classic answers, generative answers, agent actions, graph grounding, AI tools, content processing, and agent-flow runs triggered by "When an agent calls the flow" — in employee-facing authenticated scenarios, subject to fair-use limits. Computer-Using Agents (CUA) are excluded and are not modeled in this tool.
 
 **Voice agents** (introduced in the May 2026 Licensing Guide) are billed by **total call length to the nearest second** plus the configured voice orchestration. Voice agents are **not modeled** in this tool — estimate them separately.
 

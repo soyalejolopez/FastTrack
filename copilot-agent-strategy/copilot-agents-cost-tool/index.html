@@ -256,6 +256,8 @@
 
   .breakdown-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1rem; }
   @media (max-width: 768px) { .breakdown-grid { grid-template-columns: 1fr; } }
+  /* Agent-type selector: stack its inline 4-column grid into 2 columns on phones to prevent horizontal overflow */
+  @media (max-width: 600px) { .form-grid[style*="repeat(4"] { grid-template-columns: 1fr 1fr !important; } }
   .breakdown-section h3 { font-size: 0.95rem; margin-bottom: 0.75rem; color: var(--light); }
 
   /* Capacity */
@@ -1006,16 +1008,30 @@
           <button class="info-btn" aria-label="Info about reasoning model">i
             <span class="tooltip">
               When an agent uses a reasoning-capable model, Copilot Studio bills two meters:<br>
-              1. The <strong>feature rate</strong> for the core action (e.g., 2 cr for generative answer, 5 cr for agent action)<br>
-              2. A <strong>premium AI tools surcharge</strong> (100 credits per 10 responses = +10 per response)<br><br>
-              The surcharge applies to <strong>generative answers, agent actions, and flow executions</strong>.<br>
-              Example: A generative answer with reasoning = 2 + 10 = <strong>12 credits</strong>.<br>
-              An agent action with reasoning = 5 + 10 = <strong>15 credits</strong>.<br><br>
+              1. The <strong>feature rate</strong> for the core action (e.g., 2 cr for a generative answer, 5 cr for an agent action) &mdash; already counted above.<br>
+              2. <strong>Text and generative AI tools (premium)</strong> for the reasoning tokens, billed at <strong>10 Copilot Credits per 1,000 reasoning tokens</strong>.<br><br>
+              Enter the average reasoning tokens you expect <em>per conversation</em>; the premium meter is estimated once per conversation as tokens / 1,000 &times; 10.<br>
+              This is a planning estimate &mdash; actual reasoning-token use varies by model, prompt, and task.<br><br>
               <a href="https://learn.microsoft.com/en-us/microsoft-copilot-studio/requirements-messages-management#reasoning-model-billing-rates" target="_blank" rel="noopener noreferrer">Reasoning model billing &rarr;</a>
             </span>
           </button>
-          <span class="cost-hint">+10 cr per generative answer and agent action</span>
+          <span class="cost-hint">10 cr per 1,000 reasoning tokens (premium meter)</span>
         </label>
+        <div class="field" id="comp_reasoningTokens_field" style="margin-top:0.75rem;">
+          <label>
+            Avg reasoning tokens per conversation
+            <span class="hint">(10 cr / 1,000 tokens)</span>
+            <button class="info-btn" aria-label="Info about reasoning tokens per conversation">i
+              <span class="tooltip">
+                The average number of reasoning tokens the model generates across one conversation.
+                Billed under <strong>Text and generative AI tools (premium)</strong> at <strong>10 Copilot Credits per 1,000 reasoning tokens</strong>, estimated <strong>once per conversation</strong>.
+                Planning estimate only &mdash; actual reasoning-token use varies by model, prompt, and task.<br><br>
+                <a href="https://learn.microsoft.com/en-us/microsoft-copilot-studio/requirements-messages-management#reasoning-model-billing-rates" target="_blank" rel="noopener noreferrer">Reasoning model billing &rarr;</a>
+              </span>
+            </button>
+          </label>
+          <input type="number" id="comp_reasoningTokens" min="0" step="100" value="1000" oninput="recalculate()">
+        </div>
       </div>
     </div>
   </div>
@@ -1181,7 +1197,7 @@
     </div>
     <p class="step-subtitle">How many test scenarios and iterations do you plan to run?</p>
     <div class="learn-link" style="margin-bottom:0.9rem;">
-      Users with a <strong>Microsoft 365 Copilot</strong> license typically consume <strong>zero credits for eligible authenticated usage</strong>. Use the `% users with M365 Copilot license` field below to model that blended scenario.
+      Users with a <strong>Microsoft 365 Copilot</strong> license are typically <strong>not charged Copilot Credits for eligible employee-facing authenticated scenarios</strong> (subject to fair use). Use the `% users with M365 Copilot license` field below to model that blended scenario.
     </div>
 
     <div class="card">
@@ -1249,9 +1265,9 @@
             % users with M365 Copilot license
             <button class="info-btn" aria-label="Info about M365 Copilot license">i
               <span class="tooltip">
-                Users with a <strong>Microsoft 365 Copilot</strong> license consume <strong>zero credits for all features</strong> &mdash; classic answers, generative answers, agent actions, graph grounding, AI tools, agent flow actions, and content processing &mdash; when the agent operates using their authenticated M365 Copilot identity. Subject to fair-use limits.
+                Employee-facing scenarios where a <strong>Microsoft 365 Copilot</strong> licensed user is authenticated are <strong>not charged Copilot Credits</strong> for the eligible features this calculator models &mdash; classic answers, generative answers, agent actions, graph grounding, AI tools, agent-flow runs triggered by &ldquo;When an agent calls the flow&rdquo;, and content processing &mdash; subject to fair use. Computer-Using Agent (CUA) actions are excluded and are not modeled here.
                 Set this to estimate the blended cost for a mixed user population.<br>
-                0% = all users consume credits. 100% = all usage is zero-rated.<br><br>
+                0% = all users consume credits. 100% = all modeled usage is no-charge (eligible scenarios only).<br><br>
                 <a href="https://learn.microsoft.com/en-us/microsoft-copilot-studio/requirements-messages-management#copilot-credits-billing-rates" target="_blank" rel="noopener noreferrer">M365 Copilot included usage &rarr;</a>
               </span>
             </button>
@@ -1309,25 +1325,31 @@
       <a href="https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/microsoft/bade/documents/products-and-services/en-us/bizapps/Microsoft-Copilot-Studio-Licensing-Guide-May-2026-PUB.pdf" target="_blank" rel="noopener noreferrer">
         Copilot Studio Licensing Guide (May 2026)
       </a>
-      &nbsp;|&nbsp; Last verified: May 2026
+      &nbsp;|&nbsp; Last verified: September 2026
     </p>
-    <span class="version-badge" id="versionBadge">v1.6.1</span>
+    <span class="version-badge" id="versionBadge">v1.7.0</span>
   </div>
 </div>
 
 <script>
 /* ═══════════════════════════════════════
-   Copilot Credits billing rates (verified against Microsoft Learn 05/2026 —
-   page last updated 03/20/2026 — and the Copilot Studio Licensing Guide,
-   May 2026 edition. All Copilot Credits feature rates unchanged since v1.4.0.
+   Copilot Credits billing rates (verified against Microsoft Learn 09/15/2026
+   and the Copilot Studio Licensing Guide, May 2026 edition. Copilot Credits
+   feature rates unchanged since v1.4.0.
    v1.6.0 added Copilot Credit P3 + Microsoft Agent P3 plans + voice-agent
    callout. v1.6.1 polish: linkified footer reference to the Licensing Guide,
-   expanded ESS template names to "Employee Self-Service".)
+   expanded ESS template names to "Employee Self-Service".
+   v1.7.0 models reasoning as a per-conversation Text and generative AI tools
+   (premium) meter — 10 credits per 1,000 reasoning tokens, entered as an
+   average per conversation — instead of a fixed per-response surcharge, and
+   qualifies M365 Copilot licensed-user no-charge language to eligible
+   modeled usage.)
    https://learn.microsoft.com/en-us/microsoft-copilot-studio/requirements-messages-management
    ═══════════════════════════════════════ */
 const CREDIT_TO_USD_PAYG = 0.01;
 const CREDIT_TO_USD_PREPAID = 0.008; // Copilot Credit pack: $200 / 25,000 credits
-const REASONING_SURCHARGE = 10; // premium AI tools: 100 credits / 10 responses
+const REASONING_CREDITS_PER_1K_TOKENS = 10; // Text & generative AI tools (premium): 10 credits per 1,000 reasoning tokens
+const DEFAULT_REASONING_TOKENS = 1000;      // planning-estimate default per conversation when reasoning is enabled
 const CONTENT_PROCESSING_RATE = 8; // 8 credits per page
 const PROMPT_RATES = { basic: 1/10, standard: 15/10, premium: 100/10 };
 /* Pre-purchase plan effective $/credit. Both CCCU and ACU = $1 list = 100 credits.
@@ -1342,7 +1364,7 @@ const PRICING_MODEL_RATES = {
   // Microsoft Agent Pre-Purchase Plan (P3) — NEW May 2026 — covers MCS + Foundry
   ap3_t1:  0.00950, ap3_t2:  0.00900, ap3_t3:  0.00850,
 };
-const APP_VERSION = 'v1.6.1';
+const APP_VERSION = 'v1.7.0';
 const TEMPLATES = {
   faq: {
     label: 'Enterprise FAQ agent',
@@ -1357,6 +1379,7 @@ const TEMPLATES = {
     flowActions: 5,
     contentPages: 0,
     reasoning: false,
+    reasoningTokens: 1000,
     knowledgeTurns: 3,
     toolTurns: 0,
     promptTurns: 0,
@@ -1399,6 +1422,7 @@ const TEMPLATES = {
     flowActions: 5,
     contentPages: 0,
     reasoning: false,
+    reasoningTokens: 1000,
     knowledgeTurns: 4,
     toolTurns: 0,
     promptTurns: 0,
@@ -1445,6 +1469,7 @@ const TEMPLATES = {
     flowActions: 12,
     contentPages: 0,
     reasoning: true,
+    reasoningTokens: 1000,
     knowledgeTurns: 2,
     toolTurns: 2,
     promptTurns: 1,
@@ -1500,6 +1525,7 @@ const TEMPLATES = {
     flowActions: 18,    /* HRSD orchestrator chains: create + list + get + cache steps */
     contentPages: 0,
     reasoning: false,
+    reasoningTokens: 1000,
     knowledgeTurns: 2,  /* HR policy + benefits lookup via SharePoint / SNOW KB */
     toolTurns: 3,       /* Workday employee data + HRSD case read/create */
     promptTurns: 1,     /* AI summary of case status or policy answer */
@@ -1558,6 +1584,7 @@ const TEMPLATES = {
     flowActions: 22,    /* ITSM flows: create + list + details + update + attachment steps */
     contentPages: 0,
     reasoning: true,    /* Diagnostic classification before routing/ticket creation */
+    reasoningTokens: 1000,
     knowledgeTurns: 2,  /* IT runbook + ServiceNow KB article + Self-Help M365 steps */
     toolTurns: 3,       /* Ticket create/read/update operations */
     promptTurns: 1,     /* AI-generated ticket description from user problem description */
@@ -1763,6 +1790,7 @@ function applyTemplate(templateKey) {
   el('comp_flowActions').value = template.flowActions;
   el('comp_contentPages').value = template.contentPages;
   el('comp_reasoning').checked = template.reasoning;
+  el('comp_reasoningTokens').value = template.reasoningTokens != null ? template.reasoningTokens : DEFAULT_REASONING_TOKENS;
 
   el('conv_knowledgeTurns').value = template.knowledgeTurns;
   el('conv_toolTurns').value = template.toolTurns;
@@ -1967,6 +1995,7 @@ function getConfig() {
   const flowActions = Math.max(1, numVal('comp_flowActions'));
   const contentPages = numVal('comp_contentPages');
   const reasoning = el('comp_reasoning').checked;
+  const reasoningTokens = Math.max(0, numVal('comp_reasoningTokens'));
 
   const turns = Math.max(1, numVal('conv_turns'));
   const knowledgeTurns = numVal('conv_knowledgeTurns');
@@ -1983,7 +2012,7 @@ function getConfig() {
 
   return {
     agentType, ksSources, primaryKS, templateKey: getSelectedTemplateKey(),
-    classicTopics, tools, prompts, promptTier, promptCostPer, flows, flowActions, contentPages, reasoning,
+    classicTopics, tools, prompts, promptTier, promptCostPer, flows, flowActions, contentPages, reasoning, reasoningTokens,
     turns, knowledgeTurns, toolTurns, promptTurns, classicTurns, flowTurns,
     scenarios, iterations, prepaid, pricingModel, m365pct,
   };
@@ -2034,9 +2063,11 @@ function calcPerConversation(cfg) {
   /* Content processing: 8 credits per page */
   breakdown.contentCredits = cfg.contentPages * CONTENT_PROCESSING_RATE;
 
-  /* Reasoning surcharge on generative answers AND agent actions */
+  /* Reasoning: Text and generative AI tools (premium) meter — 10 cr per 1,000
+     reasoning tokens, estimated once per conversation. Feature rates (gen
+     answers, actions) are billed separately above. Planning estimate only. */
   if (cfg.reasoning) {
-    breakdown.reasoningCredits = (breakdown.genAnswers + breakdown.actions) * REASONING_SURCHARGE;
+    breakdown.reasoningCredits = (cfg.reasoningTokens / 1000) * REASONING_CREDITS_PER_1K_TOKENS;
   }
 
   const creditItems = {
@@ -2047,7 +2078,7 @@ function calcPerConversation(cfg) {
     'AI prompt actions':         { credits: breakdown.promptCredits,      rate: cfg.promptTier + ' tier' },
     'Agent flow actions':        { credits: breakdown.flowCredits,        rate: '13 cr / 100 actions' },
     'Content processing':        { credits: breakdown.contentCredits,     rate: '8 cr / page' },
-    'Reasoning surcharge':       { credits: breakdown.reasoningCredits,   rate: '+10 cr/gen answer & action' },
+    'Reasoning (premium AI tools)': { credits: breakdown.reasoningCredits,   rate: '10 cr / 1,000 tokens' },
   };
 
   const perConv = Object.values(creditItems).reduce((s, i) => s + i.credits, 0);
@@ -2059,7 +2090,16 @@ function updateCostLabels() {
   const graphOn = el('ks_sharepoint_graph').checked;
   const spCost = graphOn ? '12 cr/query (10 graph + 2 gen)' : '2 cr/query (gen answer only)';
   el('ks_sharepoint_cost').textContent = spCost;
-  el('ks_connectors_cost').textContent = '12 cr/query (10 graph + 2 gen)';
+  el('ks_connectors_cost').textContent = graphOn ? '12 cr/query (10 graph + 2 gen)' : '2 cr/query (gen answer only)';
+}
+
+/* ───── Enable/disable the reasoning-tokens field to match the toggle ───── */
+function syncReasoningField() {
+  const on = el('comp_reasoning').checked;
+  const input = el('comp_reasoningTokens');
+  const field = el('comp_reasoningTokens_field');
+  if (input) input.disabled = !on;
+  if (field) field.style.opacity = on ? '1' : '0.5';
 }
 
 /* ───── Example prompt builder ───── */
@@ -2114,21 +2154,12 @@ function buildExamples(cfg, calc) {
         lines += '<div class="trace-step"><span class="arrow">&rarr;</span> Generates answer from ' + ks.label + ' <span class="credits">+' + genCredits + ' cr (generative answer)</span></div>';
       }
       cr += genCredits;
-      if (cfg.reasoning) {
-        lines += '<div class="trace-step"><span class="arrow">&rarr;</span> Reasoning model active <span class="credits">+' + REASONING_SURCHARGE + ' cr (premium AI surcharge)</span></div>';
-        cr += REASONING_SURCHARGE;
-      }
       traceHtml = lines;
     } else if (turn.type === 'tool') {
       prompt = pickTemplateExample(cfg, 'tool', null, TOOL_EXAMPLES);
       cr = 5 + 2;
       let lines = '<div class="trace-step"><span class="arrow">&rarr;</span> Calls tool / connector <span class="credits">+5 cr (agent action)</span></div>';
       lines += '<div class="trace-step"><span class="arrow">&rarr;</span> Generates response <span class="credits">+2 cr (generative answer)</span></div>';
-      if (cfg.reasoning) {
-        lines += '<div class="trace-step"><span class="arrow">&rarr;</span> Reasoning model active <span class="credits">+' + REASONING_SURCHARGE + ' cr (premium AI surcharge on gen answer)</span></div>';
-        lines += '<div class="trace-step"><span class="arrow">&rarr;</span> Reasoning model active <span class="credits">+' + REASONING_SURCHARGE + ' cr (premium AI surcharge on action)</span></div>';
-        cr += REASONING_SURCHARGE * 2;
-      }
       traceHtml = lines;
     } else if (turn.type === 'prompt') {
       prompt = pickTemplateExample(cfg, 'prompt', null, PROMPT_EXAMPLES);
@@ -2142,11 +2173,6 @@ function buildExamples(cfg, calc) {
       let lines = '<div class="trace-step"><span class="arrow">&rarr;</span> Invokes agent flow <span class="credits">+5 cr (agent action)</span></div>';
       lines += '<div class="trace-step"><span class="arrow">&rarr;</span> Generates response <span class="credits">+2 cr (generative answer)</span></div>';
       lines += '<div class="trace-step"><span class="arrow">&rarr;</span> Executes flow (' + cfg.flowActions + ' actions) <span class="credits">+' + flowActionsCr + ' cr (13 cr/100 actions)</span></div>';
-      if (cfg.reasoning) {
-        lines += '<div class="trace-step"><span class="arrow">&rarr;</span> Reasoning model active <span class="credits">+' + REASONING_SURCHARGE + ' cr (premium AI surcharge on gen answer)</span></div>';
-        lines += '<div class="trace-step"><span class="arrow">&rarr;</span> Reasoning model active <span class="credits">+' + REASONING_SURCHARGE + ' cr (premium AI surcharge on action)</span></div>';
-        cr += REASONING_SURCHARGE * 2;
-      }
       traceHtml = lines;
     }
 
@@ -2154,6 +2180,17 @@ function buildExamples(cfg, calc) {
     html += '<div style="margin-bottom:0.75rem;">';
     html += '  <div class="prompt"><strong>Turn ' + turnNum + ':</strong> &ldquo;' + escapeHtml(prompt) + '&rdquo;</div>';
     html += '  <div class="trace">' + traceHtml + '</div>';
+    html += '</div>';
+  }
+
+  /* Reasoning premium meter: estimated once per conversation (10 cr / 1,000 reasoning tokens) */
+  if (cfg.reasoning && cfg.reasoningTokens > 0) {
+    const reasoningCr = (cfg.reasoningTokens / 1000) * REASONING_CREDITS_PER_1K_TOKENS;
+    const reasoningCrDisplay = Number.isInteger(reasoningCr) ? String(reasoningCr) : reasoningCr.toFixed(2);
+    totalCr += reasoningCr;
+    html += '<div style="margin-bottom:0.75rem;">';
+    html += '  <div class="prompt"><strong>Per conversation:</strong> reasoning model premium meter (planning estimate)</div>';
+    html += '  <div class="trace"><div class="trace-step"><span class="arrow">&rarr;</span> Reasoning tokens (' + cfg.reasoningTokens.toLocaleString() + ' / conversation) <span class="credits">+' + reasoningCrDisplay + ' cr (Text &amp; generative AI tools, 10 cr / 1,000 tokens)</span></div></div>';
     html += '</div>';
   }
 
@@ -2173,7 +2210,7 @@ function renderResults(cfg, calc) {
   const pricingLabel = cfg.pricingModel === 'prepaid' ? 'Prepaid ($0.008/cr)' : 'PAYG ($0.01/cr)';
   const totalConversations = cfg.scenarios * cfg.iterations;
 
-  /* M365 Copilot deduction: zero-rate classic, gen, actions, and graph for licensed user % */
+  /* M365 Copilot deduction: no charge for eligible modeled features in authenticated employee-facing scenarios (subject to fair use); CUA excluded and not modeled */
   const adjustedPerConv = getM365AdjustedPerConv(cfg, calc);
   const grandTotal = adjustedPerConv * totalConversations;
   const grandUSD = (grandTotal * creditRate).toFixed(2);
@@ -2181,7 +2218,7 @@ function renderResults(cfg, calc) {
   let m365Note = '';
   if (cfg.m365pct > 0) {
     m365Note = '<div style="font-size:0.8rem;color:var(--accent-light);margin-bottom:1rem;padding:0.5rem 0.75rem;background:rgba(0,120,212,0.1);border-radius:6px;">' +
-      '&#9432; M365 Copilot licensed users (' + cfg.m365pct + '%) consume <strong>zero credits for all features</strong> (classic, generative, actions, graph, AI tools, flow actions, content processing) when operating under their authenticated M365 Copilot identity. Subject to fair-use limits. ' +
+      '&#9432; M365 Copilot licensed users (' + cfg.m365pct + '%) are <strong>not charged for the eligible modeled features</strong> (classic, generative, actions, graph, AI tools, content processing, and agent-flow runs triggered by &ldquo;When an agent calls the flow&rdquo;) in employee-facing authenticated scenarios, subject to fair use. Computer-Using Agent actions are excluded and not modeled here. ' +
       'Adjusted per-conversation cost: ' + adjustedPerConv + ' cr (blended). ' +
       '<a href="https://learn.microsoft.com/en-us/microsoft-copilot-studio/requirements-messages-management#copilot-credits-billing-rates" target="_blank" rel="noopener noreferrer" style="color:var(--accent-light);">Learn more</a></div>';
   }
@@ -2208,7 +2245,7 @@ function renderResults(cfg, calc) {
   if (cfg.m365pct > 0) {
     const discountPerConv = calc.perConv - adjustedPerConv;
     const discountTotal = discountPerConv * totalConversations;
-    tableRows += '<tr style="color:var(--green)"><td>M365 Copilot license discount (' + cfg.m365pct + '% users)</td><td class="num">−' + discountPerConv + '</td><td class="num" style="color:var(--muted)">zero-credit all meters</td><td class="num">−' + discountTotal.toLocaleString() + '</td></tr>';
+    tableRows += '<tr style="color:var(--green)"><td>M365 Copilot license discount (' + cfg.m365pct + '% users)</td><td class="num">−' + discountPerConv + '</td><td class="num" style="color:var(--muted)">no charge (eligible)</td><td class="num">−' + discountTotal.toLocaleString() + '</td></tr>';
   }
 
   const featureVals = Object.entries(calc.creditItems).filter(([, i]) => i.credits > 0).map(([label, i]) => ({ label, val: i.credits * totalConversations }));
@@ -2283,7 +2320,7 @@ function updateTurnTotal() {
 function getM365AdjustedPerConv(cfg, calc) {
   if (cfg.m365pct === 0) return calc.perConv;
   const m365Factor = 1 - (cfg.m365pct / 100);
-  /* M365 Copilot licensed users: zero credits for ALL features (per billing rates table) */
+  /* M365 Copilot licensed users: no charge for eligible modeled features in authenticated employee-facing scenarios (subject to fair use); CUA excluded and not modeled */
   return Math.ceil(calc.perConv * m365Factor);
 }
 
@@ -2300,6 +2337,7 @@ function recalculate() {
   autoSyncTurns();
   updateTurnTotal();
   updateCostLabels();
+  syncReasoningField();
   const cfg  = getConfig();
   const calc = calcPerConversation(cfg);
   buildExamples(cfg, calc);
@@ -2505,6 +2543,7 @@ function exportCSV() {
     'Components,Agent Flows,' + cfg.flows,
 
     'Components,Reasoning Model,' + (cfg.reasoning ? 'Yes' : 'No'),
+    'Components,Avg Reasoning Tokens Per Conversation,' + (cfg.reasoning ? cfg.reasoningTokens : 0),
     'Conversation,Turns Per Conversation,' + cfg.turns,
     'Conversation,Knowledge Lookups,' + cfg.knowledgeTurns,
     'Conversation,Tool Calls,' + cfg.toolTurns,
@@ -2571,6 +2610,7 @@ function resetAll() {
   el('comp_flowActions').value = 5;
   el('comp_contentPages').value = 0;
   el('comp_reasoning').checked = false;
+  el('comp_reasoningTokens').value = DEFAULT_REASONING_TOKENS;
 
   /* Conversation profile */
   el('conv_knowledgeTurns').value = 0;

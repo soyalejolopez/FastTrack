@@ -6,9 +6,9 @@ summary: >-
   Use source control, local YAML, preflight checks, and repeatable packaging to build Copilot Studio
   agents like software.
 author: Microsoft FastTrack
-version: 1.0.0
+version: 1.0.1
 published: "2026-04-10"
-updated: "2026-04-13"
+updated: "2026-09-15"
 tags:
   - devops
   - copilot-studio
@@ -47,7 +47,7 @@ prerequisites:
 # copilot-studio-workflow
 **Build Copilot Studio agents like software: local YAML, source control, repeatable packaging, and an AI assistant that already knows the platform's sharp edges.**
 
-![Version](https://img.shields.io/badge/version-1.0.0-2563eb?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.0.1-2563eb?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-Copilot%20CLI%20%7C%20VS%20Code%20%7C%20Claude%20Code%20%7C%20Cloud%20Agent-111827?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-16a34a?style=for-the-badge)
 [![Install](https://img.shields.io/badge/install-copilot%20plugin%20install-7c3aed?style=for-the-badge&logo=github)](#quick-install)
@@ -201,7 +201,7 @@ For YAML authoring, schema validation, topic creation, and agent testing in Copi
 Run `skills\copilot-studio-workflow\scripts\cps-status.ps1` to validate the local setup.
 
 ## Versioning
-This plugin uses [Semantic Versioning](https://semver.org/). Current version: **1.0.0**.
+This plugin uses [Semantic Versioning](https://semver.org/). Current version: **1.0.1**.
 - Release notes: `CHANGELOG.md`
 - Update: `copilot plugin update copilot-studio-workflow`
 
