@@ -4,6 +4,11 @@ All notable changes to the copilot-studio-workflow skill are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-09-15
+
+### Fixed
+- Corrected the showcase page gotcha count from 11 to 12 to match the 12 documented gotchas in `reference/gotchas.md` (2 Initialization, 5 Packaging, 3 Development, 2 Deployment).
+
 ## [1.0.0] — 2026-04-10
 
 ### Added
