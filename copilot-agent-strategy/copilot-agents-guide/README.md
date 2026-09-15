@@ -6,9 +6,9 @@ summary: >-
   Compare Microsoft Copilot agent approaches, availability, licensing, FastTrack scope, and common
   scenarios.
 author: Microsoft FastTrack
-version: 4.0.1
+version: 4.1.0
 published: "2025-10-28"
-updated: "2026-09-09"
+updated: "2026-09-15"
 tags:
   - guide
   - decision
@@ -49,9 +49,9 @@ as the same thing.
 - **Copilot Studio:** Replaced the old "full declarative" and "full custom" framing with the current
   three-harness model: Copilot chat, standard, and GitHub Copilot harnesses. Harness-specific MCP,
   workflow, A2A, connected-agent, and computer-use boundaries are called out.
-- **Copilot Studio identity:** Added automatic Microsoft Entra Agent ID creation for new agents,
-  the July 2026 removal of environment-level opt-out, and Conditional Access guidance for connector
-  permissions.
+- **Copilot Studio identity:** Added automatic Microsoft Entra Agent ID creation for new standard
+  harness agents, the May 2026 removal of environment-level opt-out, and Conditional Access guidance
+  for connector permissions.
 - **Agent Builder and SharePoint:** Updated knowledge, sharing, pay-as-you-go, creator, and user
   requirements.
 - **Microsoft 365 Agents Toolkit:** Updated the supported SDK, TypeSpec, Foundry, Visual Studio,
@@ -120,7 +120,7 @@ not an agent-authoring path.
 The guide separates three kinds of information:
 
 1. **Product facts:** Availability, licensing, capabilities, and FastTrack scope linked to official
-   Microsoft guidance and reviewed on **August 21, 2026**.
+   Microsoft guidance and reviewed on **September 15, 2026**.
 2. **Planning guidance:** Setup time, scalability, customization, and maintenance ratings are
    directional estimates. They are not Microsoft commitments.
 3. **Message Center feed:** Refreshed separately from the core guide. A feed refresh updates only the
@@ -182,5 +182,5 @@ The scheduled workflow is `.github/workflows/update-message-center.yml`.
 This guide is provided as-is for informational and planning purposes. Microsoft, Microsoft 365,
 Copilot, and related trademarks are property of Microsoft Corporation.
 
-**Version:** 4.0.0
-**Core guidance reviewed:** August 21, 2026
+**Version:** 4.1.0
+**Core guidance reviewed:** September 15, 2026
