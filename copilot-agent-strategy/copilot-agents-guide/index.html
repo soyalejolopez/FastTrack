@@ -241,7 +241,7 @@
               technicalLevel: 'Beginner',
               shortName: 'Microsoft-built',
               fastTrackSupported: true,
-              fastTrackNote: 'FastTrack covers agent fundamentals and guidance for Microsoft prebuilt agents, plus Cowork configuration and consumption controls.',
+              fastTrackNote: 'FastTrack provides remote guidance for agent fundamentals and capabilities covering prebuilt Microsoft agents, and for configuring Cowork, billing policies, and consumption controls.',
               sourceUrl: 'https://learn.microsoft.com/microsoft-365/copilot/agent-essentials/m365-agents-admin-guide',
               description: 'Microsoft provides ready-to-use agents and agentic experiences for research, analysis, content creation, automation, and delegated work. This guide highlights representative options rather than an exhaustive catalog. Availability, licensing, language support, and preview terms vary by experience.',
               subAgents: [
@@ -294,7 +294,8 @@
                   capabilities: [
                     'Creates documents and manages files, email, calendar, and Teams',
                     'Supports built-in and custom skills plus marketplace plugins',
-                    'Runs scheduled prompts and event-driven automations'
+                    'Runs scheduled prompts and event-driven automations',
+                    'Can act in the signed-in user\'s local Microsoft Edge session when an admin turns browser access on'
                   ],
                   whenToUse: 'Open-ended delegated work that spans several Microsoft 365 apps and tools',
                   sourceUrl: 'https://learn.microsoft.com/microsoft-365/copilot/cowork/'
@@ -347,8 +348,8 @@
                   description: 'Microsoft-built creation agents that generate Word, Excel, and PowerPoint files from Microsoft Copilot.',
                   capabilities: [
                     'Creates Office files and saves them in OneDrive',
-                    'Uses Work IQ for organizational data when the user has a Copilot license',
-                    'Available to eligible users with or without a Copilot license',
+                    'Uses Work IQ to reach files, emails, meetings, and sites the user can already access',
+                    'Requires a paid Microsoft 365 Copilot license',
                     'Requires an admin to enable Anthropic models for the tenant'
                   ],
                   whenToUse: 'Creating a first draft of a document, workbook, or presentation',
@@ -384,7 +385,8 @@
               limitations: [
                 'Licensing and availability differ by experience and cloud',
                 'Researcher is limited to 25 queries per user per month',
-                'Cowork requires a Microsoft 365 Copilot license and usage-based billing with Copilot Credits',
+                'Cowork access is granted through a spending policy that selects Cowork; confirm current licensing and usage-based billing prerequisites in the Cowork documentation before planning rollout',
+                'Cowork local browser use is off by default, needs tenant admin enablement, and runs only in Cowork on the web with Microsoft Edge 150 Stable 2 or later signed in with the same work account',
                 'Workflows is English-only and supports a limited set of Microsoft 365 connectors',
                 'Preview experiences can change and might require Frontier or tenant opt-in',
                 'Word, Excel, and PowerPoint Agents require Anthropic models to be enabled by an admin'
@@ -442,7 +444,7 @@
               technicalLevel: 'Beginner',
               shortName: 'SharePoint',
               fastTrackSupported: true,
-              fastTrackNote: 'FastTrack provides remote guidance for deploying agents in SharePoint.',
+              fastTrackNote: 'FastTrack provides remote guidance for agent fundamentals and capabilities covering SharePoint agents.',
               sourceUrl: 'https://learn.microsoft.com/sharepoint/get-started-sharepoint-agents',
               description: 'Agents in SharePoint help users find information and insights from sites, pages, folders, and document libraries. Responses follow each user\'s existing permissions, and agents can be used from SharePoint and Teams chat.',
               capabilities: [
@@ -509,7 +511,7 @@
               technicalLevel: 'Beginner',
               shortName: 'Agent Builder',
               fastTrackSupported: true,
-              fastTrackNote: 'FastTrack guidance covers declarative agents in Microsoft Copilot Chat. Exact assistance depends on the requested deployment scope.',
+              fastTrackNote: 'FastTrack provides remote guidance for agent fundamentals and capabilities covering Agent Builder.',
               sourceUrl: 'https://learn.microsoft.com/microsoft-365/copilot/extensibility/agent-builder',
               description: 'Agent Builder provides a guided way to create declarative agents in Microsoft 365 Copilot with natural language, templates, instructions, and selected knowledge sources. Move to Copilot Studio when the scenario needs actions or deeper process logic.',
               capabilities: [
@@ -641,7 +643,7 @@
               technicalLevel: 'Intermediate',
               shortName: 'Copilot Studio',
               fastTrackSupported: true,
-              fastTrackNote: 'FastTrack guidance for custom engine agents built in Copilot Studio is limited to Teams, Microsoft Copilot, or SharePoint deployment channels.',
+              fastTrackNote: 'FastTrack provides remote guidance for agent fundamentals and capabilities covering Copilot Studio, plus agent management and governance. Creating custom agents in Copilot Studio is out of scope.',
               sourceUrl: 'https://learn.microsoft.com/microsoft-copilot-studio/agents-overview',
               description: 'Copilot Studio now uses three harnesses. This path covers the standard harness for rule-based, predictable conversations and the GitHub Copilot harness for reasoning-heavy, multi-step work. Use the separate Copilot chat harness path when the goal is to extend Microsoft 365 Copilot Chat.',
               subAgents: [
@@ -677,8 +679,9 @@
                   statusColor: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
                   description: 'Reasoning-heavy agents that plan multi-step work, adapt to results, and work with files in a secure sandbox.',
                   capabilities: [
-                    'Native skills and memory',
-                    'Workflows as tools for multistep processes',
+                    'Native skills',
+                    'Memory (production-ready preview)',
+                    'Workflows as tools for multistep processes (preview)',
                     'MCP servers as tools (preview)',
                     'Connected agents, limited to other Copilot Studio agents',
                     'Usage-based billing with Copilot Credits'
@@ -691,7 +694,7 @@
                 'Standard harness for rule-based, predictable conversations',
                 'GitHub Copilot harness for adaptive, multi-step reasoning',
                 'Harness-specific support for workflows, REST APIs, MCP servers, A2A, and connected agents',
-                'Microsoft Entra Agent ID is created automatically for each new agent',
+                'Microsoft Entra Agent ID is created automatically for new standard harness agents',
                 'Multi-channel deployment based on the selected harness and channel',
                 'Analytics, evaluations, administration, and cost management',
                 'Human review and approval patterns for sensitive processes'
@@ -702,7 +705,7 @@
                 'Standard harness uses the Copilot Studio capacity model',
                 'Agents created before the Agent ID rollout can continue using app registrations until Microsoft migrates them',
                 'Production agents need environment, data policy, evaluation, owner, and monitoring plans',
-                'FastTrack custom engine guidance is channel-limited'
+                'Creating custom agents in Copilot Studio is outside FastTrack scope; fundamentals, management, and governance guidance still apply'
               ],
               whenToUse: [
                 'Structured help desk or service conversations',
@@ -756,7 +759,7 @@
               technicalLevel: 'Expert',
               shortName: 'M365 Agents Toolkit',
               fastTrackSupported: false,
-              fastTrackNote: 'FastTrack does not create custom agents with Microsoft 365 Agents Toolkit, Agents SDK, Teams SDK, Foundry, or similar pro-code tools.',
+              fastTrackNote: 'FastTrack does not create custom agents with Microsoft 365 Agents Toolkit, Agents SDK, Teams SDK, Foundry, or similar pro-code tools. Agent management, governance, and usage measurement guidance still apply once an agent is deployed.',
               sourceUrl: 'https://learn.microsoft.com/microsoftteams/platform/toolkit/overview-agents-toolkit',
               description: 'Microsoft 365 Agents Toolkit is a suite of developer tools for enterprise agents and apps across Microsoft 365 Copilot, Teams, Office, web, and third-party messaging channels. It supports declarative agents and custom engine agents through Microsoft 365 Agents SDK, Teams SDK, Microsoft Foundry, and TypeSpec.',
               capabilities: [
@@ -773,7 +776,7 @@
                 'Requires software engineering, cloud architecture, security, and DevOps skills',
                 'Custom engine agents can require separate hosting and model costs',
                 'Teams and Microsoft 365 publishing still requires tenant configuration and approval',
-                'Publishing through Agents Toolkit is not supported in Microsoft 365 Government tenants',
+                'Government cloud support is partial; confirm current GCC, GCC High, DoD, and 21Vianet status in the Agents Toolkit overview before planning a government deployment',
                 'Pro-code agent creation is outside FastTrack deployment scope'
               ],
               whenToUse: [
@@ -1481,6 +1484,10 @@
                     <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Govern from Day One</h4>
                     <p className="text-sm text-gray-700 dark:text-gray-200">Plan ownership, identity, sharing, audit, DLP, cost, and lifecycle management. Use Microsoft Agent 365 when the organization needs a unified control plane to observe, govern, and secure agents.</p>
                   </div>
+                  <div className="bg-white dark:bg-white/[0.03] rounded-lg p-4 md:col-span-2">
+                    <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Know What FastTrack Covers</h4>
+                    <p className="text-sm text-gray-700 dark:text-gray-200">FastTrack provides remote guidance for agent fundamentals and capabilities, agent management and governance, enabling Work IQ, consumption billing and spending controls, and measuring agent usage. It also provides remote guidance for <a href="https://learn.microsoft.com/microsoft-365/fasttrack/microsoft-agent-365" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600">Microsoft Agent 365</a>, including agent discovery, identity and access control, and baseline Entra, Defender, and Purview controls. Creating custom agents, commercial licensing planning, configuring non-Microsoft-published or custom connectors, and interpreting analytics results stay out of scope. See the published <a href="https://learn.microsoft.com/microsoft-365/fasttrack/microsoft-365-copilot#microsoft-copilot-agents" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600">FastTrack service description</a> for the current list.</p>
+                  </div>
                 </div>
               </div>
               </div>
@@ -1612,7 +1619,7 @@
                   <div className="flex items-center gap-2">
                     <div className="hidden lg:flex items-center gap-2 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 text-xs px-2.5 py-1 rounded-full border border-blue-100 dark:border-blue-400/20">
                       <Check className="w-3 h-3" />
-                      <span>Reviewed August 21, 2026</span>
+                      <span>Reviewed September 15, 2026</span>
                     </div>
                     <div className="hidden sm:flex items-center gap-2 bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400 text-xs px-2.5 py-1 rounded-full border border-transparent dark:border-white/[0.08]">
                       <Clock className="w-3 h-3" />
@@ -1633,7 +1640,7 @@
                 <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 rounded-xl px-4 py-3 flex items-start gap-3">
                   <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-gray-700 dark:text-gray-200">
-                    <span className="font-semibold">Accuracy note:</span> Product status and licensing change frequently. Core guidance was reviewed on August 21, 2026 against the official Microsoft links shown in each section. Planning estimates are directional.
+                    <span className="font-semibold">Accuracy note:</span> Product status and licensing change frequently. Core guidance was reviewed on September 15, 2026 against the official Microsoft links shown in each section. Planning estimates are directional.
                   </p>
                 </div>
               </div>
@@ -1681,7 +1688,7 @@
                       <a href="https://learn.microsoft.com/microsoft-agent-365/overview" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2.5 text-xs text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg transition-colors">
                         <Shield className="w-3.5 h-3.5" />
                         <div className="flex-1 min-w-0">
-                          <span>Agent 365 — Control Plane</span>
+                          <span>Agent 365: Control Plane</span>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span title="Agent 365 generally available May 1, 2026" className="inline-flex items-center gap-0.5 text-[9px] text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-400/10 border border-green-100 dark:border-green-400/20 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap leading-none">
                               GA May 1
@@ -1824,7 +1831,7 @@
                         <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                         <div>
                           <p className="text-sm font-semibold text-gray-900 dark:text-white">Accuracy boundary</p>
-                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Product claims were reviewed against the linked Microsoft guidance on August 21, 2026. Setup times and qualitative ratings are planning estimates, not Microsoft commitments.</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Product claims were reviewed against the linked Microsoft guidance on September 15, 2026. Setup times and qualitative ratings are planning estimates, not Microsoft commitments.</p>
                         </div>
                       </div>
                       <div className={`rounded-lg p-4 flex items-start gap-3 border ${
@@ -2574,7 +2581,7 @@
                 {/* Footer */}
                 <div className="text-center mt-12 py-6 border-t border-gray-100 dark:border-white/[0.08]">
                   <p className="text-gray-400 dark:text-gray-500 text-sm mb-2">
-                    Microsoft Copilot Agents Guide • Core guidance reviewed August 21, 2026
+                    Microsoft Copilot Agents Guide • Core guidance reviewed September 15, 2026
                   </p>
                   <div className="flex items-center justify-center gap-3 text-xs text-gray-400 dark:text-gray-500">
                     <a 
