@@ -2,14 +2,14 @@
 title: "Microsoft Agent 365 Customer Implementation Guide"
 type: strategy
 category: "Interactive"
-summary: "Plan and configure a governed Microsoft Agent 365 baseline with simple guidance and detailed implementation tasks."
+summary: "A community-supported FastTrack sample checklist, built with AI assistance, for customers to review and adapt as a starting point."
 author:
   - "Pratik Bhusal"
   - "Manas Biswas"
   - "Alejandro Lopez"
-version: 1.1.1
+version: 1.1.2
 published: 2026-09-09
-updated: 2026-09-14
+updated: 2026-09-17
 tags:
   - agent-365
   - implementation
@@ -21,8 +21,10 @@ preview: preview.webp
 featured: false
 status: active
 whatItIs: >-
-  A self-contained interactive implementation guide for planning and configuring a governed
-  Microsoft Agent 365 baseline. It includes a concise reference and a detailed deployment journey.
+  A self-contained sample checklist provided by Microsoft FastTrack as a community-supported
+  template and starting point for Microsoft Agent 365 implementation. Built with the help of AI,
+  it is not official Microsoft product documentation or in-product guidance. Customers must review
+  it for accuracy, completeness, and suitability for their environment before use.
 whyUseIt:
   - "Review 58 configuration controls across the Microsoft 365, Entra, Purview, Defender, SharePoint, and Intune admin experiences."
   - "Follow 65 detailed implementation tasks with roles, licensing context, validation guidance, and public Microsoft references."
@@ -31,7 +33,7 @@ howToUse: |-
   1. Download or open `index.html` in a modern browser.
   2. Select **Simple** for the concise configuration reference or **Detailed** for the full implementation journey.
   3. Use the built-in navigation, theme, and print controls while applying the guidance in your own tenant.
-  4. Confirm product availability, licensing, roles, and portal behavior in your tenant before making production changes.
+  4. Review and adapt the sample for accuracy, completeness, and suitability against current official Microsoft documentation. Confirm product availability, licensing, roles, and portal behavior in your tenant before making production changes.
 prerequisites:
   - "Modern web browser"
   - "Appropriate Microsoft 365, Agent 365, security, compliance, identity, and endpoint licenses for the features you plan to configure"
@@ -40,7 +42,16 @@ prerequisites:
 
 # Microsoft Agent 365 Customer Implementation Guide
 
-This self-contained browser guide helps administrators, architects, and security teams plan and
+> **Sample checklist, not official product guidance.** Microsoft FastTrack provides this
+> community-supported template as a starting point for customers. It was built with the help of AI
+> and is not official Microsoft product documentation or in-product guidance. Before use, customers
+> must review it for accuracy, completeness, and suitability for their environment against current
+> official Microsoft documentation, and adapt it as needed.
+>
+> Provided as-is. Support is available through the [repository community](https://github.com/microsoft/FastTrack/issues),
+> not Microsoft support channels, with no service-level agreement (SLA).
+
+This self-contained sample checklist helps administrators, architects, and security teams plan and
 configure a governed Microsoft Agent 365 baseline. It provides two views of the same implementation
 scope:
 
@@ -57,7 +68,7 @@ file works offline and does not require a web server, sign-in, or installation.
 2. Select **Simple** for the configuration reference or **Detailed** for the complete implementation
    journey.
 3. Use the theme and print controls as needed.
-4. Apply the guidance in your own tenant. The guide does not connect to your tenant. Detailed tracks
+4. Review and adapt the sample before applying it in your own tenant. The guide does not connect to your tenant. Detailed tracks
    selections only while the file is open; closing or reloading it resets them.
 
 Product availability, licensing, portal paths, and controls can vary by tenant and rollout. Confirm

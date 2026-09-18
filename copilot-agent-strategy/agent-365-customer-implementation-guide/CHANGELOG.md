@@ -2,6 +2,11 @@
 
 All notable changes to the Microsoft Agent 365 Customer Implementation Guide are documented here.
 
+## 1.1.2 - 2026-09-17
+
+- Clarified that the guide is a FastTrack-provided, community-supported sample checklist built with AI assistance, not official Microsoft product documentation or in-product guidance. Customers should review and adapt this template for accuracy, completeness, and suitability before use.
+- Added the disclaimer to the interactive guide and README, and updated the catalog description to reflect its purpose as a starting point.
+
 ## 1.1.1 - 2026-09-14
 
 - Fixed the Detailed navigation so selecting an item in the left rail scrolls the matching section into view while keeping all task content visible. Arrow key, Home, and End navigation use the same behavior and respect the reader's reduced-motion preference.
