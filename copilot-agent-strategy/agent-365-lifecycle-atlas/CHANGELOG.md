@@ -2,6 +2,18 @@
 
 All notable changes to the Agent 365 Lifecycle Atlas are documented here.
 
+## 1.3.1 - 2026-10-06
+
+- Updated the Connected platforms card to list all seven currently documented platforms (Amazon
+  Bedrock, Google Vertex AI, Salesforce Agentforce, Databricks Genie, Anthropic Claude Managed
+  Agents, Oracle Generative AI Agents, and Snowflake Cortex) and removed the outdated parenthetical
+  that labeled the Anthropic connector preview.
+- Refreshed the Connected platforms / registry sync source note to a 6 October 2026 review of the
+  integration-options documentation; registry sync remains labeled Preview.
+- Fixed a mobile responsive defect where unwrapped `table.grid` elements forced document-level
+  horizontal overflow at narrow (375px) viewports. Added a scoped rule in the `@media (max-width:820px)`
+  block so `table.grid` scrolls horizontally within its own width, preserving desktop and print behavior.
+
 ## 1.3.0 - 2026-09-22
 
 - Corrected `a365 setup all` runtime-configuration synchronization: it depends on

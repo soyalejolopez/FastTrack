@@ -4,6 +4,12 @@ All notable changes to the copilot-studio-workflow skill are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-10-06
+
+### Fixed
+- Corrected the showcase "Update command" to `copilot plugin update copilot-studio-workflow`. Direct (non-repository) installs update by the installed plugin name, as documented by `copilot plugin update --help`.
+- Corrected the showcase gotcha counts to match `reference/gotchas.md`: the page now states 12 gotchas are encoded (previously 11) and the gotchas section makes explicit that the six rendered cards are highlights from the full set of 12.
+
 ## [1.0.0] — 2026-04-10
 
 ### Added

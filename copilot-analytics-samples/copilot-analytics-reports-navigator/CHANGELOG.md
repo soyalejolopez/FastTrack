@@ -2,6 +2,13 @@
 
 All notable changes to the Copilot Analytics Reports Navigator are documented here.
 
+## 1.0.1 - 2026-10-06
+
+- Fixed the "Back to top" control by giving the page's top container a stable `id="top"` so the
+  `#top` fragment resolves correctly.
+- Refreshed the visible review dates to 2026-10-06 after a full public-source re-review of the
+  navigator against current Microsoft Learn documentation and public project pages.
+
 ## 1.0.0 - 2026-09-11
 
 - Added a self-contained interactive navigator covering 21 documented Microsoft reports and 22

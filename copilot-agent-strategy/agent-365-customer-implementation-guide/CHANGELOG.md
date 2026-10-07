@@ -2,6 +2,10 @@
 
 All notable changes to the Microsoft Agent 365 Customer Implementation Guide are documented here.
 
+## 1.2.2 - 2026-10-06
+
+- Replaced a broken licensing link (`microsoft.com/licensing/faqs/122`) with the current Microsoft Agent 365 service description on Microsoft Learn, relabeled to match the destination (plans and feature availability).
+
 ## 1.2.1 - 2026-09-30
 
 - Clarified how to scope Purview DLP to Agent 365 agents. Purview has no separate "Agent 365 instances" picker: each instance is an Entra agent user account, so the Simple checklist control **Scope DLP to Agent 365 instances and supported interactions** now starts by adding the approved agents to a reviewed security group, then includes that group under **Edit** for each Exchange, Teams, and OneDrive location. It also notes that Exchange scoping accepts only groups and that SharePoint is scoped by site. Detailed task **4.21** now sets this scope in the **Locations** step instead of after the rule actions.

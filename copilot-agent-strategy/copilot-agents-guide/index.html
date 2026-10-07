@@ -385,6 +385,7 @@
                 'Licensing and availability differ by experience and cloud',
                 'Researcher is limited to 25 queries per user per month',
                 'Cowork requires a Microsoft 365 Copilot license and usage-based billing with Copilot Credits',
+                'Cowork access is granted through a spending policy that selects Cowork — a low credit limit still grants access; the legacy Cowork entry under All agents no longer controls access',
                 'Workflows is English-only and supports a limited set of Microsoft 365 connectors',
                 'Preview experiences can change and might require Frontier or tenant opt-in',
                 'Word, Excel, and PowerPoint Agents require Anthropic models to be enabled by an admin'
@@ -425,6 +426,7 @@
                 ],
                 deploymentChecklist: [
                   { item: 'License and usage-billing requirements confirmed', critical: true },
+                  { item: 'Cowork access granted through a spending policy that selects Cowork (not the legacy All agents entry)', critical: true },
                   { item: 'Preview or Frontier access approved where required', critical: true },
                   { item: 'Admin access and model controls reviewed', critical: true },
                   { item: 'Pilot users and representative scenarios selected', critical: false },
@@ -889,6 +891,10 @@
               return matchesAgent && matchesJourney && matchesDifficulty;
             });
           }, [selectedAgentKeyForContent, labJourneyFilter, labDifficultyFilter]);
+
+          const approachHasLabs = useMemo(() =>
+            mcsLabs.some(lab => lab.agentTypes && lab.agentTypes.includes(selectedAgentKeyForContent)),
+          [selectedAgentKeyForContent]);
 
           const tabs = ['overview', 'guidance', 'capabilities', 'comparison', 'labs', 'message-center'];
           const tabLabels = { overview: '📋 Overview', capabilities: '⚡ Capabilities', guidance: '🧭 Guidance', comparison: '📊 Comparison', labs: '🧪 Labs', 'message-center': '📢 Message Center' };
@@ -1612,7 +1618,7 @@
                   <div className="flex items-center gap-2">
                     <div className="hidden lg:flex items-center gap-2 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 text-xs px-2.5 py-1 rounded-full border border-blue-100 dark:border-blue-400/20">
                       <Check className="w-3 h-3" />
-                      <span>Reviewed August 21, 2026</span>
+                      <span>Reviewed October 6, 2026</span>
                     </div>
                     <div className="hidden sm:flex items-center gap-2 bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400 text-xs px-2.5 py-1 rounded-full border border-transparent dark:border-white/[0.08]">
                       <Clock className="w-3 h-3" />
@@ -1633,7 +1639,7 @@
                 <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 rounded-xl px-4 py-3 flex items-start gap-3">
                   <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-gray-700 dark:text-gray-200">
-                    <span className="font-semibold">Accuracy note:</span> Product status and licensing change frequently. Core guidance was reviewed on August 21, 2026 against the official Microsoft links shown in each section. Planning estimates are directional.
+                    <span className="font-semibold">Accuracy note:</span> Product status and licensing change frequently. Core guidance was reviewed on October 6, 2026 against the official Microsoft links shown in each section. Planning estimates are directional.
                   </p>
                 </div>
               </div>
@@ -1824,7 +1830,7 @@
                         <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                         <div>
                           <p className="text-sm font-semibold text-gray-900 dark:text-white">Accuracy boundary</p>
-                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Product claims were reviewed against the linked Microsoft guidance on August 21, 2026. Setup times and qualitative ratings are planning estimates, not Microsoft commitments.</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Product claims were reviewed against the linked Microsoft guidance on October 6, 2026. Setup times and qualitative ratings are planning estimates, not Microsoft commitments.</p>
                         </div>
                       </div>
                       <div className={`rounded-lg p-4 flex items-start gap-3 border ${
@@ -2296,16 +2302,33 @@
                         <div className="mx-auto w-12 h-12 bg-gray-100 dark:bg-white/10 rounded-full flex items-center justify-center mb-4">
                           <Target className="w-6 h-6 text-gray-400 dark:text-gray-500" />
                         </div>
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">No labs found</h3>
-                        <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-sm mx-auto">
-                          No labs match your current filters for {currentAgent.name}.
-                        </p>
-                        <button 
-                          onClick={() => { setLabJourneyFilter('all'); setLabDifficultyFilter('all'); }}
-                          className="inline-flex items-center gap-2 text-blue-600 font-medium hover:text-blue-800 hover:underline"
-                        >
-                          Clear all filters
-                        </button>
+                        {approachHasLabs ? (
+                          <>
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">No labs match these filters</h3>
+                            <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-sm mx-auto">
+                              {currentAgent.name} has hands-on labs, but none match your current journey and difficulty filters.
+                            </p>
+                            <button
+                              onClick={() => { setLabJourneyFilter('all'); setLabDifficultyFilter('all'); }}
+                              className="inline-flex items-center gap-2 text-blue-600 font-medium hover:text-blue-800 hover:underline"
+                            >
+                              Clear lab filters
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">No mapped labs for this approach</h3>
+                            <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-sm mx-auto">
+                              {currentAgent.name} doesn't have dedicated hands-on labs yet. Explore the Copilot Studio labs to build with the custom-engine approach.
+                            </p>
+                            <button
+                              onClick={() => { setSelectedAgentKey('full'); setLabJourneyFilter('all'); setLabDifficultyFilter('all'); }}
+                              className="inline-flex items-center gap-2 text-blue-600 font-medium hover:text-blue-800 hover:underline"
+                            >
+                              View Copilot Studio labs
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2574,7 +2597,7 @@
                 {/* Footer */}
                 <div className="text-center mt-12 py-6 border-t border-gray-100 dark:border-white/[0.08]">
                   <p className="text-gray-400 dark:text-gray-500 text-sm mb-2">
-                    Microsoft Copilot Agents Guide • Core guidance reviewed August 21, 2026
+                    Microsoft Copilot Agents Guide • Core guidance reviewed October 6, 2026
                   </p>
                   <div className="flex items-center justify-center gap-3 text-xs text-gray-400 dark:text-gray-500">
                     <a 

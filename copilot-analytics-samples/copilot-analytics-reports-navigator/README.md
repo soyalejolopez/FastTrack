@@ -5,9 +5,9 @@ category: "Interactive"
 summary: "Compare 21 Microsoft reports and 22 public community projects by purpose, metrics, location, timing, and release status."
 author:
   - "Alejandro Lopez"
-version: 1.0.0
+version: 1.0.1
 published: 2026-09-11
-updated: 2026-09-11
+updated: 2026-10-06
 tags:
   - copilot
   - analytics

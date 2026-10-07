@@ -6,9 +6,9 @@ summary: >-
   Compare Microsoft Copilot agent approaches, availability, licensing, FastTrack scope, and common
   scenarios.
 author: Microsoft FastTrack
-version: 4.0.1
+version: 4.0.2
 published: "2025-10-28"
-updated: "2026-09-09"
+updated: "2026-10-06"
 tags:
   - guide
   - decision
@@ -120,7 +120,7 @@ not an agent-authoring path.
 The guide separates three kinds of information:
 
 1. **Product facts:** Availability, licensing, capabilities, and FastTrack scope linked to official
-   Microsoft guidance and reviewed on **August 21, 2026**.
+   Microsoft guidance and reviewed on **October 6, 2026**.
 2. **Planning guidance:** Setup time, scalability, customization, and maintenance ratings are
    directional estimates. They are not Microsoft commitments.
 3. **Message Center feed:** Refreshed separately from the core guide. A feed refresh updates only the
@@ -182,5 +182,5 @@ The scheduled workflow is `.github/workflows/update-message-center.yml`.
 This guide is provided as-is for informational and planning purposes. Microsoft, Microsoft 365,
 Copilot, and related trademarks are property of Microsoft Corporation.
 
-**Version:** 4.0.0
-**Core guidance reviewed:** August 21, 2026
+**Version:** 4.0.2
+**Core guidance reviewed:** October 6, 2026
