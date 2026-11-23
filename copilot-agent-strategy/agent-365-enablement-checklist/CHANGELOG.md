@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.1 - 2026-11-23
+
+- Rechecked every task that cites a Microsoft Learn page that moved or changed since the 2026-11-19 review, and updated what no longer matched.
+- Fixed 3 moved Microsoft Learn links. The Agent Builder org catalog article now lives under `plugins/`.
+- Defender: the Copilot Studio real-time protection onboarding retires on December 23, 2026, and its blocking settings don't migrate (tasks 7 and 8). Runtime protection deploys both inspection methods with the Intune or Defender portal policy profile instead of a platform script, and both Learn articles still carry a preview label with known issues (Shadow agents task 9). Local Windows agents have their own prompt evidence setting that uploads without redaction (task 9). Custom detection rules need the Security settings (manage) permission or Security Administrator, and BehaviorInfo isn't a Continuous (NRT) table (tasks 6 and 10).
+- Entra and Global Secure Access: access packages add a policy for **All Service principals** when agents don't use agent IDs (Entra Agent ID task 8), sponsor transfer to the manager can happen automatically (task 9), the audit log base type is **Create service principal** (task 10), and AI agent discovery needs Windows devices on a minimum client version, the Log Reader role, and the Copilot Studio integration (Shadow agents task 15).
+- Purview and SharePoint: the Copilot DLP location is **Microsoft Copilot, Copilot Chat, and Copilot Cowork** (Purview task 10), adaptive scopes for auto-labeling use PowerShell (task 7), the site permissions report is **Site permissions for users or groups** (SharePoint task 5), and the data access governance reports need SharePoint Advanced Management for snapshots and aren't available in 21Vianet (SharePoint task 2).
+- Foundry: the compliance view is **Manage > Compliance** and guardrails are created in Foundry guardrails and controls (Purview task 19 and Custom agents task 11).
+- Administration and licensing: the admin center control is **Add agent** (Custom agents task 8), conditions-based rules and risk signals need Agent 365 or E7 (Admin center tasks 13 and 15), usage insights for Microsoft-platform agents are included without Agent 365 (Foundations task 7), and cost management and Business Analytics aren't available in GCC (Operate & value tasks 8 and 18).
+- Viva Insights and Windows 365 for Agents: the AI Administrator needs explicit access to the Viva Insights web app, the Agent 365 Dashboard can exclude non-public agents (Operate & value task 2), and new customers are billed in Copilot Credits (Gateway & compute task 6).
+- Copilot Studio and Agent Builder: data policies name Azure Bot Service skills, and blocking the Microsoft Copilot Studio connector also blocks automated evaluations (Low-code agents task 3). Shared Agent Builder updates can take several minutes, and the **No users** sharing setting doesn't affect existing shares (Foundations task 14 and Admin center task 4).
+- The Anthropic model setting changes on December 9, 2026 (Operate & value task 14).
+- Updated link titles that no longer matched their Learn articles.
+
 ## 1.2.0 - 2026-11-19
 
 Updated for the Agent 365 announcements from Microsoft Ignite. The checklist grows from 160 to 174 tasks and was rechecked against Microsoft Learn on 2026-11-19.

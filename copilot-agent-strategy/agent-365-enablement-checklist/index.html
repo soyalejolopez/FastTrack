@@ -953,8 +953,8 @@ button.feat-chip.is-on { border-color: var(--pc); color: var(--ink); }
    Workstreams are appended by the data-ws-*.js files.
    ========================================================================== */
 
-var CONTENT_VERSION = "1.2.0";
-var CONTENT_REVIEWED = "2026-11-19";
+var CONTENT_VERSION = "1.2.1";
+var CONTENT_REVIEWED = "2026-11-23";
 /* Microsoft logo (four-square symbol, brand colors), embedded as a PNG so the file stays self-contained. */
 var MS_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKgAAACoCAYAAAB0S6W0AAACkUlEQVR42u3avW0UURiG0fdjZyz+ZK9FAQgaoBRIqIWQPkgowBG5JWqgASwKQF47QeDZ/QjAIjLsjAMkOCee6NWje7WzU5cvnnaYpZMeq2rq3mx7++T43adNJ1VJJ0l3qir9+n3W/S1nqyHr7ZSuSllvnjsmQKAgUAQKAgWBIlAQKAIFgYJAESgIFIGCQEGgCBQEikBBoCBQBAoCRaAgUBAoAgWBgkARKAgUgYJAQaAIFASKQEGgIFAECgJFoCBQECgCBYEiUBAoCBSBgkBBoAgUBIpAQaAgUAQKAkWgIFAQKAIFgSJQECgIFIGCQBEoCBQEikBBoCBQBAq3NHTSZpitf47Wez3b6U7a0gsCHavKDDPrTGqsynbX4x6Pj6shlcTSSwKdujdmmN9oJZXkog9WN56L96b0l+Tzbsq026XTkehMdf788doMCys9WPXxycfLuumq79Sr0xzeHVLZJLE0/GMnaMe1c6sB//BDqV3rAPylG6rbFXSrBcsVD//vCfr2fG2GhR505+Xx5U2naHcqpznM9WsmZhsy9pkZZup0hrHydbrIm/NnSS7SXdehdqeq0jnJYY7yIVOOcj8db0wWBLoanaCzA+1kNSTbacjBb/7AHFNJHmXIw0zyXBbodOUThiVn6I8fmFd7VHeVKZ2tE3RZoD5hWHaCVlVqr+B+PVcCncv3oAgUBIpAQaAgUAQKAkWgIFAQKAIFgSJQECgIFIGCQBEoCBQEikBBoAjUBAgUBIpAQaAgUAQKAkWgIFAQKAIFgSJQECgIFIGCQBEoCBQEikBBoAgUBAoCRaAgUBAoAgWBIlAQKAgUgYJAESgIFASKQEGgCBQECgJFoCBQBAoCBYEiUBAoCBSBwm19B32IgcD0RnF6AAAAAElFTkSuQmCC";
 
@@ -1297,7 +1297,7 @@ var L = {
   ppDlp: ["Configure data policies for agents", "https://learn.microsoft.com/en-us/microsoft-copilot-studio/admin-data-loss-prevention"],
   csGov: ["Copilot Studio security and governance", "https://learn.microsoft.com/en-us/microsoft-copilot-studio/security-and-governance"],
   csPublish: ["Control how agents are shared", "https://learn.microsoft.com/en-us/microsoft-copilot-studio/publication-fundamentals-publish-channels"],
-  abCatalog: ["Submit agents from Agent Builder to your org catalog", "https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/agent-builder-submit-to-org-catalog"],
+  abCatalog: ["Submit agents from Agent Builder to your org catalog", "https://learn.microsoft.com/en-us/plugins/agent-builder-submit-to-org-catalog"],
   csIdentity: ["Agent identity for Copilot Studio agents", "https://learn.microsoft.com/en-us/microsoft-agent-365/builder/identity"],
   csMigrate: ["Migrate Copilot Studio agents to Entra Agent ID", "https://learn.microsoft.com/en-us/microsoft-copilot-studio/govern-migrate-api-entra-agent-identity"],
   csRegistry: ["Agent registry integration for Copilot Studio", "https://learn.microsoft.com/en-us/microsoft-agent-365/builder/agent-registry"],
@@ -1464,7 +1464,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-365-overview"
 ],
 [
-"Manage agent registry in Microsoft 365 admin center",
+"Agent Registry in Microsoft 365 admin center",
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-registry-overview"
 ]
 ],
@@ -1602,7 +1602,7 @@ var WORKSTREAMS = [
 "phase": "configure",
 "req": "Only users who meet the license prerequisite can receive Agent 365.",
 "desc": "License users who delegate access to agents, and the owners, sponsors, or managers of agents that act with their own access. Microsoft recommends broader coverage for everyone who interacts with agents as adoption grows. Use group-based licensing so rings can grow by group membership.",
-"done": "The pilot license group shows no assignment errors, and Agents → Overview starts showing activity data.",
+"done": "The pilot license group shows no assignment errors, and Agents → Overview starts showing activity data for non-Microsoft agents.",
 "where": "Microsoft 365 admin center → Billing → Licenses → Agent 365 → Assign licenses",
 "preview": false,
 "links": [
@@ -1755,7 +1755,7 @@ var WORKSTREAMS = [
 "preview": false,
 "links": [
 [
-"Manage agent registry in Microsoft 365 admin center",
+"Agent Registry in Microsoft 365 admin center",
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-registry-overview"
 ],
 [
@@ -1791,7 +1791,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-365-overview"
 ],
 [
-"Manage agent registry in Microsoft 365 admin center",
+"Agent Registry in Microsoft 365 admin center",
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-registry-overview"
 ],
 [
@@ -1872,7 +1872,7 @@ var WORKSTREAMS = [
 ],
 [
 "Submit agents from Agent Builder to your org catalog",
-"https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/agent-builder-submit-to-org-catalog"
+"https://learn.microsoft.com/en-us/plugins/agent-builder-submit-to-org-catalog"
 ],
 [
 "Configure data policies for agents",
@@ -1885,7 +1885,7 @@ var WORKSTREAMS = [
 ],
 "steps": [
 "Write a short maker standard: allowed agent types, environments, approved knowledge sources and connectors, authentication, sharing limits, the approval path, and retirement.",
-"Explain when to share directly and when to submit to the org catalog, and that shared updates go live immediately.",
+"Explain when to share directly and when to submit to the org catalog, and that shared updates go live without admin review but can take several minutes.",
 "Explain owner and sponsor duties, including what happens when an owner leaves.",
 "Ask makers to add a second owner to Agent Builder agents so they don't become ownerless.",
 "Publish where to ask for help and how to request a blocked Microsoft agent.",
@@ -1957,7 +1957,7 @@ var WORKSTREAMS = [
 "preview": false,
 "links": [
 [
-"Manage agent registry in Microsoft 365 admin center",
+"Agent Registry in Microsoft 365 admin center",
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-registry-overview"
 ],
 [
@@ -2054,7 +2054,7 @@ var WORKSTREAMS = [
 "pri": "Recommended",
 "phase": "configure",
 "req": "",
-"desc": "Choose All users, No users, or Specific users. This control applies only to Agent Builder agents. No users blocks organization-wide sharing, but people can still share directly with named individuals.",
+"desc": "Choose All users, No users, or Specific users. This control applies only to Agent Builder agents. No users blocks new organization-wide sharing, but people can still share directly with named individuals, and existing shared agents stay accessible.",
 "done": "The Sharing page shows the approved option.",
 "where": "Agents → Settings → Sharing",
 "preview": false,
@@ -2230,7 +2230,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/microsoft-365/admin/manage/agent-map"
 ],
 [
-"Manage agent registry in Microsoft 365 admin center",
+"Agent Registry in Microsoft 365 admin center",
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-registry-overview"
 ],
 [
@@ -2302,7 +2302,7 @@ var WORKSTREAMS = [
 "pri": "Optional",
 "phase": "operate",
 "req": "Licensing sources differ on whether rules need Agent 365. Confirm in your tenant.",
-"desc": "Two more management rules help at scale: block ownerless agents without usage, and reject publish requests older than a set number of days. Each rule shows the impacted agents before it runs. Agree thresholds with owners and the service desk first. An action center, due in preview in December 2026, will start with inactive and ownerless agents and put them in one review and cleanup queue.",
+"desc": "Two more management rules help at scale: block ownerless agents without usage, and reject publish requests older than a set number of days. Each rule shows the impacted agents before it runs. Conditions-based rules need Agent 365 or E7. Agree thresholds with owners and the service desk first. An action center, due in preview in December 2026, will start with inactive and ownerless agents and put them in one review and cleanup queue.",
 "done": "Both rules exist with agreed thresholds, and each run has a reviewed preview and a change record.",
 "where": "Agents → Settings → Agent management rules",
 "preview": false,
@@ -2369,13 +2369,13 @@ var WORKSTREAMS = [
 "pri": "Recommended",
 "phase": "operate",
 "req": "Agent 365 or E7 license",
-"desc": "The Risks column and Agents at risk tile combine signals from Entra, Defender, and Purview so AI admins can see risks without security roles. Counts can lag the security portals by up to an hour. Deep links open the source portal only for users with the right role, and Purview IRM alerts need an IRM role. Dynamic agent risk, in preview since Ignite 2026, combines runtime identity, access, data, endpoint, cloud, and network signals with exposure and blast radius into one risk level per agent. It updates as the agent acts, is targeted, or changes, and shows the same level in the admin center, Defender, Entra, and Purview. Microsoft is also working with Check Point, Cyera, Darktrace, and Zenity to add their signals through Microsoft Sentinel.",
+"desc": "The Risks column and Agents at risk tile combine signals from Entra, Defender, and Purview so AI admins can see risks without security roles. Viewing risk signals needs an E7 or Agent 365 license. Counts can lag the security portals by up to an hour. Deep links open the source portal only for users with the right role, and Purview IRM alerts need an IRM role. Dynamic agent risk, in preview since Ignite 2026, combines runtime identity, access, data, endpoint, cloud, and network signals with exposure and blast radius into one risk level per agent. It updates as the agent acts, is targeted, or changes, and shows the same level in the admin center, Defender, Entra, and Purview. Microsoft is also working with Check Point, Cyera, Darktrace, and Zenity to add their signals through Microsoft Sentinel.",
 "done": "A weekly triage routes each high-severity risk to its security owner with a ticket.",
 "where": "Agents → All agents → Registry → Agents at risk",
 "preview": false,
 "links": [
 [
-"Manage agent registry in Microsoft 365 admin center",
+"Agent Registry in Microsoft 365 admin center",
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-registry-overview"
 ],
 [
@@ -2702,7 +2702,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/defender-xdr/security-for-ai/ai-agent-risk-assessment"
 ],
 [
-"Manage agent registry in Microsoft 365 admin center",
+"Agent Registry in Microsoft 365 admin center",
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-registry-overview"
 ],
 [
@@ -2792,7 +2792,7 @@ var WORKSTREAMS = [
 "Run AgentsInfo | summarize arg_max(Timestamp, *) by AgentId | where LifecycleStatus != \"Deleted\" to list current agents.",
 "Query CloudAppEvents for a known test agent to confirm actions, tool invocations, and data access events.",
 "Query BehaviorInfo and BehaviorEntities to review real-time protection audit and block events and the agents, users, and tools involved.",
-"Save tested queries for the SOC and turn high-value ones into custom detection rules."
+"Save tested queries for the SOC and turn high-value ones into custom detection rules. Creating rules needs the Security settings (manage) permission or the Security Administrator role, and the query should return Timestamp and ReportId."
 ],
 "ord": 60,
 "rollback": "Turn off a custom detection rule that creates noise from Hunting → Custom detection rules. Delete also removes the rule permanently, so turn it off first if you might reuse it.",
@@ -2822,7 +2822,7 @@ var WORKSTREAMS = [
 ],
 "steps": [
 "Review audit events that the Default rule records in BehaviorInfo, and note which detections fire for which agents.",
-"Confirm coverage: Agent 365 tool calls through Work IQ MCP, Copilot Studio (preview, needs connection), and Foundry agents (preview).",
+"Confirm coverage: Agent 365 tool calls through Work IQ MCP, Copilot Studio (preview, needs connection until the existing onboarding retires on December 23, 2026), and Foundry agents (preview).",
 "Select Create rule, set Status, name, and description, then scope the rule to specific pilot agents.",
 "Select only high-confidence detection types, such as Secret exfiltration or Unsafe email domain, then select Apply.",
 "Create the rule, test it with a pilot agent, and confirm a block behavior appears in BehaviorInfo.",
@@ -2840,7 +2840,7 @@ var WORKSTREAMS = [
 "pri": "Recommended",
 "phase": "configure",
 "req": "Power Platform Administrator; permission to create Entra app registrations; agents that use generative orchestration",
-"desc": "Defender inspects Copilot Studio tool invocations before they run and can block suspicious actions. You configure it per environment, there's no tenant-wide setting, and it applies only to agents that use generative orchestration. If no decision arrives within one second, the default error behavior lets the action proceed.",
+"desc": "Defender inspects Copilot Studio tool invocations before they run and can block suspicious actions. You configure it per environment, there's no tenant-wide setting, and it applies only to agents that use generative orchestration. This onboarding retires on December 23, 2026 and its blocking settings don't migrate, so re-create your blocking rules in Policies & rules before then. If no decision arrives within one second, the default error behavior lets the action proceed.",
 "done": "The Copilot Studio step shows Connected and a protected test agent's tool invocation is evaluated as expected.",
 "where": "Defender portal → Settings → Security for AI → Get started → Copilot Studio; Power Platform admin center → Security → Threat detection → Additional threat detection",
 "preview": true,
@@ -2877,7 +2877,7 @@ var WORKSTREAMS = [
 "pri": "Optional",
 "phase": "plan",
 "req": "",
-"desc": "Prompt evidence collection is on by default and adds only the suspicious, security-relevant parts of prompts or responses to each alert. Secrets and sensitive data are redacted, but conversations can still be sensitive. Treat it as a privacy decision, agree it with privacy and compliance, and set it before agents reach production.",
+"desc": "Prompt evidence collection is on by default and adds only the suspicious, security-relevant parts of prompts or responses to each alert. Secrets and sensitive data are redacted, but conversations can still be sensitive. For local Windows agents, a separate device-level setting sends prompt data and tool calls to the cloud without redaction when enabled. Treat it as a privacy decision, agree it with privacy and compliance, and set it before agents reach production.",
 "done": "The setting matches your privacy and compliance decision.",
 "where": "Defender portal → Settings → Security for AI → Prompt evidence collection",
 "preview": false,
@@ -2894,7 +2894,7 @@ var WORKSTREAMS = [
 "steps": [
 "Brief privacy and compliance owners on what the evidence contains and who can view agent alerts.",
 "Decide whether to keep collection on, and record the decision and approver.",
-"Go to Settings → Security for AI → Prompt evidence collection and set Enabled to match the decision.",
+"Go to Settings → Security for AI → Prompt evidence collection and set Enabled to match the decision. For local Windows agents, set PromptEvidenceCollection in the runtime protection policy to match.",
 "Review which SOC roles can view AI agent alerts, because the evidence appears in each alert."
 ],
 "ord": 90,
@@ -2943,7 +2943,7 @@ var WORKSTREAMS = [
 "Add AI agent alerts and incidents to triage queues and on-call routing with severity-based response targets.",
 "Document hunting pivots across AlertInfo, AlertEvidence, CloudAppEvents, AgentsInfo, BehaviorInfo, and BehaviorEntities.",
 "Use the incident graph in each incident's attack story to trace affected agents, users, tools, and resources.",
-"Create custom detections on BehaviorInfo, because agents covered by block rules don't raise near-real-time alerts.",
+"Create custom detections on BehaviorInfo, because agents covered by block rules don't raise near-real-time alerts. BehaviorInfo isn't a Continuous (NRT) table, so the fastest frequency is every hour.",
 "Define containment: disable the agent identity in Entra, block the agent in the Microsoft 365 admin center, or confirm compromise.",
 "Export ID Protection agent risk data to your SIEM through Entra diagnostic settings.",
 "Run a tabletop exercise with the SOC, a sponsor, and an owner, and track the gaps."
@@ -3348,7 +3348,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/entra/agent-id/agent-access-packages"
 ],
 [
-"Governing Agent Identities",
+"Governing Agent identities and access",
 "https://learn.microsoft.com/en-us/entra/id-governance/agent-id-governance-overview"
 ]
 ],
@@ -3356,7 +3356,7 @@ var WORKSTREAMS = [
 "Create or choose a dedicated catalog for agent resources, knowing that adding API permissions or Entra roles marks it privileged.",
 "Go to ID Governance → Entitlement management → Access packages and select New access package.",
 "Add only the security groups, allowed Entra roles, or API permissions the agent needs.",
-"Under Requests, select For users, service principals, and agent identities in your directory, then select All agents.",
+"Under Requests, select For users, service principals, and agent identities in your directory, then select All agents. For agents that use service principals instead of agent IDs, add a policy for All Service principals too.",
 "Set approval stages with named approvers, and set an expiration so access ends unless extended.",
 "Have a Global Administrator, activated just in time, add any API permissions or Entra roles as resource roles.",
 "Assign the package to a pilot agent and confirm access and expiry in its assignment."
@@ -3373,7 +3373,7 @@ var WORKSTREAMS = [
 "pri": "Optional",
 "phase": "configure",
 "req": "Microsoft 365 E7, or Agent 365 with Entra ID P1 or Microsoft 365 E3",
-"desc": "Entra ID moves sponsorship to the sponsor's manager automatically when a sponsor leaves. Lifecycle workflows add mover and leaver tasks that email the manager and cosponsors and transfer agent identity sponsorships to the manager. These tasks depend on accurate manager and HR attributes in Entra ID.",
+"desc": "Entra ID can move sponsorship to the sponsor's manager automatically when a sponsor leaves. Lifecycle workflows add mover and leaver tasks that email the manager and cosponsors and transfer agent identity sponsorships to the manager. These tasks depend on accurate manager and HR attributes in Entra ID.",
 "done": "A test mover or leaver run sends the notices and moves sponsorship to the manager.",
 "where": "Entra admin center → ID Governance → Lifecycle workflows → Workflows",
 "preview": false,
@@ -3391,7 +3391,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/entra/id-governance/on-demand-workflow"
 ],
 [
-"Governing Agent Identities",
+"Governing Agent identities and access",
 "https://learn.microsoft.com/en-us/entra/id-governance/agent-id-governance-overview"
 ]
 ],
@@ -3415,7 +3415,7 @@ var WORKSTREAMS = [
 "pri": "Optional",
 "phase": "validate",
 "req": "",
-"desc": "Agent sign-ins can appear in any of the four sign-in log types, so filter by agent type rather than log type. Confirm a test agent's sign-ins appear with the expected Conditional Access and report-only results. Agent changes appear in audit logs under base types such as add service principal, so check the agentType property.",
+"desc": "Agent sign-ins can appear in any of the four sign-in log types, so filter by agent type rather than log type. Confirm a test agent's sign-ins appear with the expected Conditional Access and report-only results. Agent changes appear in audit logs under base types such as Create service principal, so check the agentType property.",
 "done": "Sign-ins for the test agent appear with expected results.",
 "where": "Entra admin center → Entra ID → Monitoring & health → Sign-in logs",
 "preview": false,
@@ -3901,7 +3901,7 @@ var WORKSTREAMS = [
 "Identify where each agent saves output, such as specific SharePoint libraries, OneDrive accounts, or mailboxes.",
 "Ask site owners to set a default sensitivity label on agent output libraries, which labels new and edited files.",
 "Create an auto-labeling policy with sensitive info type or trainable classifier conditions for those locations.",
-"Scope SharePoint to up to 1,000 explicit sites, or use an adaptive scope to target up to 50,000 sites.",
+"Scope SharePoint to up to 1,000 explicit sites, or use PowerShell to associate an adaptive scope to target up to 50,000 sites.",
 "Select Run policy in simulation mode, and don't allow automatic turn-on if changes need formal approval.",
 "Review matches with data owners, refine conditions, then turn on the policy as Compliance Administrator.",
 "Record locations that auto-labeling can't cover as residual risks with an owner."
@@ -4038,13 +4038,13 @@ var WORKSTREAMS = [
 "pri": "Recommended",
 "phase": "configure",
 "req": "",
-"desc": "The Microsoft 365 Copilot and Copilot Chat DLP location can exclude labeled files and emails from responses, and block prompts or web searches that contain sensitive info types (prompt blocking is in preview). It covers Microsoft 365 Copilot, Copilot Chat, and Cowork, and label rules also restrict Copilot Studio agents whose knowledge source is SharePoint. It doesn't inspect files uploaded into prompts, and excluded items can still appear as citations. At Ignite 2026, Microsoft announced previews that block Copilot from referencing files with sensitive information even when they aren't labeled, and extend prompt protection to attachments and linked files.",
+"desc": "The Microsoft Copilot, Copilot Chat, and Copilot Cowork DLP location can exclude labeled files and emails from responses, and block prompts or web searches that contain sensitive info types (prompt blocking is in preview). It covers Microsoft 365 Copilot, Copilot Chat, and Cowork, and label rules also restrict Copilot Studio agents whose knowledge source is SharePoint. It doesn't inspect files uploaded into prompts, and excluded items can still appear as citations. At Ignite 2026, Microsoft announced previews that block Copilot from referencing files with sensitive information even when they aren't labeled, and extend prompt protection to attachments and linked files.",
 "done": "A test prompt over labeled content returns nothing from that item in simulation and after enforcement, while unlabeled content still works.",
 "where": "Purview portal → Data Loss Prevention → Policies → Create policy → Custom",
 "preview": false,
 "links": [
 [
-"Learn about using Microsoft Purview Data Loss Prevention to protect interactions with Microsoft 365 Copilot, Copilot Chat, and Cowork",
+"Microsoft Purview DLP for Microsoft 365 Copilot and Cowork",
 "https://learn.microsoft.com/en-us/purview/dlp-microsoft365-copilot-location-learn-about"
 ],
 [
@@ -4066,9 +4066,9 @@ var WORKSTREAMS = [
 ],
 "steps": [
 "Review the Default DLP policy - Protect sensitive M365 Copilot interactions, which starts in simulation mode.",
-"Create a Custom policy and turn on only the Microsoft 365 Copilot and Copilot Chat location.",
+"Create a Custom policy and turn on only the Microsoft Copilot, Copilot Chat, and Copilot Cowork location.",
 "Add a rule with Content contains → Sensitivity labels and the action Prevent Copilot from processing content.",
-"Put sensitive info type conditions for prompts or web searches in separate rules, because they can't share a rule.",
+"Put sensitive info type conditions for prompts or web searches in separate rules from the label rule, because one rule can't use both condition types.",
 "Run in simulation mode, review matches, and allow up to four hours for changes to apply.",
 "Set a compliance URL in policy tips so blocked users reach your internal guidance.",
 "Turn on after sign-off; this location supports administrative units, but support is still rolling out, so confirm it's available in your tenant before you delegate it, and otherwise central admins own it."
@@ -4410,11 +4410,11 @@ var WORKSTREAMS = [
 "req": "Pay-as-you-go billing or Agent 365 for policies; Purview Audit alone is included",
 "desc": "Turn on Purview in the Foundry Control Plane for each Azure subscription that hosts Foundry apps and agents. The older Defender for Cloud setting is being deprecated and doesn't include Foundry agent data. Data security policies apply only to calls that use Microsoft Entra ID user-context tokens; other calls are audited and classified but not enforced.",
 "done": "Foundry interactions from each enabled subscription appear in DSPM activity explorer, and a user-context test call is evaluated by policy.",
-"where": "Foundry portal → Operate → Compliance → Data security and governance",
+"where": "Foundry portal → Manage → Compliance → Data security and governance",
 "preview": false,
 "links": [
 [
-"Manage compliance and security in Microsoft Foundry",
+"Monitor AI governance and compliance in Microsoft Foundry",
 "https://learn.microsoft.com/en-us/azure/foundry/control-plane/how-to-manage-compliance-security"
 ],
 [
@@ -4429,7 +4429,7 @@ var WORKSTREAMS = [
 "steps": [
 "List every Azure subscription that hosts Foundry apps or agents, with an owner for each.",
 "Confirm pay-as-you-go billing or an Agent 365 subscription, otherwise only Purview Audit works.",
-"In the Foundry (new) portal, select Operate → Compliance → Data security and governance.",
+"In the Foundry (new) portal, select Manage → Compliance → Data security and governance.",
 "Select the subscription, turn on Powered by Microsoft Purview, and repeat for each subscription.",
 "Ask developers to call the managed inference endpoint with Entra ID user-context tokens so policies apply.",
 "Plan separately for network-isolated workloads, and move subscriptions off the deprecated Defender for Cloud setting.",
@@ -4773,14 +4773,14 @@ var WORKSTREAMS = [
 "preview": false,
 "links": [
 [
-"Data access governance reports for SharePoint and OneDrive sites",
+"Data access governance reports for SharePoint sites",
 "https://learn.microsoft.com/en-us/sharepoint/data-access-governance-reports"
 ]
 ],
 "steps": [
 "In the SharePoint admin center, go to Reports → Data access governance and open Site permissions across your organization.",
 "Run the site permissions snapshot first to baseline sites with thousands of users, guests, or EEEU access. Repeat it quarterly.",
-"Run the Sharing links and Shared with 'Everyone except external users' activity reports for the last 28 days. Repeat them monthly.",
+"Run the Sharing links and Shared with 'Everyone except external users' activity reports for the last 28 days. Repeat them monthly. Without SAM, enable data collection first, and snapshot reports aren't available. None of the reports are available in Microsoft 365 operated by 21Vianet.",
 "Run the sites and files shared via special SharePoint groups report to see exactly which items are exposed and script the cleanup.",
 "If reports fail, ask a Global Administrator to clear Display concealed user, group, and site names in all reports.",
 "Download the reports, rank sites by exposure and sensitivity, and assign each high-risk site to an owner and a remediation wave."
@@ -4857,13 +4857,13 @@ var WORKSTREAMS = [
 "pri": "Optional",
 "phase": "validate",
 "req": "SharePoint Advanced Management; the Site permissions across your organization report must have run at least once",
-"desc": "Run the site permissions for users report for a pilot agent's identity to list every site it can reach. Reconcile direct and group-based access against the sites you approved.",
+"desc": "Run the site permissions for users or groups report for a pilot agent's identity to list every site it can reach. Reconcile direct and group-based access against the sites you approved.",
 "done": "The report for each pilot agent identity lists only approved sites, or each extra site has a removal ticket.",
-"where": "SharePoint admin center → Reports → Data access governance → Site permissions for users → View reports",
+"where": "SharePoint admin center → Reports → Data access governance → Site permissions for users or groups → View reports",
 "preview": false,
 "links": [
 [
-"Discover sites accessible by a given user with the snapshot report",
+"Data access governance reports - get site permissions for users or groups",
 "https://learn.microsoft.com/en-us/sharepoint/data-access-governance-site-permissions-users-report"
 ],
 [
@@ -4873,7 +4873,7 @@ var WORKSTREAMS = [
 ],
 "steps": [
 "Confirm the Site permissions across your organization report has run at least once.",
-"Under Site permissions for users, select View reports, then Create report, then Add users to report, and pick the agent identity.",
+"Under Site permissions for users or groups, select View reports, then Create report, choose Users and select Next, then add the agent identity and select Save.",
 "Choose SharePoint or OneDrive as the scope, name the report, and select Create and run.",
 "Check whether the identity reaches whole sites or specific items, and whether access is direct or through groups.",
 "Download the detailed report and remove access that isn't approved, starting with group-derived access.",
@@ -4994,7 +4994,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/sharepoint/site-access-review"
 ],
 [
-"Data access governance reports for SharePoint and OneDrive sites",
+"Data access governance reports for SharePoint sites",
 "https://learn.microsoft.com/en-us/sharepoint/data-access-governance-reports"
 ]
 ],
@@ -5115,7 +5115,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/microsoft-agent-365/builder/agent-registry"
 ],
 [
-"Manage agent registry in Microsoft 365 admin center",
+"Agent Registry in Microsoft 365 admin center",
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-registry-overview"
 ],
 [
@@ -5142,7 +5142,7 @@ var WORKSTREAMS = [
 "pri": "Required",
 "phase": "configure",
 "req": "",
-"desc": "Purview DLP covers agent interactions, but Power Platform data policies decide which connectors, knowledge sources, HTTP calls, skills, channels, and triggers Copilot Studio agents can use. Blocking a connector also blocks MCP server tools that rely on it. Enforcement applies to all agents, and exemptions are no longer supported.",
+"desc": "Purview DLP covers agent interactions, but Power Platform data policies decide which connectors, knowledge sources, HTTP calls, Azure Bot Service skills, channels, and triggers Copilot Studio agents can use. Blocking a connector also blocks MCP server tools that rely on it. Enforcement applies to all agents, and exemptions are no longer supported.",
 "done": "Data policies block unauthenticated chat and the connectors, knowledge sources, channels, and triggers you don't approve, and a test agent shows the expected errors.",
 "where": "Power Platform admin center → Security → Data and privacy → Data policy",
 "preview": false,
@@ -5152,7 +5152,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/microsoft-copilot-studio/admin-data-loss-prevention"
 ],
 [
-"Key concepts - Copilot Studio security and governance",
+"Security and governance",
 "https://learn.microsoft.com/en-us/microsoft-copilot-studio/security-and-governance"
 ]
 ],
@@ -5161,7 +5161,7 @@ var WORKSTREAMS = [
 "Create the policy for a test environment first: select Security → Data and privacy → Data policy → New Policy.",
 "Block Chat without Microsoft Entra ID authentication in Copilot Studio so every agent requires sign-in.",
 "Block or endpoint-filter knowledge source, HTTP, Skills with Copilot Studio, Application Insights in Copilot Studio, and unapproved channel connectors, such as Direct Line.",
-"Block the Microsoft Copilot Studio connector where you don't allow event triggers for autonomous agents.",
+"Block the Microsoft Copilot Studio connector where you don't allow event triggers for autonomous agents. It also blocks automated evaluations that use authenticated accounts.",
 "Add an admin contact and Learn more link with New-PowerAppDlpErrorSettings, notify makers, then extend the policy to more environments.",
 "Open a test agent in Copilot Studio and confirm Publish is unavailable and the downloaded details list each violation."
 ],
@@ -5187,10 +5187,10 @@ var WORKSTREAMS = [
 "links": [
 [
 "Submit agents from Agent Builder to your org catalog",
-"https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/agent-builder-submit-to-org-catalog"
+"https://learn.microsoft.com/en-us/plugins/agent-builder-submit-to-org-catalog"
 ],
 [
-"Manage agent registry in Microsoft 365 admin center",
+"Agent Registry in Microsoft 365 admin center",
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-registry-overview"
 ],
 [
@@ -5240,7 +5240,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/microsoft-agent-365/builder/identity"
 ],
 [
-"Microsoft Entra Agent IDs for Copilot Studio agents",
+"Manage Entra Agent IDs",
 "https://learn.microsoft.com/en-us/microsoft-copilot-studio/admin-use-entra-agent-identities"
 ],
 [
@@ -5281,7 +5281,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/microsoft-copilot-studio/govern-migrate-api-entra-agent-identity"
 ],
 [
-"Microsoft Entra Agent IDs for Copilot Studio agents",
+"Manage Entra Agent IDs",
 "https://learn.microsoft.com/en-us/microsoft-copilot-studio/admin-use-entra-agent-identities"
 ]
 ],
@@ -5368,11 +5368,11 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/microsoft-agent-365/builder/agent-registry"
 ],
 [
-"Microsoft Entra Agent IDs for Copilot Studio agents",
+"Manage Entra Agent IDs",
 "https://learn.microsoft.com/en-us/microsoft-copilot-studio/admin-use-entra-agent-identities"
 ],
 [
-"Manage agent registry in Microsoft 365 admin center",
+"Agent Registry in Microsoft 365 admin center",
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-registry-overview"
 ]
 ],
@@ -5792,7 +5792,7 @@ var WORKSTREAMS = [
 "req": "Global Administrator for the admin center upload; Frontier preview for agents with their own user account",
 "desc": "a365 publish builds manifest.zip but doesn't upload it, so a Global Administrator uploads it in the admin center. Configure the blueprint in Teams Developer Portal, or the agent won't receive messages from Teams, email, or other Microsoft 365 services. Instances of agents with their own user account need Frontier, admin approval, and licenses for the agent user.",
 "done": "The agent appears under Agents → All agents, and a test instance replies and shows sessions on its Activity tab.",
-"where": "Microsoft 365 admin center → Agents → All agents → Upload custom agent",
+"where": "Microsoft 365 admin center → Agents → All agents → Add agent",
 "preview": false,
 "links": [
 [
@@ -5810,7 +5810,7 @@ var WORKSTREAMS = [
 ],
 "steps": [
 "Review manifest names and descriptions, increment the version, then run a365 publish to build manifest/manifest.zip.",
-"Have a Global Administrator upload manifest.zip under Agents → All agents → Upload custom agent, and allow 5 to 10 minutes.",
+"Have a Global Administrator upload manifest.zip under Agents → All agents → Add agent, and allow 5 to 10 minutes.",
 "In Teams Developer Portal, set Agent Type to API Based and Notification URL to the messaging endpoint, then save.",
 "Have a pilot user request an instance in Teams, then approve it under Agents → All agents → Requests.",
 "Assign the agent user the licenses its workloads need; mailbox and OneDrive provisioning can take up to 24 hours.",
@@ -5937,7 +5937,7 @@ var WORKSTREAMS = [
 "req": "Foundry Account Owner for Purview; Owner or Resource Policy Contributor for guardrail policies; Purview pay-as-you-go or Agent 365 for data security policies",
 "desc": "Published Foundry agents appear in the Agent 365 registry automatically, and each Foundry resource sends activity data to Agent 365 by default unless you opt it out. Guardrail policies and the Purview toggle are still set per subscription in Foundry. Hosted agents need extra setup to export telemetry, and Defender threat detection covers published agents only.",
 "done": "A nonproduction Foundry project shows its agents in the registry, Purview is on for its subscription, and a trace is validated.",
-"where": "Foundry portal → Operate → Compliance",
+"where": "Foundry portal → Manage → Compliance",
 "preview": false,
 "links": [
 [
@@ -5949,7 +5949,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/configure-agent-365-data-collection"
 ],
 [
-"Manage compliance and security in Microsoft Foundry",
+"Monitor AI governance and compliance in Microsoft Foundry",
 "https://learn.microsoft.com/en-us/azure/foundry/control-plane/how-to-manage-compliance-security"
 ],
 [
@@ -5964,8 +5964,8 @@ var WORKSTREAMS = [
 "steps": [
 "Confirm published Foundry agents appear under Agents → All agents in the Microsoft 365 admin center.",
 "Review a365LoggingEnabled on each Foundry resource, and use Azure Policy to opt out resources with data residency limits.",
-"In Foundry, open Operate → Compliance → Data security and governance, and turn on Powered by Microsoft Purview.",
-"Under Operate → Compliance → Policies, create guardrail policies for content filters and prompt shields at subscription scope.",
+"In Foundry, open Manage → Compliance → Data security and governance, and turn on Powered by Microsoft Purview.",
+"In Foundry guardrails and controls, create guardrail policies for content filters and prompt shields at subscription scope, then review them under Manage → Compliance → Policy.",
 "For hosted agents, configure the Foundry hosting libraries or Agent 365 SDK and grant the observability permissions.",
 "If a firewall restricts egress, allow agent365.svc.cloud.microsoft on TCP 443 for hosted agents.",
 "Publish one test agent, then validate a prompt, a tool call, and its trace in Purview and Defender."
@@ -6968,7 +6968,7 @@ var WORKSTREAMS = [
 "pri": "Recommended",
 "phase": "golive",
 "req": "Defender for Endpoint Plan 2, Microsoft 365 E5, Agent 365, or Microsoft 365 E7; supported Windows devices",
-"desc": "Runtime protection inspects supported agents on Windows for prompt injection and became generally available on Windows at Ignite 2026. Agent-native inspection covers Claude Code, GitHub Copilot CLI and app, Claude Desktop (Code), and the VS Code GitHub Copilot and Claude Code extensions; network inspection covers OpenClaw, Ollama Desktop, ChatGPT Classic, and ChatGPT Desktop (Chat). Deploy agent-native inspection with the Intune or Defender portal policy profile, and network inspection with an Intune PowerShell platform script. Start in audit mode on a small group, review alerts for one to two weeks, then block. Some Learn articles still carry a preview label, so check the support matrix for each agent.",
+"desc": "Runtime protection inspects supported agents on Windows for prompt injection and was announced as generally available on Windows at Ignite 2026. Agent-native inspection covers Claude Code, GitHub Copilot CLI and app, Claude Desktop (Code), and the VS Code GitHub Copilot and Claude Code extensions; network inspection covers OpenClaw, Ollama Desktop, ChatGPT Classic, and ChatGPT Desktop (Chat). Deploy agent-native inspection and network inspection with the Intune or Defender portal policy profile. Start in audit mode on a small group, review alerts for one to two weeks, then block. Both Learn articles still carry a preview label and list preview known issues, so check the support matrix for each agent.",
 "done": "Audit alerts are reviewed and the block decision and target device groups are recorded.",
 "where": "Intune admin center → Endpoint security → Antivirus → Create policy",
 "preview": false,
@@ -6996,10 +6996,9 @@ var WORKSTREAMS = [
 ],
 "steps": [
 "On test Windows devices, confirm AntivirusSignatureVersion is 1.451.224.0 or later and set Defender updates to the Beta Channel.",
-"In Intune, create an Antivirus policy with the Microsoft Defender AI agent runtime protection profile set to Audit.",
-"For network inspection, deploy Set-MpPreference -AiAgentNetworkInspection Audit as a platform script that doesn't use logged-on credentials.",
-"Assign both to a limited device group, then confirm Ai Agent Protection under the device's Effective settings.",
-"Run the runtime protection demonstration prompt and confirm an informational Suspicious AI prompt injection alert.",
+"In Intune, create an Antivirus policy with the Microsoft Defender AI agent runtime protection profile, and set Ai Agent Protection and Ai Agent Network Inspection to Audit.",
+"Assign the policy to a limited device group, then confirm Ai Agent Protection and Ai Agent Network Inspection under the device's Effective settings.",
+"Run the runtime protection demonstration prompt and confirm an informational Suspicious AI prompt injection alert. During preview the alert title can wrongly say blocked in Audit mode, so confirm the mode on the device.",
 "Review alerts for one to two weeks, classify false positives, then switch selected device groups to Block.",
 "Brief the help desk on in-terminal block messages and Windows toast notifications before you enforce."
 ],
@@ -7204,7 +7203,7 @@ var WORKSTREAMS = [
 "pri": "Optional",
 "phase": "configure",
 "req": "Global Secure Access client on endpoints with Internet Access forwarding and TLS inspection; Global Secure Access Administrator; Agent 365 or E7 for agent network controls",
-"desc": "Global Secure Access adds a network view to what Defender finds on devices. AI agent discovery lists local and Copilot Studio agents reaching the internet, ties them to a user, device, and process, and marks each as managed or shadow based on Entra Agent ID. MCP logging shows which remote MCP servers and tools agents call, and the MCP firewall can allow or block MCP servers, tools, resources, and prompts. All three are in preview. Local MCP servers on a device have no network footprint, so they aren't visible here.",
+"desc": "Global Secure Access adds a network view to what Defender finds on devices. AI agent discovery lists local agents, Copilot Studio agents, and unclassified agentic traffic reaching the internet, ties them to a user and device, and marks each as managed (governed through Agent 365) or unmanaged. MCP logging shows which remote MCP servers and tools agents call, and the MCP firewall can allow or block MCP servers, tools, resources, and prompts. All three are in preview. Local MCP servers on a device have no network footprint, so they aren't visible here.",
 "done": "Pilot devices show discovered agents and MCP traffic in Global Secure Access, and an MCP firewall policy blocks a test server as expected.",
 "where": "Microsoft Entra admin center → Global Secure Access",
 "preview": true,
@@ -7227,9 +7226,9 @@ var WORKSTREAMS = [
 ]
 ],
 "steps": [
-"After privacy and legal review, deploy the Global Secure Access client to pilot devices with Internet Access forwarding and TLS inspection.",
-"Open AI agent discovery and compare its agents with Defender's local agent inventory.",
-"Review managed versus shadow agents, and the destinations and traffic volume for each.",
+"After privacy and legal review, deploy the Global Secure Access client to pilot Windows devices (client 2.34.222.0 or later, Defender Antivirus platform 4.18.26090.9 or later) with Internet Access forwarding and TLS inspection, and enable the Copilot Studio integration for cloud agents.",
+"Open Global Secure Access → Agents → Discovered agents (at least Global Secure Access Log Reader) and compare its agents with Defender's local agent inventory.",
+"Review managed versus unmanaged agents, and the destinations and traffic volume for each.",
 "Review MCP traffic logs to find the remote MCP servers and tools your agents use, including unknown servers.",
 "Create an MCP firewall policy that blocks a test MCP server for the pilot group, and confirm the block.",
 "Stream the logs to Microsoft Sentinel if your SOC needs them for detection."
@@ -7269,7 +7268,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/viva/insights/org-team-insights/agent-dashboard"
 ],
 [
-"Manage settings for the Microsoft Copilot Dashboard, Agent Dashboard, Consumption Dashboard, and Viva Insights web app",
+"Manage settings for the Microsoft Copilot Dashboard, Agent Dashboard, and Viva Insights web app",
 "https://learn.microsoft.com/en-us/viva/insights/advanced/admin/manage-settings-copilot-dashboard"
 ],
 [
@@ -7295,11 +7294,11 @@ var WORKSTREAMS = [
 ],
 "steps": [
 "Confirm at least 50 Microsoft Copilot licenses are assigned and the tenant isn't in a national or government cloud.",
-"In the admin center, go to Settings → Microsoft Viva → Viva Insights, and confirm the web app and Agent Dashboard controls are on.",
+"In the admin center, go to Settings → Microsoft Viva → Viva Insights, and confirm the web app and Agent Dashboard controls are on and whether the Agent 365 view includes non-public agents.",
 "Grant access to named leaders and analysts with Entra groups, and decide whether to keep automatic leader access.",
 "Set the minimum group size to meet your privacy policy; the default is 10 and the minimum is 5.",
 "Upload organizational data with Organization and optional job function attributes so filters match your structure.",
-"In PIM-enabled tenants, add administrators explicitly, because Global Administrators might not get automatic access.",
+"Add the AI Administrator explicitly, because it has no automatic access to the Viva Insights web app, and in PIM-enabled tenants add Global Administrators too.",
 "Open Agent Dashboard and select All agents to check the Agent 365 view. If the All agents toggle is missing, check Agent 365 licensing.",
 "Delegate access to change and adoption leads, and export de-identified agent data only where your privacy policy allows."
 ],
@@ -7333,7 +7332,7 @@ var WORKSTREAMS = [
 "https://adoption.microsoft.com/en-us/microsoft-agent-365/"
 ],
 [
-"Manage agent registry in Microsoft 365 admin center",
+"Agent Registry in Microsoft 365 admin center",
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-registry-overview"
 ]
 ],
@@ -7368,7 +7367,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/microsoft-365/admin/manage/agent-map"
 ],
 [
-"Manage agent registry in Microsoft 365 admin center",
+"Agent Registry in Microsoft 365 admin center",
 "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-registry-overview"
 ],
 [
@@ -7497,7 +7496,7 @@ var WORKSTREAMS = [
 "pri": "Recommended",
 "phase": "operate",
 "req": "Global or Billing Administrator to activate usage-based billing and set billing methods; an Azure subscription for pay-as-you-go",
-"desc": "Agent 365 is licensed per user, but Copilot Credits, Windows 365 for Agents, model providers, and other connected services bill by usage. Cost management in the Microsoft 365 admin center is the central place to turn on usage-based services, set spending policies, limits, and alerts, and review consumption by policy, user, group, agent, and service. At Ignite 2026, Microsoft expanded it to cover Copilot Cowork, Copilot Code, GitHub Copilot CLI, Copilot Studio, Copilot Managed Runtime, Autopilot, and the Work IQ APIs, with limits at the user, group, organization, or resource level, model controls, and delegated budgets for business leaders. Windows 365 for Agents now bills in Copilot Credits for new customers. Keep managing Copilot Studio environment capacity and agent limits in the Power Platform admin center.",
+"desc": "Agent 365 is licensed per user, but Copilot Credits, Windows 365 for Agents, model providers, and other connected services bill by usage. Cost management in the Microsoft 365 admin center is the central place to turn on usage-based services, set spending policies, limits, and alerts, and review consumption by policy, user, group, agent, and service. At Ignite 2026, Microsoft expanded it to cover Copilot Cowork, Copilot Code, GitHub Copilot CLI, Copilot Studio, Copilot Managed Runtime, Autopilot, and the Work IQ APIs, with limits at the user, group, organization, or resource level, model controls, and delegated budgets for business leaders. Windows 365 for Agents now bills in Copilot Credits for new customers. Keep managing Copilot Studio environment capacity and agent limits in the Power Platform admin center. Cost management isn't available in GCC.",
 "done": "Spending policies with limits and alerts cover the usage-based services you allow, finance has read-only access, and spend is reviewed monthly against budget with an owner for each overage.",
 "where": "Microsoft 365 admin center → Copilot → Cost management",
 "preview": false,
@@ -7775,7 +7774,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/copilot/cowork/cowork-admin-governance"
 ],
 [
-"Anthropic models in Microsoft Online Services",
+"Claude models from Anthropic in Microsoft Online Services",
 "https://learn.microsoft.com/en-us/copilot/implement/connect-to-ai-subprocessor"
 ],
 [
@@ -7786,7 +7785,7 @@ var WORKSTREAMS = [
 "steps": [
 "With privacy, legal, and finance, decide which AI providers each population may use, based on cost, data handling, and regional requirements.",
 "Go to Copilot → Settings → View all, and open AI providers operating as Microsoft subprocessors.",
-"For each provider, choose All users, No users, or specific users and security groups. For Anthropic, you can also limit it to Copilot in Microsoft 365 apps.",
+"For each provider, choose All users, No users, or specific users and security groups. For Anthropic, you can also limit it to Copilot in Microsoft 365 apps; that setting changes on December 9, 2026.",
 "Review AI providers operating as independent processors separately. A Global Administrator must accept their terms before anyone can use them.",
 "In the Power Platform admin center, review the matching settings that allow external models in Copilot Studio.",
 "If your spending policies show a model profile, set it to match the providers each group may use.",
@@ -7932,7 +7931,7 @@ var WORKSTREAMS = [
 "pri": "Optional",
 "phase": "operate",
 "req": "Frontier program. At launch, analytics for Microsoft services are available to tenants with at least 50 Microsoft 365 Copilot licenses, and availability will expand to tenants with one or more licenses by mid-December. Usage-based billing turned on and spending policies in place. Insights for non-Microsoft services need Agent 365 or E7.",
-"desc": "Agent 365 Business Analytics, a Frontier preview launched at Ignite 2026, is a dedicated app that shows business leaders AI cost, usage, and value in one place, across Microsoft 365 Copilot and usage-based services such as Cowork, agents, GitHub Copilot, and the Work IQ API. It shows what drives cost by service, model, and use case, forecasts cost against a budget, and measures value through assisted hours, AI value, success rate, and satisfaction. Access follows Viva Insights roles and minimum group sizes, and Cowork value metrics stay off until an admin turns them on. Treat AI value as an estimate built on the calculator assumptions you set.",
+"desc": "Agent 365 Business Analytics, a Frontier preview launched at Ignite 2026, is a dedicated app that shows business leaders AI cost, usage, and value in one place, across Microsoft 365 Copilot and usage-based services such as Cowork, agents, GitHub Copilot, and the Work IQ API. It shows what drives cost by service, model, and use case, forecasts cost against a budget, and measures value through assisted hours, AI value, success rate, and satisfaction. Access follows Viva Insights roles and minimum group sizes, and Cowork value metrics stay off until an admin turns them on. Treat AI value as an estimate built on the calculator assumptions you set. Business Analytics isn't available in GCC.",
 "done": "Named leaders can open Business Analytics with the right scope, value calculator assumptions are agreed with finance, and the quarterly value review uses it.",
 "where": "Agent 365 Business Analytics app (aka.ms/a365analytics)",
 "preview": true,
@@ -8155,7 +8154,7 @@ var WORKSTREAMS = [
 "pri": "Optional",
 "phase": "configure",
 "req": "",
-"desc": "Set the billing plan, always-available count, geography, approved agents, and image. Link either a device group or an Autopilot device preparation policy (preview) so your Intune policies and apps reach the Cloud PCs. You can't change geography later.",
+"desc": "Set the billing type, always-available count, geography, approved agents, and image. Link either a device group or an Autopilot device preparation policy (preview) so your Intune policies and apps reach the Cloud PCs. You can't change geography later.",
 "done": "The policy exists with only approved agents assigned.",
 "where": "Intune admin center → Devices → Provision Cloud PCs → Provisioning policies (Agents)",
 "preview": false,
@@ -8175,7 +8174,7 @@ var WORKSTREAMS = [
 ],
 "steps": [
 "Go to Devices → Provision Cloud PCs → Provisioning policies (Agents) → Create policy.",
-"Choose the billing plan, an always-available count from 1 to 200, and a geography.",
+"Choose the billing type (Copilot Credits for new customers), an always-available count from 1 to 200, and a geography.",
 "Add only approved agents, and select a gallery image or a tested custom image.",
 "Link an assigned security group owned by Windows 365, or an Autopilot device preparation policy for required apps.",
 "Add scope tags so only the owning admin team can manage the pool.",
@@ -8202,7 +8201,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/windows-365/agents/windows365foragentssecuritybaseline"
 ],
 [
-"Create a compliance policy in Microsoft Intune",
+"Create device compliance policies in Microsoft Intune",
 "https://learn.microsoft.com/en-us/intune/device-security/compliance/create-policy"
 ],
 [
@@ -8307,7 +8306,7 @@ var WORKSTREAMS = [
 "https://learn.microsoft.com/en-us/azure/ai-gateway/ai-gateway-resource"
 ],
 [
-"AI Gateway overview",
+"What is AI Gateway?",
 "https://learn.microsoft.com/en-us/azure/ai-gateway/overview"
 ]
 ],

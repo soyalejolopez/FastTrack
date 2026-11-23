@@ -2,6 +2,20 @@
 
 All notable changes to the Microsoft Agent 365 Customer Implementation Guide are documented here.
 
+## 1.4.2 - 2026-11-23
+
+- Rechecked every step and reference that cites a Microsoft Learn page that moved or changed since the 2026-11-09 review, in both the Simple and Detailed views, and updated what no longer matched.
+- Fixed 4 moved Microsoft Learn links. The Agent Builder articles now live under `plugins/`.
+- Registry and licensing: viewing the Registry needs no Agent 365 license except to view risk signals, while the Agent Map needs Agent 365 or Microsoft 365 E7 (15c and 1b). Usage and activity insights for Microsoft-platform agents and audit and eDiscovery for agents are core capabilities. The Registry shows the Agents at risk tile, and Unmanaged agents means agents created or managed outside Agent 365. The Overview now says Learn lists four pillars (management, governance, security, and business value) while this guide groups the work as observe, govern, and secure.
+- Defender: the Copilot Studio real-time protection onboarding retires on December 23, 2026 and its blocking settings don't migrate, so re-create blocking rules first (2.02, 2.06, PP2, and 07). Runtime protection for both inspection methods now deploys with an Intune endpoint security Antivirus policy or the Defender portal template instead of scripts (13a and 13j), with the preview known issues and the Defender for Endpoint AI agent support matrix. Local Windows agents have their own prompt evidence setting that uploads content without redaction (2.03, 2.09, and 13j), and real-time protection rules don't cover local agents (2.06). Creating custom detections needs the Security settings (manage) permission or Security Administrator (2.09), and runtime protection also accepts Defender for Endpoint Plan 2 or Microsoft 365 E5.
+- Entra: sponsors are human users, not service principals (3a). The lifecycle workflow basics, trigger placement, and manager attribute prerequisite match Learn (3e), access package policies explain **Who can get access** and service principals (3d), and Lifecycle Workflows Administrator is listed for 3e. Entra security features and network controls for agents need Agent 365.
+- Purview: Exchange DLP scoping works only with a mail-enabled security group (4.21), the Copilot DLP location is now **Microsoft Copilot, Copilot Chat, and Copilot Cowork** with a Purview Data Security AI Admin or Compliance Administrator role (4.20), auto-labeling needs a simulation and a sublabel and lives under **Policies** (4.19), labels need the **Emails** scope to label email (4.17), and the Purview middleware goes last and fails closed (4.04).
+- Foundry: the compliance view is **Manage > Compliance**, Purview is on the **Data security and governance** tab, and guardrails are configured in Foundry guardrails and controls instead of the Compliance view (4.04a, 9b, and 9c).
+- Windows 365 for Agents: new customers are billed in Copilot Credits through a spending policy, and existing customers can keep a billing plan (Simple view).
+- Copilot Studio and Agent Builder: data policies name Azure Bot Service skills (PP3 and 07), sharing setting changes apply only to new shares and org-wide sharing doesn't list the agent in the Agent Store (1d and Simple view).
+- Other: the Direct OTel steps check the `results` array as well as `partialSuccess.rejectedSpans` (12f, 12h, and 12l), the admin center control is **Add agent** (12j), the usage report is named **Microsoft Copilot** (14a), and the Agents report is public cloud only.
+- Updated link labels that no longer matched their Learn articles.
+
 ## 1.4.1 - 2026-11-09
 
 - Rechecked every step and reference that cites a Microsoft Learn page that moved or changed since the 2026-10-15 review, in both the Simple and Detailed views, and updated what no longer matched.
